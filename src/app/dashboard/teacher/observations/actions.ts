@@ -37,11 +37,10 @@ export async function createObservation(formData: FormData) {
 
     if (error) {
         console.error('Error creating observation:', error)
-        return { error: error.message }
+        throw new Error(error.message)
     }
 
     revalidatePath('/dashboard/teacher/observations')
-    return { success: true }
 }
 
 export async function deleteObservation(formData: FormData) {
@@ -62,9 +61,8 @@ export async function deleteObservation(formData: FormData) {
 
     if (error) {
         console.error('Error deleting observation:', error)
-        return { error: error.message }
+        throw new Error(error.message)
     }
 
     revalidatePath('/dashboard/teacher/observations')
-    return { success: true }
 }
