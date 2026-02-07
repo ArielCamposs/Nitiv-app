@@ -126,8 +126,8 @@ export default function TeacherBottomNav() {
             </nav>
 
             {/* Desktop Navigation - Sidebar */}
-            <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-32 bg-white border-r-2 border-gray-200 shadow-xl z-40 flex-col items-center py-6 gap-2">
-                <div className="flex flex-col items-center gap-2 flex-1 overflow-y-auto">
+            <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-32 bg-white border-r-2 border-gray-200 shadow-xl z-40 flex-col items-center py-4 gap-1 overflow-x-hidden">
+                <div className="flex flex-col items-center gap-1 flex-1 overflow-y-auto no-scrollbar w-full">
                     {NAV_ITEMS.map((item) => {
                         const Icon = item.icon
                         const isActive = pathname === item.href ||
@@ -138,9 +138,9 @@ export default function TeacherBottomNav() {
                                 key={item.href}
                                 href={item.href}
                                 className={`
-                                    flex flex-col items-center justify-center gap-1 w-24 py-2 rounded-2xl
+                                    flex flex-col items-center justify-center gap-0.5 w-28 py-1.5 rounded-xl
                                     transition-all duration-200
-                                    ${isActive ? 'scale-110' : 'scale-100 opacity-70 hover:opacity-100'}
+                                    ${isActive ? 'scale-105' : 'scale-100 opacity-70 hover:opacity-100'}
                                 `}
                                 title={item.label}
                             >
@@ -148,8 +148,8 @@ export default function TeacherBottomNav() {
                                     w-11 h-11 rounded-xl flex items-center justify-center
                                     transition-all duration-200
                                     ${isActive
-                                        ? `bg-gradient-to-br ${item.color} shadow-lg`
-                                        : 'bg-gray-100 hover:bg-gray-200'
+                                        ? `bg-gradient-to-br ${item.color} shadow-md`
+                                        : 'bg-gray-50 hover:bg-gray-100'
                                     }
                                 `}>
                                     <Icon
@@ -159,7 +159,7 @@ export default function TeacherBottomNav() {
                                     />
                                 </div>
                                 <span className={`
-                                    text-[11px] font-bold transition-colors text-center px-1
+                                    text-[11px] font-bold transition-colors text-center px-1 leading-tight
                                     ${isActive ? item.activeColor : 'text-gray-400'}
                                 `}>
                                     {item.label}
@@ -172,7 +172,7 @@ export default function TeacherBottomNav() {
                 {/* Logout Button - Bottom of Sidebar */}
                 <button
                     onClick={handleLogout}
-                    className="flex flex-col items-center justify-center gap-1 w-24 py-2 rounded-2xl transition-all duration-200 opacity-70 hover:opacity-100"
+                    className="flex flex-col items-center justify-center gap-0.5 w-28 py-1.5 rounded-xl transition-all duration-200 opacity-70 hover:opacity-100 mt-auto"
                     title="Cerrar sesión"
                 >
                     <div className="w-11 h-11 rounded-xl flex items-center justify-center bg-red-100 hover:bg-gradient-to-br hover:from-red-400 hover:to-red-600 transition-all duration-200">
