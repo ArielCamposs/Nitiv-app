@@ -1,6 +1,6 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 
 export async function getAllUsers() {
@@ -40,7 +40,8 @@ export async function getAllUsers() {
     // Get email from auth.users for each profile
     const usersWithEmail = await Promise.all(
         (users || []).map(async (userProfile) => {
-            const { data: authUser } = await supabase.auth.admin.getUserById(userProfile.id)
+            const supabaseAdmin = await createAdminClient()
+            const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userProfile.id)
             return {
                 ...userProfile,
                 email: authUser.user?.email || ''
@@ -89,7 +90,8 @@ export async function getUsersByRole(role: string) {
     // Get email from auth.users for each profile
     const usersWithEmail = await Promise.all(
         (users || []).map(async (userProfile) => {
-            const { data: authUser } = await supabase.auth.admin.getUserById(userProfile.id)
+            const supabaseAdmin = await createAdminClient()
+            const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userProfile.id)
             return {
                 ...userProfile,
                 email: authUser.user?.email || ''
@@ -130,7 +132,8 @@ export async function deleteUser(userId: string) {
     }
 
     // Delete from auth.users (will cascade to profiles)
-    const { error } = await supabase.auth.admin.deleteUser(userId)
+    const supabaseAdmin = await createAdminClient()
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(userId)
 
     if (error) {
         return { error: error.message }
@@ -164,7 +167,8 @@ export async function createUser(data: {
     }
 
     // Create user in auth.users
-    const { data: newUser, error: authError } = await supabase.auth.admin.createUser({
+    const supabaseAdmin = await createAdminClient()
+    const { data: newUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email: data.email,
         password: data.password,
         email_confirm: true
@@ -186,7 +190,7 @@ export async function createUser(data: {
 
     if (profileError) {
         // Rollback: delete auth user
-        await supabase.auth.admin.deleteUser(newUser.user.id)
+        await supabaseAdmin.auth.admin.deleteUser(newUser.user.id)
         return { error: profileError.message }
     }
 
