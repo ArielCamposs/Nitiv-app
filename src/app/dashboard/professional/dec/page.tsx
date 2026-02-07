@@ -112,10 +112,10 @@ export default async function DECPage() {
                                             </div>
                                             <div>
                                                 <h3 className="font-semibold text-lg text-[#475569]">
-                                                    {record.student?.full_name || 'Sin nombre'}
+                                                    {Array.isArray((record as any).student) ? (record as any).student[0]?.full_name : (record as any).student?.full_name || 'Sin nombre'}
                                                 </h3>
                                                 <p className="text-sm text-gray-500">
-                                                    {record.course?.name} - {record.course?.level}
+                                                    {Array.isArray((record as any).course) ? (record as any).course[0]?.name : (record as any).course?.name} - {Array.isArray((record as any).course) ? (record as any).course[0]?.level : (record as any).course?.level}
                                                 </p>
                                             </div>
                                         </div>

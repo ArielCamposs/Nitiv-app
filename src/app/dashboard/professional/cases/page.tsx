@@ -129,14 +129,14 @@ export default async function RecordsPage() {
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
                                                         <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold">
-                                                            {caseItem.student?.full_name?.charAt(0) || 'S'}
+                                                            {Array.isArray((caseItem as any).student) ? (caseItem as any).student[0]?.full_name?.charAt(0) : (caseItem as any).student?.full_name?.charAt(0) || 'S'}
                                                         </div>
                                                         <div>
                                                             <p className="font-semibold text-[#475569]">
-                                                                {caseItem.student?.full_name || 'Sin nombre'}
+                                                                {Array.isArray((caseItem as any).student) ? (caseItem as any).student[0]?.full_name : (caseItem as any).student?.full_name || 'Sin nombre'}
                                                             </p>
                                                             <p className="text-xs text-gray-400">
-                                                                {caseItem.student?.email || ''}
+                                                                {Array.isArray((caseItem as any).student) ? (caseItem as any).student[0]?.email : (caseItem as any).student?.email || ''}
                                                             </p>
                                                         </div>
                                                     </div>

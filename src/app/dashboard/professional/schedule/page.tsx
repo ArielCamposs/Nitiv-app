@@ -191,7 +191,7 @@ export default async function SchedulePage() {
                                             <div key={apt.id} className="border-l-4 border-green-500 pl-4 py-2 hover:bg-gray-50 rounded-r-lg transition-colors">
                                                 <p className="text-xs font-bold text-gray-500 uppercase mb-1">{dayStr}</p>
                                                 <p className="font-bold text-sm text-[#475569]">
-                                                    {apt.student?.full_name || 'Sin asignar'}
+                                                    {Array.isArray((apt as any).student) ? (apt as any).student[0]?.full_name : (apt as any).student?.full_name || 'Sin asignar'}
                                                 </p>
                                                 <p className="text-sm text-gray-600">{apt.title}</p>
                                                 <p className="text-xs text-gray-400 mt-1">{timeStr} • {apt.duration_minutes} min</p>

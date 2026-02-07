@@ -37,7 +37,10 @@ export async function getStatistics() {
         .gte('created_at', sevenDaysAgo.toISOString())
 
     const institutionRecords = recentRecords?.filter(
-        (r: any) => r.student?.institution_id === profile.institution_id
+        (r: any) => {
+            const student = Array.isArray(r.student) ? r.student[0] : r.student
+            return student?.institution_id === profile.institution_id
+        }
     ) || []
 
     const avgWellbeing = institutionRecords.length > 0
@@ -57,7 +60,10 @@ export async function getStatistics() {
         .gte('created_at', sevenDaysAgo.toISOString())
 
     const weeklyRecords = weeklyRecordsData?.filter(
-        (r: any) => r.student?.institution_id === profile.institution_id
+        (r: any) => {
+            const student = Array.isArray(r.student) ? r.student[0] : r.student
+            return student?.institution_id === profile.institution_id
+        }
     ).length || 0
 
     return {
@@ -91,7 +97,10 @@ export async function getEmotionDistribution() {
         .gte('created_at', sevenDaysAgo.toISOString())
 
     const institutionRecords = records?.filter(
-        (r: any) => r.student?.institution_id === profile.institution_id
+        (r: any) => {
+            const student = Array.isArray(r.student) ? r.student[0] : r.student
+            return student?.institution_id === profile.institution_id
+        }
     ) || []
 
     // Count emotions
@@ -134,7 +143,10 @@ export async function getWeeklyEvolution() {
         .order('created_at', { ascending: true })
 
     const institutionRecords = records?.filter(
-        (r: any) => r.student?.institution_id === profile.institution_id
+        (r: any) => {
+            const student = Array.isArray(r.student) ? r.student[0] : r.student
+            return student?.institution_id === profile.institution_id
+        }
     ) || []
 
     // Group by week
@@ -187,7 +199,10 @@ export async function generateAIAnalysis() {
         .limit(10)
 
     const institutionAlerts = recentAlerts?.filter(
-        (a: any) => a.student?.institution_id === profile?.institution_id
+        (a: any) => {
+            const student = Array.isArray(a.student) ? a.student[0] : a.student
+            return student?.institution_id === profile?.institution_id
+        }
     ) || []
 
     // Prepare data for AI
