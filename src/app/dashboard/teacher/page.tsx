@@ -31,10 +31,10 @@ export default async function TeacherDashboard() {
         `)
         .eq('teacher_id', user.id)
 
-    const courses = teacherCourses?.map(tc => tc.course).filter(Boolean) || []
+    const courses = teacherCourses?.map(tc => Array.isArray(tc.course) ? tc.course[0] : tc.course).filter(Boolean) || []
 
     // Get course IDs for filtering
-    const courseIds = courses.map(c => c?.id).filter(Boolean)
+    const courseIds = courses.map(c => c?.id).filter(Boolean) as string[]
 
     // Fetch Unread Alerts for students in teacher's courses
     const { data: alerts } = await supabase
@@ -169,7 +169,7 @@ export default async function TeacherDashboard() {
                                         </span>
                                     </div>
                                     <h3 className="font-bold text-[#475569] text-sm">
-                                        {alert.student?.full_name || 'Estudiante'}
+                                        {Array.isArray((alert as any).student) ? (alert as any).student[0]?.full_name : (alert as any).student?.full_name || 'Estudiante'}
                                     </h3>
                                     <p className="text-sm text-gray-600 mt-1">{alert.message || 'Alerta detectada'}</p>
                                 </div>
@@ -248,7 +248,7 @@ export default async function TeacherDashboard() {
                                             {new Date(activity.activity_date).toLocaleDateString()}
                                         </span>
                                     </div>
-                                    <p className="text-xs text-gray-600">{activity.course?.name || 'Curso'}</p>
+                                    <p className="text-xs text-gray-600">{Array.isArray((activity as any).course) ? (activity as any).course[0]?.name : (activity as any).course?.name || 'Curso'}</p>
                                 </div>
                             ))
                         ) : (
