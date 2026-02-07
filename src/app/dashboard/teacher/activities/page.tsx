@@ -18,7 +18,7 @@ export default async function ActivitiesPage() {
         .select('course:courses(id, name, grade)')
         .eq('teacher_id', user.id)
 
-    const courses = teacherCourses?.map(tc => tc.course).filter(Boolean) || []
+    const courses = teacherCourses?.map(tc => Array.isArray(tc.course) ? tc.course[0] : tc.course).filter(Boolean) || []
 
     // Fetch activities
     const { data: activities } = await supabase
@@ -85,7 +85,7 @@ export default async function ActivitiesPage() {
                                                             activity.activity_type === 'project' ? 'Proyecto' : 'Otro'}
                                             </span>
                                             <h3 className="font-bold text-[#475569] mt-2">{activity.title}</h3>
-                                            <p className="text-sm text-gray-600 mt-1">{activity.course?.name}</p>
+                                            <p className="text-sm text-gray-600 mt-1">{Array.isArray((activity as any).course) ? (activity as any).course[0]?.name : (activity as any).course?.name}</p>
                                             {activity.description && <p className="text-sm text-gray-500 mt-2">{activity.description}</p>}
                                             <p className="text-xs text-gray-400 mt-2">
                                                 {new Date(activity.activity_date).toLocaleDateString('es-ES', {

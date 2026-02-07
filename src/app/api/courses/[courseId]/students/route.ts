@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 
 export async function GET(
     request: Request,
-    { params }: { params: { courseId: string } }
+    { params }: { params: Promise<{ courseId: string }> }
 ) {
     try {
         const supabase = await createClient()
@@ -13,7 +13,7 @@ export async function GET(
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
         }
 
-        const courseId = params.courseId
+        const { courseId } = await params
 
         // Fetch students enrolled in this course
         const { data: students, error } = await supabase

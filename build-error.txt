@@ -1,0 +1,136 @@
+﻿
+> nitiv-app@0.1.0 build
+> next build
+
+Ôû▓ Next.js 16.1.6 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+node.exe : Turbopack build 
+encountered 1 warnings:
+En línea: 1 Carácter: 1
++ & "C:\Program 
+Files\nodejs/node.exe" 
+"C:\Users\campo\AppData\Roaming\ ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpe 
+   cified: (Turbopack build encount  
+  ered 1 warnings::String) [], Rem   
+ oteException
+    + FullyQualifiedErrorId : Native 
+   CommandError
+ 
+./src/app/dashboard/professional/stat
+istics/actions.ts:230:40
+Module not found: Can't resolve 
+'@google/generative-ai'
+[0m [90m 228 |[39m     
+[36mtry[39m {
+ [90m 229 |[39m         [90m// 
+Use Gemini AI for analysis[39m
+[31m[1m>[22m[39m[90m 230 |[39m 
+        [36mconst[39m { 
+[33mGoogleGenerativeAI[39m } 
+[33m=[39m require([32m'@google/gen
+erative-ai'[39m)
+ [90m     |[39m                    
+                    [31m[1m^[22m[
+39m[31m[1m^[22m[39m[31m[1m^[22
+m[39m[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39m[31m[1
+m^[22m[39m[31m[1m^[22m[39m[31m
+[1m^[22m[39m[31m[1m^[22m[39m[
+31m[1m^[22m[39m[31m[1m^[22m[39
+m[31m[1m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31m[1m^[2
+2m[39m[31m[1m^[22m[39m[31m[1m^
+[22m[39m[31m[1m^[22m[39m[31m[
+1m^[22m[39m[31m[1m^[22m[39m[31
+m[1m^[22m[39m[31m[1m^[22m[39m
+[31m[1m^[22m[39m[31m[1m^[22m[3
+9m[31m[1m^[22m[39m[31m[1m^[22m
+[39m[31m[1m^[22m[39m[31m[1m^[
+22m[39m[31m[1m^[22m[39m[31m[1m
+^[22m[39m[31m[1m^[22m[39m
+ [90m 231 |[39m         
+[36mconst[39m genAI [33m=[39m 
+[36mnew[39m [33mGoogleGenerativeAI
+[39m(process[33m.[39menv[33m.[39
+m[33mGEMINI_API_KEY[39m)
+ [90m 232 |[39m         
+[36mconst[39m model [33m=[39m 
+genAI[33m.[39mgetGenerativeModel({ 
+model[33m:[39m 
+[32m'gemini-2.0-flash-exp'[39m })
+ [90m 233 |[39m[0m
+
+
+
+Import trace:
+  Server Component:
+    ./src/app/dashboard/professional/
+statistics/actions.ts
+    ./src/app/dashboard/professional/
+statistics/page.tsx
+
+https://nextjs.org/docs/messages/modu
+le-not-found
+
+
+Ô£ô Compiled successfully in 5.1s
+  Running TypeScript ...
+Failed to compile.
+
+./src/app/dashboard/admin/courses/[id
+]/page.tsx:44:27
+Type error: Argument of type '{ id: 
+any; name: any; grade: any; 
+created_at: any; enrollments: { id: 
+any; student_id: any; profiles: { 
+id: any; full_name: any; }[]; }[]; 
+}' is not assignable to parameter of 
+type 'SetStateAction<Course | null>'.
+  Type '{ id: any; name: any; grade: 
+any; created_at: any; enrollments: { 
+id: any; student_id: any; profiles: 
+{ id: any; full_name: any; }[]; }[]; 
+}' is not assignable to type 
+'Course'.
+    Types of property 'enrollments' 
+are incompatible.
+      Type '{ id: any; student_id: 
+any; profiles: { id: any; full_name: 
+any; }[]; }[]' is not assignable to 
+type 'Enrollment[]'.
+        Type '{ id: any; student_id: 
+any; profiles: { id: any; full_name: 
+any; }[]; }' is not assignable to 
+type 'Enrollment'.
+          Types of property 
+'profiles' are incompatible.
+            Type '{ id: any; 
+full_name: any; }[]' is missing the 
+following properties from type 
+'Student': id, full_name
+
+[0m [90m 42 |[39m             
+[36mconst[39m result [33m=[39m 
+[36mawait[39m getCourseById(resolve
+dParams[33m.[39mid)
+ [90m 43 |[39m             
+[36mif[39m 
+(result[33m.[39mcourse) {
+[31m[1m>[22m[39m[90m 44 |[39m  
+               
+setCourse(result[33m.[39mcourse)
+ [90m    |[39m                     
+      [31m[1m^[22m[39m
+ [90m 45 |[39m             } 
+[36melse[39m [36mif[39m 
+(result[33m.[39merror) {
+ [90m 46 |[39m                 
+setError(result[33m.[39merror)
+ [90m 47 |[39m             }[0m
+Next.js build worker exited with 
+code: 1 and signal: null

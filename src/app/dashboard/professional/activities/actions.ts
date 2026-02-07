@@ -41,7 +41,7 @@ export async function createActivity(formData: FormData) {
 
     if (activityError) {
         console.error('Error creating activity:', activityError)
-        return { error: activityError.message }
+        throw new Error(activityError.message)
     }
 
     // Insert activity courses
@@ -59,7 +59,7 @@ export async function createActivity(formData: FormData) {
             console.error('Error adding courses:', coursesError)
             // Rollback: delete the activity
             await supabase.from('school_activities').delete().eq('id', activity.id)
-            return { error: coursesError.message }
+            throw new Error(coursesError.message)
         }
     }
 
@@ -78,14 +78,13 @@ export async function createActivity(formData: FormData) {
             console.error('Error adding responsibles:', responsiblesError)
             // Rollback: delete the activity and courses
             await supabase.from('school_activities').delete().eq('id', activity.id)
-            return { error: responsiblesError.message }
+            throw new Error(responsiblesError.message)
         }
     }
 
     revalidatePath('/dashboard/professional/activities')
     revalidatePath('/dashboard/professional')
     revalidatePath('/dashboard/teacher/activities')
-    return { success: true }
 }
 
 export async function deleteActivity(formData: FormData) {
@@ -106,13 +105,12 @@ export async function deleteActivity(formData: FormData) {
 
     if (error) {
         console.error('Error deleting activity:', error)
-        return { error: error.message }
+        throw new Error(error.message)
     }
 
     revalidatePath('/dashboard/professional/activities')
     revalidatePath('/dashboard/professional')
     revalidatePath('/dashboard/teacher/activities')
-    return { success: true }
 }
 
 export async function updateActivity(formData: FormData) {
@@ -152,7 +150,7 @@ export async function updateActivity(formData: FormData) {
 
     if (activityError) {
         console.error('Error updating activity:', activityError)
-        return { error: activityError.message }
+        throw new Error(activityError.message)
     }
 
     // Update courses: delete all and re-insert
@@ -170,7 +168,7 @@ export async function updateActivity(formData: FormData) {
 
         if (coursesError) {
             console.error('Error updating courses:', coursesError)
-            return { error: coursesError.message }
+            throw new Error(coursesError.message)
         }
     }
 
@@ -189,12 +187,11 @@ export async function updateActivity(formData: FormData) {
 
         if (responsiblesError) {
             console.error('Error updating responsibles:', responsiblesError)
-            return { error: responsiblesError.message }
+            throw new Error(responsiblesError.message)
         }
     }
 
     revalidatePath('/dashboard/professional/activities')
     revalidatePath('/dashboard/professional')
     revalidatePath('/dashboard/teacher/activities')
-    return { success: true }
 }

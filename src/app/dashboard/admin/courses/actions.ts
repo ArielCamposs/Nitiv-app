@@ -67,7 +67,7 @@ export async function getCourseById(courseId: string) {
             enrollments (
                 id,
                 student_id,
-                profiles (
+                profiles!enrollments_student_id_fkey (
                     id,
                     full_name
                 )

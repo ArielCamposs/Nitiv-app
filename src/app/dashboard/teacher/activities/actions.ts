@@ -31,12 +31,11 @@ export async function createActivity(formData: FormData) {
 
     if (error) {
         console.error('Error creating activity:', error)
-        return { error: error.message }
+        throw new Error(error.message)
     }
 
     revalidatePath('/dashboard/teacher/activities')
     revalidatePath('/dashboard/teacher')
-    return { success: true }
 }
 
 export async function deleteActivity(formData: FormData) {
@@ -57,10 +56,9 @@ export async function deleteActivity(formData: FormData) {
 
     if (error) {
         console.error('Error deleting activity:', error)
-        return { error: error.message }
+        throw new Error(error.message)
     }
 
     revalidatePath('/dashboard/teacher/activities')
     revalidatePath('/dashboard/teacher')
-    return { success: true }
 }

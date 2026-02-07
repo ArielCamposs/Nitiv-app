@@ -15,7 +15,7 @@ interface Student {
 interface Enrollment {
     id: string
     student_id: string
-    profiles: Student
+    profiles: Student | Student[]
 }
 
 interface Course {
@@ -80,7 +80,11 @@ export default function CourseDetailsPage({ params }: { params: Promise<{ id: st
         )
     }
 
-    const students = course.enrollments?.map(e => e.profiles) || []
+    const students = course.enrollments?.map(e => {
+        // Handle both array and single object formats
+        const profile = Array.isArray(e.profiles) ? e.profiles[0] : e.profiles
+        return profile
+    }).filter(Boolean) || []
 
     return (
         <div className="min-h-screen bg-[#FDFBF7] md:pl-64 pb-24 md:pb-6">

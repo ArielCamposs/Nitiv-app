@@ -89,7 +89,7 @@ export default async function AlertsPage() {
                                                 </span>
                                             </div>
                                             <h3 className="font-bold text-[#475569]">
-                                                {alert.student?.full_name || 'Estudiante'}
+                                                {Array.isArray((alert as any).student) ? (alert as any).student[0]?.full_name : (alert as any).student?.full_name || 'Estudiante'}
                                             </h3>
                                             <p className="text-sm text-gray-600 mt-1">{alert.message || 'Alerta detectada'}</p>
                                         </div>
@@ -128,7 +128,7 @@ export default async function AlertsPage() {
                                         </span>
                                     </div>
                                     <h3 className="font-bold text-gray-700">
-                                        {alert.student?.full_name || 'Estudiante'}
+                                        {Array.isArray((alert as any).student) ? (alert as any).student[0]?.full_name : (alert as any).student?.full_name || 'Estudiante'}
                                     </h3>
                                     <p className="text-sm text-gray-500 mt-1">{alert.message || 'Alerta detectada'}</p>
                                 </div>

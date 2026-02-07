@@ -9,7 +9,7 @@ export async function markAlertRead(formData: FormData) {
     const alertId = formData.get('alertId') as string
 
     if (!alertId) {
-        return { error: 'Alert ID is required' }
+        throw new Error('Alert ID is required')
     }
 
     const { error } = await supabase
@@ -19,10 +19,9 @@ export async function markAlertRead(formData: FormData) {
 
     if (error) {
         console.error('Error marking alert as read:', error)
-        return { error: error.message }
+        throw new Error(error.message)
     }
 
     revalidatePath('/dashboard/teacher/alerts')
     revalidatePath('/dashboard/teacher')
-    return { success: true }
 }
