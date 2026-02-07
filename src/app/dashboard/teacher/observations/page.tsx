@@ -62,11 +62,15 @@ export default async function ObservationsPage({ searchParams }: { searchParams:
         `)
         .in('course_id', courseIds.length > 0 ? courseIds : ['00000000-0000-0000-0000-000000000000'])
 
-    const students = enrollments?.map((e: any) => ({
-        ...e.student,
-        courseId: e.course?.id,
-        courseName: e.course?.name
-    })).filter(Boolean) || []
+    const students = enrollments?.map((e: any) => {
+        const student = Array.isArray(e.student) ? e.student[0] : e.student
+        const course = Array.isArray(e.course) ? e.course[0] : e.course
+        return {
+            ...student,
+            courseId: course?.id,
+            courseName: course?.name
+        }
+    }).filter(Boolean) || []
 
     // Get unique students
     const uniqueStudents = students.reduce((acc: any[], current) => {
@@ -135,8 +139,8 @@ export default async function ObservationsPage({ searchParams }: { searchParams:
                                     </div>
                                     <h3 className="font-bold text-[#475569]">{obs.title}</h3>
                                     <p className="text-sm text-gray-600 mt-1">
-                                        <span className="font-medium">{obs.student?.full_name}</span>
-                                        {obs.course && <span className="text-gray-400"> • {obs.course.name}</span>}
+                                        <span className="font-medium">{Array.isArray((obs as any).student) ? (obs as any).student[0]?.full_name : (obs as any).student?.full_name}</span>
+                                        {obs.course && <span className="text-gray-400"> • {Array.isArray((obs as any).course) ? (obs as any).course[0]?.name : (obs as any).course?.name}</span>}
                                     </p>
                                     <p className="text-sm text-gray-700 mt-2">{obs.content}</p>
                                     <p className="text-xs text-gray-400 mt-2">
