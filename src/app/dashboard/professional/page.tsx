@@ -82,15 +82,18 @@ export default async function ProfessionalDashboard() {
         .limit(5)
 
     // Format case data for component
-    const formattedCases = cases?.map(c => ({
-        id: c.id,
-        student_name: c.student?.full_name || 'Sin nombre',
-        student_id: c.student_id,
-        summary: c.summary,
-        status: c.status,
-        priority: 'medium' as const,
-        last_session: 'Hace 3 días'
-    })) || []
+    const formattedCases = cases?.map(c => {
+        const student = Array.isArray(c.student) ? c.student[0] : c.student
+        return {
+            id: c.id,
+            student_name: student?.full_name || 'Sin nombre',
+            student_id: c.student_id,
+            summary: c.summary,
+            status: c.status,
+            priority: 'medium' as const,
+            last_session: 'Hace 3 días'
+        }
+    }) || []
 
     const currentDate = new Date().toLocaleDateString('es-CL', {
         weekday: 'long',
@@ -169,12 +172,14 @@ export default async function ProfessionalDashboard() {
                                             isCurrent ? 'bg-[#A855F7]' : 'bg-blue-400'
                                         const opacity = apt.status === 'completed' ? 'opacity-50' : ''
 
+                                        const student = Array.isArray(apt.student) ? apt.student[0] : apt.student
+
                                         return (
                                             <div key={apt.id} className={`relative pl-4 border-l-2 ${borderColor} py-2 ${opacity}`}>
                                                 <div className={`absolute -left-[9px] top-3 w-4 h-4 rounded-full ${dotColor} border-2 border-white`} />
                                                 <span className="text-xs font-bold text-gray-500 block mb-1">{timeStr}</span>
                                                 <h4 className="font-bold text-sm text-[#475569]">
-                                                    {apt.student?.full_name || 'Sin asignar'}
+                                                    {student?.full_name || 'Sin asignar'}
                                                 </h4>
                                                 <p className="text-xs text-gray-400">{apt.title}</p>
                                             </div>

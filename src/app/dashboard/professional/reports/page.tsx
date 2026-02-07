@@ -103,6 +103,9 @@ export default async function ReportsPage() {
                                 high: 'bg-red-100 text-red-700'
                             }
 
+                            const student = Array.isArray(report.student) ? report.student[0] : report.student
+                            const course = Array.isArray(report.course) ? report.course[0] : report.course
+
                             return (
                                 <div key={report.id} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
                                     <div className="flex items-start justify-between mb-4">
@@ -121,9 +124,9 @@ export default async function ReportsPage() {
                                             </div>
 
                                             <div className="flex items-center gap-4 text-sm text-gray-500">
-                                                <span>Estudiante: <span className="font-semibold text-[#475569]">{report.student?.full_name || 'Sin asignar'}</span></span>
-                                                {report.course && (
-                                                    <span>Curso: <span className="font-semibold">{report.course.name}</span></span>
+                                                <span>Estudiante: <span className="font-semibold text-[#475569]">{student?.full_name || 'Sin asignar'}</span></span>
+                                                {course && (
+                                                    <span>Curso: <span className="font-semibold">{course.name}</span></span>
                                                 )}
                                                 <span>{createdDate}</span>
                                             </div>

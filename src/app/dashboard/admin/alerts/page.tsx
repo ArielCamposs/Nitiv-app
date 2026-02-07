@@ -91,20 +91,20 @@ export default async function AlertsPage() {
                                         <div className="flex-1">
                                             <div className="flex items-center gap-3 mb-2">
                                                 <span className={`px-3 py-1 rounded-full text-xs font-semibold ${!alert.is_read
-                                                        ? 'bg-orange-100 text-orange-800'
-                                                        : 'bg-green-100 text-green-800'
+                                                    ? 'bg-orange-100 text-orange-800'
+                                                    : 'bg-green-100 text-green-800'
                                                     }`}>
                                                     {!alert.is_read ? 'No Leída' : 'Leída'}
                                                 </span>
                                                 <span className={`px-3 py-1 rounded-full text-xs font-semibold ${alert.priority === 'high' ? 'bg-red-100 text-red-800' :
-                                                        alert.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                                            'bg-blue-100 text-blue-800'
+                                                    alert.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                                        'bg-blue-100 text-blue-800'
                                                     }`}>
                                                     {alert.priority === 'high' ? 'Alta' : alert.priority === 'medium' ? 'Media' : 'Baja'}
                                                 </span>
                                             </div>
                                             <h3 className="font-semibold text-gray-900 mb-1">
-                                                {alert.student?.full_name || 'Estudiante desconocido'}
+                                                {Array.isArray((alert as any).student) ? (alert as any).student[0]?.full_name : (alert as any).student?.full_name || 'Estudiante desconocido'}
                                             </h3>
                                             <p className="text-gray-600 text-sm">{alert.message}</p>
                                             <p className="text-gray-400 text-xs mt-2">

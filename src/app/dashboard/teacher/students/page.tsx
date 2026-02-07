@@ -23,7 +23,7 @@ export default async function StudentsPage() {
         `)
         .eq('teacher_id', user.id)
 
-    const courses = teacherCourses?.map(tc => tc.course).filter(Boolean) || []
+    const courses = teacherCourses?.map(tc => Array.isArray(tc.course) ? tc.course[0] : tc.course).filter(Boolean) || []
     const courseIds = courses.map((c: any) => c.id).filter(Boolean)
 
     // Fetch Students enrolled in teacher's courses
@@ -47,14 +47,17 @@ export default async function StudentsPage() {
     // Group students by course
     const studentsByCourse: Record<string, any[]> = {}
     enrollments?.forEach((enrollment: any) => {
-        const courseName = enrollment.course?.name || 'Sin curso'
+        const course = Array.isArray(enrollment.course) ? enrollment.course[0] : enrollment.course
+        const courseName = course?.name || 'Sin curso'
         if (!studentsByCourse[courseName]) {
             studentsByCourse[courseName] = []
         }
-        if (enrollment.student) {
+
+        const student = Array.isArray(enrollment.student) ? enrollment.student[0] : enrollment.student
+        if (student) {
             studentsByCourse[courseName].push({
-                ...enrollment.student,
-                courseId: enrollment.course?.id
+                ...student,
+                courseId: course?.id
             })
         }
     })

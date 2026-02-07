@@ -91,11 +91,11 @@ export default async function ReportsPage() {
 
                                     <div className="flex gap-4 text-sm text-gray-600 mt-2">
                                         <p>
-                                            <span className="font-medium">Estudiante:</span> {report.student?.full_name || 'N/A'}
+                                            <span className="font-medium">Estudiante:</span> {Array.isArray((report as any).student) ? (report as any).student[0]?.full_name : (report as any).student?.full_name || 'N/A'}
                                         </p>
                                         {report.course && (
                                             <p>
-                                                <span className="font-medium">Curso:</span> {report.course.name}
+                                                <span className="font-medium">Curso:</span> {Array.isArray((report as any).course) ? (report as any).course[0]?.name : (report as any).course?.name}
                                             </p>
                                         )}
                                     </div>
@@ -115,7 +115,7 @@ export default async function ReportsPage() {
                                     )}
 
                                     <p className="text-xs text-gray-500 mt-4">
-                                        Creado por: <span className="font-medium">{report.professional?.full_name || 'Profesional'}</span>
+                                        Creado por: <span className="font-medium">{Array.isArray((report as any).professional) ? (report as any).professional[0]?.full_name : (report as any).professional?.full_name || 'Profesional'}</span>
                                     </p>
                                 </div>
                             ))
