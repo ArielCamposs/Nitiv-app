@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import AdminBottomNav from '@/components/AdminBottomNav'
 import { Users, GraduationCap, UserCheck, Search, Plus, Loader2, Trash2 } from 'lucide-react'
@@ -15,7 +15,7 @@ interface User {
     created_at: string
 }
 
-export default function UsersPage() {
+function UsersContent() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const [users, setUsers] = useState<User[]>([])
@@ -267,5 +267,17 @@ export default function UsersPage() {
 
             <AdminBottomNav />
         </div>
+    )
+}
+
+export default function UsersPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-[#FDFBF7] md:pl-64 pb-24 md:pb-6 flex items-center justify-center">
+                <Loader2 className="animate-spin text-blue-500" size={40} />
+            </div>
+        }>
+            <UsersContent />
+        </Suspense>
     )
 }
