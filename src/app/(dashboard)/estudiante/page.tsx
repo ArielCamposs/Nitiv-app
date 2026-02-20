@@ -1,6 +1,7 @@
 import { EmotionSlider } from "@/components/emotional/emotion-slider"
 import { WeeklyCheckinCard } from "@/components/emotional/weekly-checkin-card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { HelpButton } from "@/components/help/HelpButton"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import Link from "next/link"
@@ -124,6 +125,14 @@ export default async function EstudianteDashboardPage() {
                                 <WeeklyCheckinCard />
                             </TabsContent>
                         </Tabs>
+                    </section>
+
+                    {/* Sección de ayuda */}
+                    <section className="pt-2">
+                        <HelpButton
+                            studentId={student.id}
+                            institutionId={student.institution_id}
+                        />
                     </section>
                 </div>
             </div>

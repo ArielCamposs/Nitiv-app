@@ -37,6 +37,11 @@ export function RewardsStore({ studentId, availablePoints }: RewardsStoreProps) 
     const [cosmetics, setCosmetics] = useState<Cosmetic[]>([])
     const [owned, setOwned] = useState<OwnedCosmetic[]>([])
     const [loadingId, setLoadingId] = useState<string | null>(null)
+    const [points, setPoints] = useState(availablePoints) // ← estado local de puntos
+
+    useEffect(() => {
+        setPoints(availablePoints)
+    }, [availablePoints])
 
     useEffect(() => {
         const loadData = async () => {
@@ -64,7 +69,7 @@ export function RewardsStore({ studentId, availablePoints }: RewardsStoreProps) 
         owned.some((o) => o.cosmetic_id === cosmeticId && o.equipped)
 
     const handleBuy = async (cosmetic: Cosmetic) => {
-        if (cosmetic.cost_points > availablePoints) {
+        if (cosmetic.cost_points > points) {
             toast.error("No tienes suficientes puntos para esta recompensa.")
             return
         }
@@ -72,24 +77,44 @@ export function RewardsStore({ studentId, availablePoints }: RewardsStoreProps) 
         setLoadingId(cosmetic.id)
 
         try {
-            const { error } = await supabase.from("student_cosmetics").insert({
-                student_id: studentId,
-                cosmetic_id: cosmetic.id,
-                equipped: false,
-            })
+            // 1. Insertar en student_cosmetics
+            const { error: insertError } = await supabase
+                .from("student_cosmetics")
+                .insert({
+                    student_id: studentId,
+                    cosmetic_id: cosmetic.id,
+                    equipped: false,
+                })
 
-            if (error) {
-                console.error(error)
+            if (insertError) {
                 toast.error("No se pudo canjear la recompensa.")
                 return
             }
 
+            // 2. Obtener user_id desde students
+            const { data: studentData } = await supabase
+                .from("students")
+                .select("user_id")
+                .eq("id", studentId)
+                .single()
+
+            if (studentData?.user_id) {
+                // 3. Descontar puntos del usuario
+                await supabase.rpc("deduct_points", {
+                    p_user_id: studentData.user_id,
+                    p_amount: cosmetic.cost_points,
+                    p_reason: `canjeo_${cosmetic.name}`,
+                })
+            }
+
+            // 4. Actualizar estado local
             setOwned((prev) => [
                 ...prev,
                 { cosmetic_id: cosmetic.id, equipped: false },
             ])
+            setPoints((prev) => prev - cosmetic.cost_points)
 
-            toast.success("Recompensa canjeada. Pronto podrás equiparla en tu perfil.")
+            toast.success("¡Recompensa canjeada! Equípala desde tu perfil.")
         } finally {
             setLoadingId(null)
         }
@@ -99,14 +124,12 @@ export function RewardsStore({ studentId, availablePoints }: RewardsStoreProps) 
         setLoadingId(cosmetic.id)
 
         try {
-            // Poner todos en unequipped y este en equipped = true
             const { error } = await supabase.rpc("equip_cosmetic", {
                 p_student_id: studentId,
                 p_cosmetic_id: cosmetic.id,
             })
 
             if (error) {
-                console.error(error)
                 toast.error("No se pudo equipar la recompensa.")
                 return
             }
@@ -138,64 +161,81 @@ export function RewardsStore({ studentId, availablePoints }: RewardsStoreProps) 
     }
 
     return (
-        <div className="grid gap-4 md:grid-cols-3">
-            {cosmetics.map((cosmetic) => {
-                const ownedThis = isOwned(cosmetic.id)
-                const equipped = isEquipped(cosmetic.id)
+        <div className="space-y-6">
+            {/* Banner de puntos disponibles */}
+            <div className="flex items-center justify-between rounded-xl bg-indigo-50 px-5 py-4">
+                <p className="text-sm font-medium text-slate-600">Puntos disponibles</p>
+                <p className="text-2xl font-bold text-indigo-600">{points} pts</p>
+            </div>
 
-                return (
-                    <Card key={cosmetic.id} className="flex flex-col justify-between">
-                        <CardHeader>
-                            <CardTitle className="flex items-center justify-between text-base">
-                                <span>{cosmetic.name}</span>
-                                <Badge variant="outline" className="text-xs capitalize">
-                                    {cosmetic.type}
-                                </Badge>
-                            </CardTitle>
-                            <CardDescription>{cosmetic.cost_points} puntos</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            {cosmetic.image_url ? (
-                                <div className="h-24 w-full overflow-hidden rounded-md bg-slate-100">
-                                    {/* placeholder: en el futuro se usa <Image> */}
-                                    <img
-                                        src={cosmetic.image_url}
-                                        alt={cosmetic.name}
-                                        className="h-full w-full object-cover"
-                                    />
-                                </div>
-                            ) : (
-                                <div className="flex h-24 items-center justify-center rounded-md bg-slate-100 text-xs text-slate-500">
-                                    Sin vista previa
-                                </div>
-                            )}
-                        </CardContent>
-                        <CardFooter className="flex justify-between gap-2">
-                            {!ownedThis ? (
-                                <Button
-                                    variant="default"
-                                    className="flex-1"
-                                    disabled={loadingId === cosmetic.id}
-                                    onClick={() => handleBuy(cosmetic)}
-                                >
-                                    {loadingId === cosmetic.id
-                                        ? "Canjeando..."
-                                        : "Canjear recompensa"}
-                                </Button>
-                            ) : (
-                                <Button
-                                    variant={equipped ? "secondary" : "outline"}
-                                    className="flex-1"
-                                    disabled={loadingId === cosmetic.id}
-                                    onClick={() => handleEquip(cosmetic)}
-                                >
-                                    {equipped ? "Equipado" : "Equipar"}
-                                </Button>
-                            )}
-                        </CardFooter>
-                    </Card>
-                )
-            })}
+            {/* Grilla de cosméticos */}
+            <div className="grid gap-4 md:grid-cols-3">
+                {cosmetics.map((cosmetic) => {
+                    const ownedThis = isOwned(cosmetic.id)
+                    const equipped = isEquipped(cosmetic.id)
+                    const canAfford = points >= cosmetic.cost_points
+
+                    return (
+                        <Card
+                            key={cosmetic.id}
+                            className={`flex flex-col justify-between transition
+                                ${ownedThis ? "border-green-200 bg-green-50" : ""}
+                                ${!canAfford && !ownedThis ? "opacity-60" : ""}
+                            `}
+                        >
+                            <CardHeader>
+                                <CardTitle className="flex items-center justify-between text-base">
+                                    <span>{cosmetic.name}</span>
+                                    <Badge variant="outline" className="text-xs capitalize">
+                                        {cosmetic.type}
+                                    </Badge>
+                                </CardTitle>
+                                <CardDescription>{cosmetic.cost_points} puntos</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {cosmetic.image_url ? (
+                                    <div className="h-24 w-full overflow-hidden rounded-md bg-slate-100">
+                                        <img
+                                            src={cosmetic.image_url}
+                                            alt={cosmetic.name}
+                                            className="h-full w-full object-cover"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div className="flex h-24 items-center justify-center rounded-md bg-slate-100 text-xs text-slate-500">
+                                        Sin vista previa
+                                    </div>
+                                )}
+                            </CardContent>
+                            <CardFooter className="flex justify-between gap-2">
+                                {!ownedThis ? (
+                                    <Button
+                                        variant="default"
+                                        className="flex-1"
+                                        disabled={loadingId === cosmetic.id || !canAfford}
+                                        onClick={() => handleBuy(cosmetic)}
+                                    >
+                                        {loadingId === cosmetic.id
+                                            ? "Canjeando..."
+                                            : !canAfford
+                                                ? `Faltan ${cosmetic.cost_points - points} pts`
+                                                : "Canjear recompensa"}
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        variant={equipped ? "secondary" : "outline"}
+                                        className="flex-1"
+                                        disabled={loadingId === cosmetic.id || equipped}
+                                        onClick={() => handleEquip(cosmetic)}
+                                    >
+                                        {equipped ? "✅ Equipado" : "Equipar"}
+                                    </Button>
+                                )}
+                            </CardFooter>
+                        </Card>
+                    )
+                })}
+            </div>
         </div>
     )
 }

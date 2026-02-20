@@ -1,5 +1,6 @@
 import { getActiveAlerts } from "@/lib/utils/get-alerts"
 import { AlertsList } from "@/components/alerts/alerts-list"
+import { HelpRequestsPanel } from "@/components/help/HelpRequestsPanel"
 import { createClient } from "@/lib/supabase/server"
 import Link from "next/link"
 
@@ -8,6 +9,12 @@ export default async function DuplaPage() {
     const supabase = await createClient()
 
     const { data: { user } } = await supabase.auth.getUser()
+
+    const { data: profile } = await supabase
+        .from("users")
+        .select("institution_id")
+        .eq("id", user!.id)
+        .single()
 
     // Dupla ve: registros_negativos, discrepancia_docente, sin_registro
     const duplaTypes = [
@@ -48,6 +55,12 @@ export default async function DuplaPage() {
                         filterTypes={duplaTypes}
                     />
                 </section>
+
+                {profile?.institution_id && (
+                    <section className="space-y-3">
+                        <HelpRequestsPanel institutionId={profile.institution_id} />
+                    </section>
+                )}
             </div>
         </main>
     )

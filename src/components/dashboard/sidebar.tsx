@@ -79,11 +79,18 @@ export function SidebarContent({ userId, showBell = true }: { userId: string, sh
 
         // 2. Items específicos por rol
         if (currentRole === "estudiante" || currentRole === "centro_alumnos") {
-            items.push({
-                title: "Tienda",
-                href: "/estudiante/tienda",
-                icon: ShoppingBag,
-            })
+            items.push(
+                {
+                    title: "Tienda",
+                    href: "/estudiante/tienda",
+                    icon: ShoppingBag,
+                },
+                {
+                    title: "Necesito ayuda",
+                    href: "/estudiante/ayuda",
+                    icon: LifeBuoy,
+                }
+            )
         }
 
         if (currentRole === "docente") {
