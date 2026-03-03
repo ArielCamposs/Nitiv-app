@@ -40,7 +40,7 @@ export default async function RegistrosConvivenciaPage() {
     const since = new Date()
     since.setDate(since.getDate() - 90)
 
-    const [{ data: records }, { data: students }] = await Promise.all([
+    const [{ data: records }, { data: students }, { data: staffUsers }] = await Promise.all([
         supabase
             .from("convivencia_records")
             .select(`
@@ -62,6 +62,15 @@ export default async function RegistrosConvivenciaPage() {
             .select("id, name, last_name, rut, courses(name)")
             .eq("institution_id", profile.institution_id)
             .eq("active", true)
+            .order("last_name"),
+
+        // Staff members for the Responsable and Apoyo dropdowns
+        supabase
+            .from("users")
+            .select("id, name, last_name, role")
+            .eq("institution_id", profile.institution_id)
+            .eq("active", true)
+            .in("role", ["docente", "director", "dupla", "convivencia", "inspector", "utp", "admin"])
             .order("last_name"),
     ])
 
@@ -91,6 +100,7 @@ export default async function RegistrosConvivenciaPage() {
                 <ConvivenciaRecordsTabs
                     initialRecords={(records ?? []) as any}
                     students={(students ?? []) as any}
+                    staffUsers={(staffUsers ?? []) as any}
                     reporterName={reporterName}
                 />
             </div>

@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { createNotifications, getUserIdsByRoles } from "@/lib/notifications"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { Mic, MicOff } from "lucide-react"
 import {
     Card,
     CardContent,
@@ -98,6 +99,8 @@ export function DecForm({ students, notifiables = [], teacherId, institutionId }
     // Sección 4: Cierre
     const [actions, setActions] = useState<string[]>([])
     const [description, setDescription] = useState("")
+    const [isListening, setIsListening] = useState(false)
+    const recognitionRef = useRef<any>(null)
 
     // Sección 5: Destinatarios
     const [recipients, setRecipients] = useState<string[]>([])
@@ -112,6 +115,67 @@ export function DecForm({ students, notifiables = [], teacherId, institutionId }
         setList(
             list.includes(item) ? list.filter((i) => i !== item) : [...list, item]
         )
+    }
+
+    const toggleDictation = () => {
+        if (isListening) {
+            if (recognitionRef.current) {
+                recognitionRef.current.stop()
+            }
+            setIsListening(false)
+            return
+        }
+
+        if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
+            toast.error("Tu navegador no soporta dictado por voz.")
+            return
+        }
+
+        const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+        const recognition = new SpeechRec()
+
+        recognition.lang = "es-CL"
+        recognition.interimResults = false
+        recognition.maxAlternatives = 1
+        recognition.continuous = true
+
+        recognition.onstart = () => {
+            setIsListening(true)
+        }
+
+        recognition.onresult = (event: any) => {
+            let finalTranscript = ""
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript + " "
+                }
+            }
+            if (finalTranscript) {
+                setDescription(prev => prev + (prev.endsWith(" ") || prev === "" ? "" : " ") + finalTranscript)
+            }
+        }
+
+        recognition.onerror = (event: any) => {
+            if (event.error === 'aborted' || event.error === 'no-speech') {
+                setIsListening(false)
+                return
+            }
+
+            console.error("Speech recognition error:", event.error, event)
+            if (event.error === 'not-allowed') {
+                toast.error("Permiso de micrófono denegado. Revisa la configuración de tu navegador.")
+            } else {
+                toast.error(`Error en dictado: ${event.error || "Desconocido"}`)
+            }
+            setIsListening(false)
+        }
+
+        recognition.onend = () => {
+            setIsListening(false)
+        }
+
+        recognitionRef.current = recognition
+        recognition.start()
     }
 
     const handleSubmit = async () => {
@@ -454,10 +518,23 @@ export function DecForm({ students, notifiables = [], teacherId, institutionId }
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-900">
-                                Observaciones adicionales{" "}
-                                <span className="text-slate-400 font-normal">(opcional)</span>
-                            </label>
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-slate-900">
+                                    Observaciones adicionales{" "}
+                                    <span className="text-slate-400 font-normal">(opcional)</span>
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={toggleDictation}
+                                    className={`p-1.5 rounded-full transition-colors flex items-center justify-center ${isListening
+                                        ? "bg-rose-100 text-rose-600 animate-pulse ring-2 ring-rose-300 ring-offset-1"
+                                        : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                                        }`}
+                                    title={isListening ? "Detener dictado" : "Iniciar dictado por voz"}
+                                >
+                                    {isListening ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+                                </button>
+                            </div>
                             <Textarea
                                 rows={4}
                                 placeholder="Describe en detalle lo que ocurrió, contexto adicional..."

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
+import Link from "next/link"
 import {
     Dialog, DialogContent, DialogHeader,
     DialogTitle, DialogDescription,
@@ -35,11 +36,37 @@ const STATUS_META = {
     programada: { label: "Programada", dot: "bg-indigo-500", badge: "bg-indigo-100 text-indigo-700", border: "border-l-indigo-400" },
     en_desarrollo: { label: "En desarrollo", dot: "bg-emerald-500", badge: "bg-emerald-100 text-emerald-700", border: "border-l-emerald-400" },
     finalizada: { label: "Finalizada", dot: "bg-slate-400", badge: "bg-slate-100 text-slate-500", border: "border-l-slate-300" },
+    socioemocional: { label: "Socioemocional", dot: "bg-amber-500", badge: "bg-amber-100 text-amber-700", border: "border-l-amber-400" },
 }
 
 const TYPE_LABELS: Record<string, string> = {
-    taller: "Taller", charla: "Charla", evento: "Evento",
-    ceremonia: "Ceremonia", deportivo: "Deportivo", otro: "Otro",
+    taller: "Taller",
+    charla: "Charla",
+    deporte: "Deporte",
+    cultural: "Cultural",
+    academico: "Académico",
+    reunion: "Reunión",
+    socioemocional: "Socioemocional",
+    otro: "Otro",
+}
+
+const COLOR_MAP: Record<string, { bg: string; text: string; icon: string }> = {
+    purple: { bg: "bg-purple-50", text: "text-purple-600", icon: "text-purple-200" },
+    blue: { bg: "bg-blue-50", text: "text-blue-600", icon: "text-blue-200" },
+    green: { bg: "bg-emerald-50", text: "text-emerald-600", icon: "text-emerald-200" },
+    amber: { bg: "bg-amber-50", text: "text-amber-600", icon: "text-amber-200" },
+    rose: { bg: "bg-rose-50", text: "text-rose-600", icon: "text-rose-200" },
+    slate: { bg: "bg-slate-50", text: "text-slate-600", icon: "text-slate-200" },
+}
+
+const ROLE_LABELS: Record<string, string> = {
+    "director": "Director(a)",
+    "admin": "Plataforma Nitiv",
+    "docente": "Docente",
+    "dupla": "Especialista Psicosocial",
+    "convivencia": "Convivencia Escolar",
+    "utp": "UTP",
+    "inspector": "Inspector(a)",
 }
 
 const TYPE_ICONS: Record<string, React.ElementType> = {
@@ -276,6 +303,10 @@ function ActivityModal({
                                 {activity.target === "general" ? (
                                     <Badge variant="outline" className="text-[11px] border-indigo-200 text-indigo-600">
                                         🏫 Toda la institución
+                                    </Badge>
+                                ) : activity.target === "docentes" ? (
+                                    <Badge variant="outline" className="text-[11px] border-amber-200 text-amber-600">
+                                        👩‍🏫 Solo Docentes
                                     </Badge>
                                 ) : (
                                     <Badge variant="outline" className="text-[11px] border-violet-200 text-violet-600">
@@ -530,62 +561,102 @@ function ActivityCard({
     const meta = STATUS_META[status as keyof typeof STATUS_META]
     const isFinalizada = status === "finalizada"
 
+    const titleColorId = activity.title_color || "purple"
+    const colorStyle = COLOR_MAP[titleColorId] || COLOR_MAP.purple
+    const isExterna = activity.origin === "externa"
+
+    const hasUser = !!activity.users
+    const creatorName = hasUser ? `${activity.users.name} ${activity.users.last_name || ""}`.trim() : "Administrador"
+    const creatorRole = hasUser ? activity.users.role : "admin"
+    const roleLabel = ROLE_LABELS[creatorRole] || creatorRole
+
+    const activityCourses = (activity.activity_courses ?? []).map((ac: any) => ac.courses?.name).filter(Boolean)
+
     return (
         <>
             <button
                 onClick={() => setModalOpen(true)}
                 className={cn(
-                    "w-full text-left rounded-xl border-l-4 border border-slate-200 bg-white shadow-sm",
-                    "hover:shadow-md hover:border-slate-300 transition-all duration-200 px-4 py-3",
-                    meta.border
+                    "flex flex-col bg-white text-left w-full h-full rounded-2xl border shadow-sm border-slate-200 hover:shadow-md hover:border-slate-300 transition-all duration-200 group relative overflow-hidden"
                 )}
             >
-                <div className="flex items-center gap-3">
-                    <span className="text-xl shrink-0 text-slate-400">
+                {/* ── Top Header Area (Neutral bg & Big Icon) ── */}
+                <div className="relative w-full h-32 flex items-center justify-center pt-2 bg-slate-100">
+                    {/* Status & Origin badges inside the header */}
+                    <div className="absolute top-3 left-3 flex items-center gap-2">
+                        <Badge className={cn("text-[10px] px-2 py-0.5 border-none font-semibold", meta.badge)}>
+                            {meta.label}
+                        </Badge>
+                    </div>
+                    <div className="absolute top-3 right-3 flex items-center gap-1 bg-white/80 backdrop-blur-sm border border-slate-200/50 rounded-full px-2 py-0.5 text-[10px] font-medium text-slate-600 shadow-sm">
+                        {isExterna ? <MapPin className="w-3 h-3 text-slate-400" /> : <Pin className="w-3 h-3 text-slate-400" />}
+                        {isExterna ? "Externa" : "Del colegio"}
+                    </div>
+
+                    {/* Big Abstract Icon */}
+                    <div className={cn("transform transition-transform group-hover:scale-105", colorStyle.icon)}>
                         {TYPE_ICONS[activity.activity_type] ? (() => {
                             const IconCard = TYPE_ICONS[activity.activity_type]
-                            return <IconCard className="w-5 h-5" />
-                        })() : <Pin className="w-5 h-5" />}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-medium text-slate-900 text-sm truncate">
-                                {activity.title}
-                            </p>
-                            <Badge className={cn("text-[10px] px-1.5 py-0", meta.badge)}>
-                                <span className={cn("w-1.5 h-1.5 rounded-full mr-1 inline-block", meta.dot)} />
-                                {meta.label}
-                            </Badge>
-                            {isFinalizada && isStudent && (
-                                <span className="text-[10px] text-amber-500 font-medium">
-                                    ⭐ Valorar
-                                </span>
-                            )}
-                        </div>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-slate-400 flex-wrap">
-                            <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                <span className="capitalize">
-                                    {new Date(activity.start_datetime).toLocaleDateString("es-CL", {
-                                        day: "numeric", month: "short",
-                                    })}
-                                </span>
-                                · {fmtTime(activity.start_datetime)}
-                            </span>
-                            {activity.location && (
-                                <span className="flex items-center gap-1">
-                                    <MapPin className="w-3 h-3" />
-                                    {activity.location}
-                                </span>
-                            )}
-                            {activity.target === "general" ? (
-                                <span className="text-indigo-400">🏫 Institución</span>
-                            ) : (
-                                <span className="text-violet-400">🎯 Por curso</span>
-                            )}
+                            return <IconCard className="w-16 h-16 drop-shadow-sm opacity-80" strokeWidth={1.5} />
+                        })() : <Pin className="w-16 h-16 drop-shadow-sm opacity-80" strokeWidth={1.5} />}
+                    </div>
+
+                    {/* Bottom gradient fade for the date text overlay */}
+                    <div className="absolute bottom-0 left-0 w-full h-10 bg-linear-to-t from-black/50 to-transparent flex items-end px-3 pb-2">
+                        <div className="flex items-center gap-1.5 text-white/90 font-medium text-xs tracking-wide">
+                            <Calendar className="w-3.5 h-3.5 opacity-80" />
+                            {new Date(activity.start_datetime).toLocaleDateString("es-CL", {
+                                day: "numeric", month: "short", year: "numeric",
+                            })}
                         </div>
                     </div>
-                    <ChevronDown className="w-4 h-4 text-slate-300 shrink-0" />
+                </div>
+
+                {/* ── Main Content Area ── */}
+                <div className="flex-1 flex flex-col w-full p-4 items-start bg-white">
+                    <h3 className={cn("font-semibold text-lg leading-snug mb-0.5 line-clamp-1 truncate w-full", colorStyle.text)}>
+                        {activity.title}
+                    </h3>
+
+                    <div className="text-sm text-slate-500 mb-3 truncate w-full capitalize">
+                        {roleLabel}{hasUser ? " " : ""}
+                        {hasUser ? (
+                            <Link href={`/perfil/${activity.users.id}`} className="hover:underline hover:text-indigo-600 transition-colors">
+                                {creatorName}
+                            </Link>
+                        ) : creatorName}
+                    </div>
+
+                    {/* Activity Type / Pills */}
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                        {activity.activity_type && (
+                            <span className="text-[11px] font-medium px-2 py-0.5 bg-slate-50 rounded-full border border-slate-200 text-slate-600">
+                                {TYPE_LABELS[activity.activity_type] || activity.activity_type}
+                            </span>
+                        )}
+                        {creatorRole === "convivencia" || creatorRole === "dupla" ? (
+                            <span className="text-[11px] font-medium px-2 py-0.5 bg-slate-50 rounded-full border border-slate-200 text-slate-600">
+                                Desarrollo socioemocional
+                            </span>
+                        ) : null}
+                    </div>
+
+                    {/* Espaciador para empujar target a abajo horizontalmente alineado */}
+                    <div className="mt-auto pt-3 border-t border-slate-100 w-full flex items-center justify-between text-xs text-slate-500">
+                        <div className="flex items-center gap-1.5 truncate">
+                            <Users className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                            {activity.target === "general" ? (
+                                <span className="font-medium">Toda la Institución</span>
+                            ) : activity.target === "docentes" ? (
+                                <span className="font-medium">Solo Docentes</span>
+                            ) : activityCourses.length > 0 ? (
+                                <span className="font-medium truncate max-w-[180px]">{activityCourses.join(", ")}</span>
+                            ) : (
+                                <span className="font-medium">Cursos específicos</span>
+                            )}
+                        </div>
+                        <ChevronDown className="w-4 h-4 text-slate-300 group-hover:text-slate-400 transition-colors shrink-0" />
+                    </div>
                 </div>
             </button>
 
@@ -611,7 +682,7 @@ export function ActivitiesClient({
     const [activities, setActivities] = useState(initialActivities)
     const [showForm, setShowForm] = useState(false)
     const [editActivity, setEditActivity] = useState<any | null>(null)
-    const [filter, setFilter] = useState<"todas" | "programada" | "en_desarrollo" | "finalizada">("todas")
+    const [filter, setFilter] = useState<"todas" | "programada" | "en_desarrollo" | "finalizada" | "socioemocional">("todas")
 
     const isStudent = userRole === "estudiante"
 
@@ -633,6 +704,7 @@ export function ActivitiesClient({
 
     const filtered = useMemo(() => {
         if (filter === "todas") return activities
+        if (filter === "socioemocional") return activities.filter(a => a.target === "docentes" || a.activity_type === "socioemocional")
         return activities.filter(a =>
             computeStatus(a.start_datetime, a.end_datetime) === filter
         )
@@ -683,7 +755,7 @@ export function ActivitiesClient({
 
             {/* Filtros */}
             <div className="flex flex-wrap gap-2 items-center">
-                {(["todas", "programada", "en_desarrollo", "finalizada"] as const).map(f => (
+                {(["todas", "programada", "en_desarrollo", "finalizada", "socioemocional"] as const).map(f => (
                     <button
                         key={f}
                         onClick={() => setFilter(f)}
@@ -694,7 +766,7 @@ export function ActivitiesClient({
                                 : "bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
                         )}
                     >
-                        {f === "todas" ? "Todas" : STATUS_META[f].label}
+                        {f === "todas" ? "Todas" : STATUS_META[f]?.label ?? "Socioemocional"}
                     </button>
                 ))}
                 <span className="text-xs text-slate-400">
@@ -710,20 +782,22 @@ export function ActivitiesClient({
                 </div>
             ) : (
                 grouped.map(({ label, acts }) => (
-                    <div key={label} className="space-y-2">
+                    <div key={label} className="space-y-3">
                         <h2 className="text-xs font-semibold tracking-widest text-slate-400 capitalize px-1">
                             {label}
                         </h2>
-                        {acts.map(activity => (
-                            <ActivityCard
-                                key={activity.id}
-                                activity={activity}
-                                canManage={canManage}
-                                isStudent={isStudent}
-                                studentId={studentId}
-                                onEdit={handleEdit}
-                            />
-                        ))}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {acts.map(activity => (
+                                <ActivityCard
+                                    key={activity.id}
+                                    activity={activity}
+                                    canManage={canManage}
+                                    isStudent={isStudent}
+                                    studentId={studentId}
+                                    onEdit={handleEdit}
+                                />
+                            ))}
+                        </div>
                     </div>
                 ))
             )}

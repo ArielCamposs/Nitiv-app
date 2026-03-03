@@ -4,12 +4,16 @@ import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 
 export async function createConvivenciaRecord(formData: {
+    status: string
+    responsable_id: string | null
+    apoyo_id: string | null
     type: string
     severity: string
     location: string
     description: string
+    agreements: string
     involved_count: number
-    student_ids: string[]       // changed from courses_involved
+    student_ids: string[]
     actions_taken: string[]
     incident_date: string
 }) {
@@ -33,10 +37,14 @@ export async function createConvivenciaRecord(formData: {
         .insert({
             institution_id: profile.institution_id,
             reporter_id: user.id,
+            status: formData.status,
+            responsable_id: formData.responsable_id || null,
+            apoyo_id: formData.apoyo_id || null,
             type: formData.type,
             severity: formData.severity,
             location: formData.location || null,
             description: formData.description,
+            agreements: formData.agreements || null,
             involved_count: Math.max(formData.involved_count, formData.student_ids.length || 1),
             courses_involved: [],           // legacy field, kept empty
             actions_taken: formData.actions_taken,

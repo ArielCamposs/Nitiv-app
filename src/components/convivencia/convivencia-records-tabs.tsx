@@ -7,7 +7,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
     ResponsiveContainer
 } from "recharts"
-import { ClipboardList, Plus, History, TrendingUp, TrendingDown, Minus, CheckCircle, ChevronDown, ChevronUp, Search, X } from "lucide-react"
+import { ClipboardList, Plus, History, TrendingUp, TrendingDown, Minus, CheckCircle, ChevronDown, ChevronUp, Search, X, Mic, MicOff } from "lucide-react"
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const RECORD_TYPES: { value: string; label: string }[] = [
@@ -28,15 +28,12 @@ const SEVERITIES = [
 ]
 
 const ACTIONS_OPTIONS = [
-    "Contacto con apoderado",
-    "Derivación a convivencia",
-    "Derivación a dupla psicosocial",
-    "Derivación a dirección",
-    "Citación a apoderado",
-    "Acompañamiento en patio",
-    "Mediación entre partes",
-    "Parte policial",
-    "Suspensión",
+    "Entrevista con estudiante(s)",
+    "Contención emocional",
+    "Mediación / Resolución de conflictos",
+    "Comunicación a apoderados (llamada/correo)",
+    "Derivación externa",
+    "Aplicación de medida disciplinaria",
 ]
 
 const SEVERITY_COLORS: { [key: string]: string } = {
@@ -54,6 +51,13 @@ interface Student {
     courses?: { name: string } | null
 }
 
+interface StaffUser {
+    id: string
+    name: string
+    last_name: string
+    role: string
+}
+
 interface InvolvedStudent {
     student_id: string
     students: { id: string; name: string; last_name: string } | null
@@ -61,6 +65,10 @@ interface InvolvedStudent {
 
 interface ConvivenciaRecord {
     id: string
+    status: string
+    responsable_id: string | null
+    apoyo_id: string | null
+    agreements: string | null
     type: string
     severity: string
     location: string | null
@@ -76,6 +84,7 @@ interface ConvivenciaRecord {
 interface Props {
     initialRecords: ConvivenciaRecord[]
     students: Student[]
+    staffUsers: StaffUser[]
     reporterName: string
 }
 
@@ -264,16 +273,27 @@ function ResolveRow({ record, onResolved }: {
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-export function ConvivenciaRecordsTabs({ initialRecords, students, reporterName }: Props) {
+export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, reporterName }: Props) {
     const [tab, setTab] = useState<"nuevo" | "historial">("nuevo")
     const [records, setRecords] = useState<ConvivenciaRecord[]>(initialRecords)
     const [pending, startTransition] = useTransition()
 
     // Form state
+    const [status, setStatus] = useState("abierto")
+    const [responsableId, setResponsableId] = useState("")
+    const [apoyoId, setApoyoId] = useState("")
+
     const [type, setType] = useState("")
     const [severity, setSeverity] = useState("moderada")
     const [location, setLocation] = useState("")
     const [description, setDescription] = useState("")
+    const [agreements, setAgreements] = useState("")
+
+    // Voice Dictation State
+    const [isListening, setIsListening] = useState(false)
+    const [listeningField, setListeningField] = useState<"description" | "agreements" | null>(null)
+
+    const [selectedCourse, setSelectedCourse] = useState("")
     const [involvedStudents, setInvolvedStudents] = useState<Student[]>([])
     const [actions, setActions] = useState<string[]>([])
     const [otherAction, setOtherAction] = useState("")
@@ -320,6 +340,71 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, reporterName 
         setActions(prev => prev.includes(a) ? prev.filter(x => x !== a) : [...prev, a])
     }
 
+    function toggleDictation(field: "description" | "agreements") {
+        if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
+            toast.error("Tu navegador no soporta el dictado por voz (usa Chrome o Edge)")
+            return
+        }
+
+        if (isListening && listeningField === field) {
+            // Already listening on this field, stop it
+            setIsListening(false)
+            setListeningField(null)
+            return
+        }
+
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+        const recognition = new SpeechRecognition()
+        recognition.lang = "es-CL"
+        recognition.interimResults = true
+        recognition.continuous = true
+
+        recognition.onstart = () => {
+            setIsListening(true)
+            setListeningField(field)
+        }
+
+        recognition.onresult = (event: any) => {
+            let finalTranscript = ""
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    finalTranscript += event.results[i][0].transcript + " "
+                }
+            }
+            if (finalTranscript) {
+                if (field === "description") {
+                    setDescription(prev => prev + (prev.endsWith(" ") || prev === "" ? "" : " ") + finalTranscript)
+                } else {
+                    setAgreements(prev => prev + (prev.endsWith(" ") || prev === "" ? "" : " ") + finalTranscript)
+                }
+            }
+        }
+
+        recognition.onerror = (event: any) => {
+            if (event.error === 'aborted' || event.error === 'no-speech') {
+                setIsListening(false)
+                setListeningField(null)
+                return // Ignorar errores comunes de silencio o detención manual
+            }
+
+            console.error("Speech recognition error:", event.error, event)
+            if (event.error === 'not-allowed') {
+                toast.error("Permiso de micrófono denegado. Revisa la configuración de tu navegador.")
+            } else {
+                toast.error(`Error en dictado: ${event.error || "Desconocido"}`)
+            }
+            setIsListening(false)
+            setListeningField(null)
+        }
+
+        recognition.onend = () => {
+            setIsListening(false)
+            setListeningField(null)
+        }
+
+        recognition.start()
+    }
+
     function handleResolved(id: string, notes: string) {
         setRecords(prev => prev.map(r => r.id === id ? { ...r, resolved: true, resolution_notes: notes } : r))
     }
@@ -334,6 +419,10 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, reporterName 
 
         startTransition(async () => {
             const result = await createConvivenciaRecord({
+                status,
+                responsable_id: responsableId || null,
+                apoyo_id: apoyoId || null,
+                agreements: agreements.trim(),
                 type,
                 severity,
                 location: location.trim(),
@@ -365,13 +454,14 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, reporterName 
                         student_id: s.id,
                         students: { id: s.id, name: s.name, last_name: s.last_name },
                     })),
-                }
+                } as any // using as any to ignore strict DB typing matching for optimistic updates
                 setRecords(prev => [newRecord, ...prev])
 
                 // Reset
+                setStatus("abierto"); setResponsableId(""); setApoyoId("")
                 setType(""); setSeverity("moderada"); setLocation("")
-                setDescription(""); setInvolvedStudents([])
-                setActions([]); setOtherAction("")
+                setDescription(""); setAgreements(""); setInvolvedStudents([])
+                setSelectedCourse(""); setActions([]); setOtherAction("")
                 setIncidentDate(new Date().toISOString().slice(0, 16))
                 setTab("historial")
             }
@@ -406,106 +496,280 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, reporterName 
 
             {/* ── FORM ── */}
             {tab === "nuevo" && (
-                <form onSubmit={handleSubmit} className="bg-white rounded-2xl border shadow-sm p-6 space-y-6">
-                    {/* Tipo */}
-                    <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-3">
-                            Tipo de Caso <span className="text-red-500">*</span>
-                        </label>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                            {RECORD_TYPES.map(t => (
-                                <button type="button" key={t.value} onClick={() => setType(t.value)}
-                                    className={`px-3 py-2.5 rounded-xl border text-center text-xs font-medium transition-all ${type === t.value
-                                        ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
-                                        : "bg-white text-slate-600 border-slate-200 hover:border-indigo-300"}`}
-                                >
-                                    {t.label}
-                                </button>
-                            ))}
+                <form onSubmit={handleSubmit} className="bg-white rounded-3xl border shadow-sm p-8 space-y-10">
+
+                    {/* Header: Estado y Fecha */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                            <span className="text-sm font-semibold text-slate-700">Estado del caso</span>
+                            <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-full border">
+                                {[
+                                    { value: "abierto", label: "Abierto", color: "bg-emerald-400 text-white hover:bg-emerald-500", activeColor: "bg-emerald-500 text-white shadow-md ring-2 ring-emerald-200" },
+                                    { value: "seguimiento", label: "En seguimiento", color: "bg-orange-300 text-white hover:bg-orange-400", activeColor: "bg-orange-400 text-white shadow-md ring-2 ring-orange-200" },
+                                    { value: "cerrado", label: "Cerrado", color: "bg-red-400 text-white hover:bg-red-500", activeColor: "bg-red-500 text-white shadow-md ring-2 ring-red-200" },
+                                ].map(s => (
+                                    <button
+                                        type="button"
+                                        key={s.value}
+                                        onClick={() => setStatus(s.value)}
+                                        className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${status === s.value ? s.activeColor : s.color + " opacity-80"
+                                            }`}
+                                    >
+                                        {s.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                            <span className="text-sm font-semibold text-slate-700">Fecha y hora</span>
+                            <input type="datetime-local" value={incidentDate} onChange={e => setIncidentDate(e.target.value)}
+                                className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                            />
                         </div>
                     </div>
 
-                    {/* Gravedad */}
-                    <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-3">Gravedad</label>
-                        <div className="flex gap-2 flex-wrap">
-                            {SEVERITIES.map(s => (
-                                <button type="button" key={s.value} onClick={() => setSeverity(s.value)}
-                                    className={`px-4 py-2 rounded-full text-sm font-medium border transition-all ${severity === s.value
-                                        ? s.color + " shadow-sm"
-                                        : "bg-slate-50 text-slate-500 border-slate-200 hover:border-slate-300"}`}
-                                >
-                                    {s.label}
-                                </button>
-                            ))}
+                    {/* ── I. Identificación y contexto ── */}
+                    <div className="space-y-4">
+                        <h2 className="text-base font-bold text-slate-800">I. Identificación y contexto</h2>
+
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 bg-slate-50/50 p-6 rounded-2xl border">
+                            {/* Profesionales */}
+                            <div className="md:col-span-4 space-y-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                                <h3 className="text-sm font-semibold text-slate-700 text-center mb-2">Profesionales</h3>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 mb-1">Responsable</label>
+                                    <select
+                                        value={responsableId}
+                                        onChange={e => setResponsableId(e.target.value)}
+                                        className="w-full text-sm bg-slate-100 border-transparent focus:border-indigo-400 focus:bg-white rounded-lg px-3 py-2 transition-colors"
+                                    >
+                                        <option value="">Seleccione...</option>
+                                        {staffUsers.map(u => <option key={u.id} value={u.id}>{u.last_name}, {u.name}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-500 mb-1">Apoyo</label>
+                                    <select
+                                        value={apoyoId}
+                                        onChange={e => setApoyoId(e.target.value)}
+                                        className="w-full text-sm bg-slate-100 border-transparent focus:border-indigo-400 focus:bg-white rounded-lg px-3 py-2 transition-colors"
+                                    >
+                                        <option value="">Ninguno</option>
+                                        {staffUsers.map(u => <option key={u.id} value={u.id}>{u.last_name}, {u.name}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Cursos y Estudiantes */}
+                            <div className="md:col-span-5 space-y-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                                <div className="grid grid-cols-2 gap-4">
+                                    {/* Select de Curso */}
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-slate-700 text-center mb-3">Curso</h3>
+                                        <div className="bg-slate-50 p-2 rounded-lg border border-dashed flex items-center min-h-[40px] focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-400 transition-all">
+                                            <select
+                                                value={selectedCourse}
+                                                onChange={(e) => setSelectedCourse(e.target.value)}
+                                                className="w-full text-sm bg-transparent border-none focus:outline-none focus:ring-0 text-slate-700 font-medium cursor-pointer"
+                                            >
+                                                <option value="">Todos los cursos</option>
+                                                {Array.from(new Set(students.map(s => (s.courses as any)?.name).filter(Boolean))).sort().map(courseName => (
+                                                    <option key={courseName as string} value={courseName as string}>{courseName as string}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {/* Estudiantes Picker */}
+                                    <div>
+                                        <h3 className="text-sm font-semibold text-slate-700 text-center mb-3">Estudiante(s) Involucrado(s)</h3>
+                                        <div className="bg-slate-50 p-2 rounded-lg border border-dashed min-h-[40px]">
+                                            <StudentPicker
+                                                allStudents={selectedCourse ? students.filter(s => (s.courses as any)?.name === selectedCourse) : students}
+                                                selected={involvedStudents}
+                                                onChange={setInvolvedStudents}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Lugar del evento */}
+                            <div className="md:col-span-3 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+                                <h3 className="text-sm font-semibold text-slate-700 text-center mb-3">Lugar del evento</h3>
+                                <div className="flex flex-wrap gap-2 justify-center bg-slate-50 p-3 rounded-xl">
+                                    {["Patio", "Aula", "Baño", "Comedor", "Redes sociales", "Fuera del colegio"].map(loc => (
+                                        <button
+                                            key={loc}
+                                            type="button"
+                                            onClick={() => setLocation(loc)}
+                                            className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${location === loc
+                                                ? "bg-indigo-500 text-white shadow-sm"
+                                                : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                                                }`}
+                                        >
+                                            {loc}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Fecha */}
-                    <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-2">Fecha y hora del suceso</label>
-                        <input type="datetime-local" value={incidentDate} onChange={e => setIncidentDate(e.target.value)}
-                            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                        />
+                    {/* ── II. Tipificación del evento ── */}
+                    <div className="space-y-4">
+                        <h2 className="text-base font-bold text-slate-800">II. Tipificación del evento</h2>
+                        <div className="bg-slate-50/50 p-6 rounded-2xl border space-y-6">
+
+                            {/* Gravedad */}
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                                <span className="text-sm font-semibold text-slate-700 w-24">Gravedad</span>
+                                <div className="flex gap-2 flex-wrap">
+                                    {[
+                                        { value: "leve", label: "Leve", baseClass: "bg-indigo-100 text-indigo-700 border-indigo-200", activeClass: "bg-indigo-500 text-white shadow-md ring-2 ring-indigo-200" },
+                                        { value: "moderada", label: "Mediano", baseClass: "bg-purple-100 text-purple-700 border-purple-200", activeClass: "bg-purple-500 text-white shadow-md ring-2 ring-purple-200" },
+                                        { value: "grave", label: "Grave", baseClass: "bg-rose-100 text-rose-700 border-rose-200", activeClass: "bg-rose-500 text-white shadow-md ring-2 ring-rose-200" },
+                                        { value: "gravisimo", label: "Gravísimo", baseClass: "bg-red-100 text-red-700 border-red-200", activeClass: "bg-red-600 text-white shadow-md ring-2 ring-red-200" },
+                                    ].map(s => (
+                                        <button
+                                            type="button"
+                                            key={s.value}
+                                            onClick={() => setSeverity(s.value)}
+                                            className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${severity === s.value ? s.activeClass : s.baseClass + " opacity-80 hover:opacity-100"
+                                                } ${type === "Entrevista apoderado" ? "opacity-40 grayscale pointer-events-none" : ""}`}
+                                        >
+                                            {s.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Tipo Central / Frecuentes */}
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                                <span className="text-sm font-semibold text-slate-700 w-24">Tipo</span>
+                                <div className="flex-1 flex flex-col sm:flex-row gap-4 sm:items-center">
+                                    <div className="w-full sm:w-64">
+                                        {/* Dropdown nativo simple (se puede reemplazar por combobox si se requiere) */}
+                                        <select
+                                            value={type}
+                                            onChange={e => {
+                                                setType(e.target.value)
+                                                if (e.target.value === "Entrevista apoderado") setSeverity("n/a")
+                                            }}
+                                            className="w-full rounded-xl bg-white border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                        >
+                                            <option value="">Seleccione o escriba...</option>
+                                            {RECORD_TYPES.map(t => (
+                                                <option key={t.value} value={t.label}>{t.label}</option>
+                                            ))}
+                                            <option value="Apoyo emocional">Apoyo emocional</option>
+                                            <option value="Entrevista apoderado">Entrevista apoderado</option>
+                                            <option value="Incumplimiento de normas">Incumplimiento de normas</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-xs font-medium text-slate-500">Frecuentes:</span>
+                                        {[
+                                            { label: "Apoyo emocional", color: "border-yellow-400 text-yellow-700 bg-yellow-50 hover:bg-yellow-100" },
+                                            { label: "Entrevista apoderado", color: "border-red-400 text-red-700 bg-red-50 hover:bg-red-100" },
+                                            { label: "Incumplimiento de normas", color: "border-blue-400 text-blue-700 bg-blue-50 hover:bg-blue-100" },
+                                        ].map(shortcut => (
+                                            <button
+                                                key={shortcut.label}
+                                                type="button"
+                                                onClick={() => {
+                                                    setType(shortcut.label)
+                                                    if (shortcut.label === "Entrevista apoderado") setSeverity("n/a")
+                                                }}
+                                                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${shortcut.color} ${type === shortcut.label ? "ring-2 ring-offset-1 ring-slate-300 font-bold" : ""}`}
+                                            >
+                                                {shortcut.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
                     </div>
 
-                    {/* Lugar */}
-                    <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-2">Lugar del establecimiento</label>
-                        <input type="text" value={location} onChange={e => setLocation(e.target.value)}
-                            placeholder="Ej: Patio central, Sala 3B, Baños..."
-                            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                        />
-                    </div>
-
-                    {/* Estudiantes involucrados */}
-                    <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-2">
-                            Estudiantes involucrados
-                            {involvedStudents.length > 0 && (
-                                <span className="ml-2 text-xs font-normal text-indigo-600">{involvedStudents.length} seleccionados</span>
-                            )}
-                        </label>
-                        <StudentPicker
-                            allStudents={students}
-                            selected={involvedStudents}
-                            onChange={setInvolvedStudents}
-                        />
-                        {involvedStudents.length === 0 && (
-                            <p className="mt-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                                ⚠️ Si no asignas estudiantes, el caso <strong>no aparecerá en el perfil de ningún estudiante</strong>. Busca y selecciona los involucrados para vincularlos.
-                            </p>
-                        )}
-                    </div>
-
-                    {/* Descripción */}
-                    <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-2">
-                            Descripción del suceso <span className="text-red-500">*</span>
-                        </label>
-                        <textarea rows={4} value={description} onChange={e => setDescription(e.target.value)}
-                            placeholder="Describe detalladamente qué ocurrió, quiénes participaron y el contexto..."
-                            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
-                        />
-                    </div>
-
-                    {/* Acciones */}
-                    <div>
-                        <label className="block text-sm font-semibold text-slate-700 mb-3">Acciones tomadas de inmediato</label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {ACTIONS_OPTIONS.map(a => (
-                                <label key={a} className="flex items-center gap-2.5 cursor-pointer">
-                                    <input type="checkbox" checked={actions.includes(a)} onChange={() => toggleAction(a)}
-                                        className="w-4 h-4 rounded accent-indigo-600"
+                    {/* ── III. Descripción y Acuerdos ── */}
+                    <div className="space-y-4">
+                        <div className="bg-slate-50/50 p-6 rounded-2xl border space-y-6">
+                            {/* Descripción */}
+                            <div>
+                                <h2 className="text-sm font-bold text-slate-800 mb-2">III. Descripción del evento <span className="text-red-500">*</span></h2>
+                                <div className="relative">
+                                    <textarea
+                                        rows={4}
+                                        value={description}
+                                        onChange={e => setDescription(e.target.value)}
+                                        placeholder="Describe detalladamente qué ocurrió, quiénes participaron y el contexto..."
+                                        className="w-full rounded-2xl bg-white border border-slate-200 p-4 pb-12 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none shadow-sm"
                                     />
-                                    <span className="text-sm text-slate-700">{a}</span>
-                                </label>
-                            ))}
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleDictation("description")}
+                                        className={`absolute bottom-3 right-3 p-2.5 rounded-full transition-all ${isListening && listeningField === "description"
+                                            ? "bg-red-500 text-white shadow-md animate-pulse"
+                                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                            }`}
+                                    >
+                                        {isListening && listeningField === "description" ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Acuerdos */}
+                            <div>
+                                <h2 className="text-sm font-bold text-slate-800 mb-2">IV. Acuerdos y Resolución</h2>
+                                <div className="relative">
+                                    <textarea
+                                        rows={3}
+                                        value={agreements}
+                                        onChange={e => setAgreements(e.target.value)}
+                                        placeholder="Enumere los acuerdos o decisiones tomadas si aplica..."
+                                        className="w-full rounded-2xl bg-white border border-slate-200 p-4 pb-12 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none shadow-sm"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => toggleDictation("agreements")}
+                                        className={`absolute bottom-3 right-3 p-2.5 rounded-full transition-all ${isListening && listeningField === "agreements"
+                                            ? "bg-red-500 text-white shadow-md animate-pulse"
+                                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                                            }`}
+                                    >
+                                        {isListening && listeningField === "agreements" ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                            </div>
                         </div>
-                        <input type="text" value={otherAction} onChange={e => setOtherAction(e.target.value)}
-                            placeholder="Otra acción tomada..."
-                            className="mt-3 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                        />
+                    </div>
+
+                    {/* ── V. Gestión y acciones ── */}
+                    <div>
+                        <h2 className="text-sm font-bold text-slate-800 mb-3">V. Gestión y acciones inmediatas</h2>
+                        <div className="bg-slate-50/50 p-6 rounded-2xl border">
+                            <div className="flex flex-col gap-3">
+                                {ACTIONS_OPTIONS.map(a => (
+                                    <label key={a} className="flex items-center gap-3 cursor-pointer w-fit">
+                                        <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${actions.includes(a) ? "bg-indigo-600 border-indigo-600" : "bg-white border-slate-300"
+                                            }`}>
+                                            {actions.includes(a) && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+                                        </div>
+                                        <input
+                                            type="checkbox"
+                                            checked={actions.includes(a)}
+                                            onChange={() => toggleAction(a)}
+                                            className="hidden"
+                                        />
+                                        <span className="text-sm font-medium text-slate-700">{a}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
                     </div>
 
                     <div className="pt-2">

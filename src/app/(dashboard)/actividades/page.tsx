@@ -35,7 +35,7 @@ async function getActivitiesData() {
     const [{ data: activities }, { data: courses }] = await Promise.all([
         supabase
             .from("activities")
-            .select("*, activity_courses(course_id, courses(id, name, section))")
+            .select("*, activity_courses(course_id, courses(id, name, section)), users:created_by(id, name, last_name, role)")
             .eq("institution_id", profile.institution_id)
             .eq("active", true)
             .order("start_datetime", { ascending: true }),

@@ -20,9 +20,11 @@ const formSchema = z.object({
     start_datetime: z.string().min(1, "Indica la fecha de inicio"),
     end_datetime: z.string().min(1, "Indica la fecha de término"),
     materials: z.string().optional(),
-    target: z.enum(["general", "por_curso"]),
+    target: z.enum(["general", "por_curso", "docentes"]),
     course_ids: z.array(z.string()).optional(),
-    activity_type: z.enum(["taller", "charla", "deporte", "cultural", "academico", "reunion", "otro"]).optional(),
+    activity_type: z.enum(["taller", "charla", "deporte", "cultural", "academico", "reunion", "socioemocional", "otro"]).optional(),
+    title_color: z.enum(["purple", "blue", "green", "amber", "rose", "slate"]),
+    origin: z.enum(["institucional", "externa"]),
 }).refine(data => {
     if (!data.start_datetime || !data.end_datetime) return true
     return new Date(data.end_datetime) > new Date(data.start_datetime)
@@ -47,6 +49,8 @@ interface Props {
         target: string
         activity_type: string | null
         courseIds: string[]
+        title_color: string | null
+        origin: string | null
     } | null
     onClose: () => void
     onSaved: (activity: any) => void
@@ -75,9 +79,11 @@ export function ActivityFormModal({
             start_datetime: toLocalInput(editActivity?.start_datetime ?? null),
             end_datetime: toLocalInput(editActivity?.end_datetime ?? null),
             materials: editActivity?.materials ?? "",
-            target: (editActivity?.target as "general" | "por_curso") ?? "general",
+            target: (editActivity?.target as any) ?? "general",
             course_ids: editActivity?.courseIds ?? [],
             activity_type: (editActivity?.activity_type as any) ?? undefined,
+            title_color: (editActivity?.title_color as any) ?? "purple",
+            origin: (editActivity?.origin as any) ?? "institucional",
         },
     })
 
@@ -107,6 +113,8 @@ export function ActivityFormModal({
                 materials: values.materials?.trim() || null,
                 target: values.target,
                 activity_type: values.activity_type ?? null,
+                title_color: values.title_color,
+                origin: values.origin,
                 active: true,
             }
 
@@ -135,7 +143,7 @@ export function ActivityFormModal({
             // Fetch completo para refrescar en UI
             const { data: saved } = await supabase
                 .from("activities")
-                .select("*, activity_courses(course_id, courses(id, name, section))")
+                .select("*, activity_courses(course_id, courses(id, name, section)), users:created_by(name, last_name, role)")
                 .eq("id", activityId)
                 .single()
 
@@ -151,6 +159,10 @@ export function ActivityFormModal({
                     const staffIds = await getUserIdsByRoles(institutionId, staffRoles, userId)
 
                     recipients = [...studentIds, ...staffIds]
+                } else if (values.target === "docentes") {
+                    // Notificar SOLO al staff (docentes, directivos, dupla, etc) y NO a estudiantes
+                    const staffRoles = ["admin", "director", "dupla", "convivencia", "docente", "inspector", "utp"]
+                    recipients = await getUserIdsByRoles(institutionId, staffRoles, userId)
                 } else {
                     // "general": Notificar a todos en el colegio excepto el creador
                     recipients = await getAllUserIds(institutionId, userId)
@@ -192,6 +204,60 @@ export function ActivityFormModal({
                 </div>
 
                 <form onSubmit={form.handleSubmit(onSubmit)} className="px-6 py-5 space-y-4">
+                    <input type="hidden" {...form.register("title_color")} />
+                    <input type="hidden" {...form.register("origin")} />
+                    {/* Origen y Color del Título */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <label className="text-sm font-medium text-slate-800">Origen de la actividad</label>
+                            <div className="flex bg-slate-100 p-1 rounded-lg">
+                                {[
+                                    { value: "institucional", label: "Institucional" },
+                                    { value: "externa", label: "Externa" },
+                                ].map(opt => (
+                                    <button
+                                        key={opt.value}
+                                        type="button"
+                                        onClick={() => form.setValue("origin", opt.value as any)}
+                                        className={cn(
+                                            "flex-1 text-xs font-medium py-1.5 rounded-md transition-all",
+                                            form.watch("origin") === opt.value
+                                                ? "bg-white text-slate-800 shadow-sm"
+                                                : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50"
+                                        )}
+                                    >
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="space-y-1">
+                            <label className="text-sm font-medium text-slate-800">Color del título</label>
+                            <div className="flex items-center gap-2 mt-1">
+                                {[
+                                    { value: "purple", class: "bg-purple-500 ring-purple-500" },
+                                    { value: "blue", class: "bg-blue-500 ring-blue-500" },
+                                    { value: "green", class: "bg-emerald-500 ring-emerald-500" },
+                                    { value: "amber", class: "bg-amber-500 ring-amber-500" },
+                                    { value: "rose", class: "bg-rose-500 ring-rose-500" },
+                                    { value: "slate", class: "bg-slate-700 ring-slate-700" },
+                                ].map(color => (
+                                    <button
+                                        key={color.value}
+                                        type="button"
+                                        onClick={() => form.setValue("title_color", color.value as any)}
+                                        className={cn(
+                                            "w-6 h-6 rounded-full transition-all",
+                                            color.class,
+                                            form.watch("title_color") === color.value ? "ring-2 ring-offset-2 scale-110" : "opacity-70 hover:opacity-100"
+                                        )}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Título */}
                     <div className="space-y-1">
                         <label className="text-sm font-medium text-slate-800">Título</label>
@@ -238,6 +304,7 @@ export function ActivityFormModal({
                                 { value: "cultural", icon: PartyPopper, label: "Cultural" },
                                 { value: "academico", icon: GraduationCap, label: "Académico" },
                                 { value: "reunion", icon: Handshake, label: "Reunión" },
+                                { value: "socioemocional", icon: Pin, label: "Socioemocional" },
                                 { value: "otro", icon: Pin, label: "Otro" },
                             ].map(opt => {
                                 const selected = form.watch("activity_type") === opt.value
@@ -295,13 +362,14 @@ export function ActivityFormModal({
 
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-slate-800">Dirigido a</label>
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-3 gap-2">
                             {[
                                 { value: "general", label: "Todo el colegio" },
                                 { value: "por_curso", label: "Curso específico" },
+                                { value: "docentes", label: "Solo Docentes" },
                             ].map(opt => (
                                 <button key={opt.value} type="button"
-                                    onClick={() => form.setValue("target", opt.value as "general" | "por_curso")}
+                                    onClick={() => form.setValue("target", opt.value as any)}
                                     className={cn(
                                         "flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-medium transition-all",
                                         target === opt.value

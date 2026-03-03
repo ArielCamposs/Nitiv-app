@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { toast } from "sonner"
 import { Plus, Pencil, UserX, UserCheck, Search, Users, Eye, EyeOff, KeyRound } from "lucide-react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { formatPhone } from "@/lib/formatters"
@@ -269,7 +270,9 @@ export function UsersClient({ users: initial, institutionId }: {
                                     {filtered.map(u => (
                                         <tr key={u.id} className={cn("hover:bg-slate-50/50 transition-colors", !u.active && "opacity-50")}>
                                             <td className="px-5 py-3.5">
-                                                <p className="font-medium text-slate-800">{u.name} {u.last_name ?? ""}</p>
+                                                <Link href={`/perfil/${u.id}`} className="font-medium text-indigo-600 hover:underline">
+                                                    {u.name} {u.last_name ?? ""}
+                                                </Link>
                                                 {u.phone && <p className="text-xs text-slate-400">{u.phone}</p>}
                                             </td>
                                             <td className="px-4 py-3.5 text-slate-500 hidden md:table-cell">{u.email}</td>

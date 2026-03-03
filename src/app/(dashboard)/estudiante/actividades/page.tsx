@@ -51,6 +51,7 @@ export default async function EstudianteActividadesPage() {
             start_datetime, end_datetime,
             materials, target, activity_type,
             created_by, active,
+            users:created_by(id, name, last_name, role),
             activity_courses(
                 course_id,
                 courses(id, name, section)

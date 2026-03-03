@@ -6,6 +6,7 @@ import { useChatUnread } from "@/context/chat-unread-context"
 import { useChat } from "@/hooks/useChat"
 import { MessageSquare, X, ArrowLeft, Send, Search } from "lucide-react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { cn } from "@/lib/utils"
 
 const BLOCKED_ROLES = ["estudiante", "centro_alumnos"]
@@ -82,14 +83,14 @@ function ChatWindow({
                 >
                     <ArrowLeft className="w-4 h-4" />
                 </button>
-                <div className="flex-1 min-w-0">
+                <Link href={`/perfil/${contact.id}`} className="flex-1 min-w-0 hover:opacity-80 transition-opacity block">
                     <p className="text-sm font-semibold text-slate-800 truncate">
                         {contact.name} {contact.last_name ?? ""}
                     </p>
                     <p className="text-[10px] text-slate-400">
                         {ROLE_LABEL[contact.role] ?? contact.role}
                     </p>
-                </div>
+                </Link>
             </div>
 
             {/* Mensajes */}

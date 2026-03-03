@@ -61,6 +61,7 @@ async function getDecDetail(id: string) {
         courses ( name, level )
       ),
       users!reporter_id (
+        id,
         name,
         last_name,
         role
@@ -296,9 +297,11 @@ export default async function DecDetailPage({
                         <div>
                             <p className="text-xs text-slate-400">Reportado por</p>
                             <p className="text-slate-700">
-                                {reporter
-                                    ? `${reporter.name} ${reporter.last_name}`
-                                    : "Desconocido"}
+                                {reporter ? (
+                                    <Link href={`/perfil/${reporter.id}`} className="hover:underline hover:text-indigo-600 transition-colors">
+                                        {reporter.name} {reporter.last_name}
+                                    </Link>
+                                ) : "Desconocido"}
                             </p>
                         </div>
                     </div>
@@ -343,9 +346,11 @@ export default async function DecDetailPage({
                                 >
                                     <div>
                                         <p className="text-sm font-medium text-slate-900">
-                                            {r.users
-                                                ? `${r.users.name} ${r.users.last_name}`
-                                                : r.role}
+                                            {r.users ? (
+                                                <Link href={`/perfil/${r.recipient_id}`} className="hover:underline hover:text-indigo-600 transition-colors">
+                                                    {r.users.name} {r.users.last_name}
+                                                </Link>
+                                            ) : r.role}
                                         </p>
                                         <p className="text-xs capitalize text-slate-400">{r.role}</p>
                                     </div>

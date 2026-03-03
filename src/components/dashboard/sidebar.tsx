@@ -59,7 +59,7 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
     ]
 
     if (isStudent) {
-        centroAccion.push({ title: "Mi perfil", href: "/estudiante/perfil", icon: UserCircle })
+        centroAccion.push({ title: "Check-in", href: "/estudiante/checkin", icon: Activity })
     }
 
     if (isDocente) {
@@ -145,6 +145,40 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
     return groups
 }
 
+function AvatarContent({ fullName, role }: { fullName: string; role: string | null }) {
+    return (
+        <>
+            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <span className="text-xs font-bold text-primary">
+                    {fullName
+                        .split(" ")
+                        .slice(0, 2)
+                        .map((n) => n[0])
+                        .join("")
+                        .toUpperCase()}
+                </span>
+            </div>
+            <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-800 truncate">
+                    {fullName}
+                </p>
+                <p className="text-xs text-slate-400">
+                    {role === "docente" ? "Docente"
+                        : role === "dupla" ? "Dupla Psicosocial"
+                            : role === "convivencia" ? "Encargado de Convivencia"
+                                : role === "director" ? "Director"
+                                    : role === "admin" ? "Administrador"
+                                        : role === "inspector" ? "Inspector"
+                                            : role === "utp" ? "UTP"
+                                                : role === "estudiante" ? "Estudiante"
+                                                    : role === "centro_alumnos" ? "Centro de Alumnos"
+                                                        : role ?? ""}
+                </p>
+            </div>
+        </>
+    )
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 export function SidebarContent({ userId, showBell = true }: { userId: string; showBell?: boolean }) {
     const pathname = usePathname()
@@ -179,6 +213,7 @@ export function SidebarContent({ userId, showBell = true }: { userId: string; sh
     }, [])
 
     const sidebarGroups = getSidebarGroups(role)
+    const isStudent = role === "estudiante" || role === "centro_alumnos"
 
     const handleLogout = async () => {
         const { error } = await supabase.auth.signOut()
@@ -250,34 +285,16 @@ export function SidebarContent({ userId, showBell = true }: { userId: string; sh
 
                 {/* Avatar con iniciales + nombre + rol */}
                 {fullName && (
-                    <div className="px-3 py-2 mb-2 flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                            <span className="text-xs font-bold text-primary">
-                                {fullName
-                                    .split(" ")
-                                    .slice(0, 2)
-                                    .map((n) => n[0])
-                                    .join("")
-                                    .toUpperCase()}
-                            </span>
-                        </div>
-                        <div className="min-w-0">
-                            <p className="text-sm font-semibold text-slate-800 truncate">
-                                {fullName}
-                            </p>
-                            <p className="text-xs text-slate-400">
-                                {role === "docente" ? "Docente"
-                                    : role === "dupla" ? "Dupla Psicosocial"
-                                        : role === "convivencia" ? "Encargado de Convivencia"
-                                            : role === "director" ? "Director"
-                                                : role === "admin" ? "Administrador"
-                                                    : role === "inspector" ? "Inspector"
-                                                        : role === "utp" ? "UTP"
-                                                            : role === "estudiante" ? "Estudiante"
-                                                                : role === "centro_alumnos" ? "Centro de Alumnos"
-                                                                    : role ?? ""}
-                            </p>
-                        </div>
+                    <div className="px-3 py-2 mb-2">
+                        {isStudent ? (
+                            <Link href="/estudiante/configuracion" className="flex items-center gap-3 hover:bg-slate-100 p-2 -mx-2 rounded-lg transition-colors cursor-pointer">
+                                <AvatarContent fullName={fullName} role={role} />
+                            </Link>
+                        ) : (
+                            <div className="flex items-center gap-3 p-2 -mx-2">
+                                <AvatarContent fullName={fullName} role={role} />
+                            </div>
+                        )}
                     </div>
                 )}
 
