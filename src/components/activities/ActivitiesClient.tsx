@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import Link from "next/link"
+import Image from "next/image"
 import {
     Dialog, DialogContent, DialogHeader,
     DialogTitle, DialogDescription,
@@ -36,7 +37,6 @@ const STATUS_META = {
     programada: { label: "Programada", dot: "bg-indigo-500", badge: "bg-indigo-100 text-indigo-700", border: "border-l-indigo-400" },
     en_desarrollo: { label: "En desarrollo", dot: "bg-emerald-500", badge: "bg-emerald-100 text-emerald-700", border: "border-l-emerald-400" },
     finalizada: { label: "Finalizada", dot: "bg-slate-400", badge: "bg-slate-100 text-slate-500", border: "border-l-slate-300" },
-    socioemocional: { label: "Socioemocional", dot: "bg-amber-500", badge: "bg-amber-100 text-amber-700", border: "border-l-amber-400" },
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -46,7 +46,6 @@ const TYPE_LABELS: Record<string, string> = {
     cultural: "Cultural",
     academico: "Académico",
     reunion: "Reunión",
-    socioemocional: "Socioemocional",
     otro: "Otro",
 }
 
@@ -72,6 +71,36 @@ const ROLE_LABELS: Record<string, string> = {
 const TYPE_ICONS: Record<string, React.ElementType> = {
     taller: Palette, charla: Mic, evento: PartyPopper,
     ceremonia: GraduationCap, deportivo: Trophy, otro: Pin,
+}
+
+const TYPE_BORDER_MAP: Record<string, string> = {
+    taller: "border-t-4 border-violet-400",
+    charla: "border-t-4 border-sky-400",
+    deporte: "border-t-4 border-emerald-400",
+    cultural: "border-t-4 border-pink-400",
+    academico: "border-t-4 border-amber-400",
+    reunion: "border-t-4 border-slate-400",
+    otro: "border-t-4 border-orange-400",
+}
+
+const TYPE_BADGE_MAP: Record<string, { bg: string; text: string }> = {
+    taller: { bg: "bg-violet-100", text: "text-violet-700" },
+    charla: { bg: "bg-sky-100", text: "text-sky-700" },
+    deporte: { bg: "bg-emerald-100", text: "text-emerald-700" },
+    cultural: { bg: "bg-pink-100", text: "text-pink-700" },
+    academico: { bg: "bg-amber-100", text: "text-amber-700" },
+    reunion: { bg: "bg-slate-200", text: "text-slate-700" },
+    otro: { bg: "bg-orange-100", text: "text-orange-700" },
+}
+
+const TYPE_BG_MAP: Record<string, string> = {
+    taller: "bg-violet-200",
+    charla: "bg-sky-200",
+    deporte: "bg-emerald-200",
+    cultural: "bg-pink-200",
+    academico: "bg-amber-200",
+    reunion: "bg-slate-300",
+    otro: "bg-orange-200",
 }
 
 const RATING_LABELS: Record<number, string> = {
@@ -276,57 +305,71 @@ function ActivityModal({
     return (
         <>
             <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
-                <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-                    <DialogHeader>
-                        <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xl shrink-0 text-slate-400">
-                                {TYPE_ICONS[activity.activity_type] ? (() => {
-                                    const IconInfo = TYPE_ICONS[activity.activity_type]
-                                    return <IconInfo className="w-6 h-6" />
-                                })() : <Pin className="w-6 h-6" />}
-                            </span>
-                            <DialogTitle className="text-lg leading-snug">
-                                {activity.title}
-                            </DialogTitle>
-                        </div>
-                        <DialogDescription asChild>
-                            <div className="flex flex-wrap gap-1.5 mt-1">
-                                <Badge className={cn("text-[11px]", meta.badge)}>
-                                    <span className={cn("w-1.5 h-1.5 rounded-full mr-1 inline-block", meta.dot)} />
-                                    {meta.label}
-                                </Badge>
-                                {activity.activity_type && (
-                                    <Badge variant="outline" className="text-[11px]">
-                                        {TYPE_LABELS[activity.activity_type] ?? activity.activity_type}
-                                    </Badge>
-                                )}
-                                {activity.target === "general" ? (
-                                    <Badge variant="outline" className="text-[11px] border-indigo-200 text-indigo-600">
-                                        🏫 Toda la institución
-                                    </Badge>
-                                ) : activity.target === "docentes" ? (
-                                    <Badge variant="outline" className="text-[11px] border-amber-200 text-amber-600">
-                                        👩‍🏫 Solo Docentes
-                                    </Badge>
-                                ) : (
-                                    <Badge variant="outline" className="text-[11px] border-violet-200 text-violet-600">
-                                        🎯 Por curso
-                                    </Badge>
-                                )}
-                            </div>
-                        </DialogDescription>
-                    </DialogHeader>
+                <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto overflow-hidden p-0 rounded-2xl">
+                    {/* Hidden title for screen reader accessibility (Radix requirement) */}
+                    <DialogTitle className="sr-only">{activity.title}</DialogTitle>
 
-                    <div className="space-y-4 mt-2">
+                    {/* ── Colored header banner ── */}
+                    {(() => {
+                        const bgColor = TYPE_BG_MAP[activity.activity_type] ?? "bg-slate-100"
+                        const badge = TYPE_BADGE_MAP[activity.activity_type]
+                        const IconInfo = TYPE_ICONS[activity.activity_type] ?? Pin
+                        return (
+                            <div className={`px-6 pt-7 pb-4 ${bgColor}`}>
+                                <div className="flex items-start gap-3">
+                                    <div className={`p-2.5 rounded-xl ${badge ? badge.bg : "bg-white/60"}`}>
+                                        <IconInfo className={`w-6 h-6 ${badge ? badge.text : "text-slate-500"}`} />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <h2 className="text-lg font-bold text-slate-900 leading-snug">
+                                            {activity.title}
+                                        </h2>
+                                        <div className="flex flex-wrap gap-1.5 mt-2">
+                                            {activity.activity_type && (
+                                                <span className={cn(
+                                                    "text-[11px] font-semibold px-2 py-0.5 rounded-full",
+                                                    badge ? `${badge.bg} ${badge.text}` : "bg-white text-slate-600"
+                                                )}>
+                                                    {TYPE_LABELS[activity.activity_type] ?? activity.activity_type}
+                                                </span>
+                                            )}
+                                            <span className={cn("text-[11px] font-semibold px-2 py-0.5 rounded-full", meta.badge)}>
+                                                <span className={cn("w-1.5 h-1.5 rounded-full mr-1 inline-block", meta.dot)} />
+                                                {meta.label}
+                                            </span>
+                                            {activity.target === "general" ? (
+                                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-medium">🏫 Toda la institución</span>
+                                            ) : activity.target === "docentes" ? (
+                                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-medium">👩‍🏫 Solo Docentes</span>
+                                            ) : (
+                                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 font-medium">🎯 Por curso</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )
+                    })()}
+
+                    <div className="space-y-4 px-6 py-5">
 
                         {/* Fecha y hora */}
-                        <div className="flex items-center gap-2 text-sm text-slate-600">
-                            <Clock className="w-4 h-4 text-slate-400 shrink-0" />
-                            <span className="capitalize">{fmtDate(activity.start_datetime)}</span>
-                            <span className="text-slate-400">·</span>
-                            <span>{fmtTime(activity.start_datetime)}</span>
+                        <div className="flex flex-col gap-1 text-sm text-slate-600 bg-slate-50 border p-3 rounded-lg">
+                            <div className="flex items-center gap-2">
+                                <Clock className="w-4 h-4 text-emerald-500 shrink-0" />
+                                <span className="font-medium text-slate-700">Inicio:</span>
+                                <span className="capitalize">{fmtDate(activity.start_datetime)}</span>
+                                <span className="text-slate-400">·</span>
+                                <span>{fmtTime(activity.start_datetime)}</span>
+                            </div>
                             {activity.end_datetime && (
-                                <span className="text-slate-400">→ {fmtTime(activity.end_datetime)}</span>
+                                <div className="flex items-center gap-2">
+                                    <Clock className="w-4 h-4 text-rose-500 shrink-0" />
+                                    <span className="font-medium text-slate-700">Término:</span>
+                                    <span className="capitalize">{fmtDate(activity.end_datetime)}</span>
+                                    <span className="text-slate-400">·</span>
+                                    <span>{fmtTime(activity.end_datetime)}</span>
+                                </div>
                             )}
                         </div>
 
@@ -577,38 +620,64 @@ function ActivityCard({
             <button
                 onClick={() => setModalOpen(true)}
                 className={cn(
-                    "flex flex-col bg-white text-left w-full h-full rounded-2xl border shadow-sm border-slate-200 hover:shadow-md hover:border-slate-300 transition-all duration-200 group relative overflow-hidden"
+                    "flex flex-col bg-white text-left w-full h-full rounded-2xl shadow-sm border border-slate-200 hover:shadow-md hover:border-slate-300 transition-all duration-200 group relative overflow-hidden"
                 )}
             >
                 {/* ── Top Header Area (Neutral bg & Big Icon) ── */}
-                <div className="relative w-full h-32 flex items-center justify-center pt-2 bg-slate-100">
+                <div className={cn(
+                    "relative w-full h-52 sm:h-44 md:h-40 flex items-center justify-center",
+                    activity.header_image
+                        ? (TYPE_BG_MAP[activity.activity_type] ?? "bg-slate-100")
+                        : "bg-slate-100"
+                )}>
                     {/* Status & Origin badges inside the header */}
-                    <div className="absolute top-3 left-3 flex items-center gap-2">
+                    <div className="absolute top-3 left-3 flex items-center gap-2 z-10">
                         <Badge className={cn("text-[10px] px-2 py-0.5 border-none font-semibold", meta.badge)}>
                             {meta.label}
                         </Badge>
                     </div>
-                    <div className="absolute top-3 right-3 flex items-center gap-1 bg-white/80 backdrop-blur-sm border border-slate-200/50 rounded-full px-2 py-0.5 text-[10px] font-medium text-slate-600 shadow-sm">
+                    <div className="absolute top-3 right-3 flex items-center gap-1 bg-white/80 backdrop-blur-sm border border-slate-200/50 rounded-full px-2 py-0.5 text-[10px] font-medium text-slate-600 shadow-sm z-10">
                         {isExterna ? <MapPin className="w-3 h-3 text-slate-400" /> : <Pin className="w-3 h-3 text-slate-400" />}
                         {isExterna ? "Externa" : "Del colegio"}
                     </div>
 
-                    {/* Big Abstract Icon */}
-                    <div className={cn("transform transition-transform group-hover:scale-105", colorStyle.icon)}>
-                        {TYPE_ICONS[activity.activity_type] ? (() => {
-                            const IconCard = TYPE_ICONS[activity.activity_type]
-                            return <IconCard className="w-16 h-16 drop-shadow-sm opacity-80" strokeWidth={1.5} />
-                        })() : <Pin className="w-16 h-16 drop-shadow-sm opacity-80" strokeWidth={1.5} />}
-                    </div>
+                    {activity.header_image ? (
+                        /* Header image — shown full, centered, no crop */
+                        <Image
+                            src={activity.header_image}
+                            alt={activity.title}
+                            width={400}
+                            height={128}
+                            className="w-full h-full object-cover object-[center_20%]"
+                        />
+                    ) : (
+                        /* Big Abstract Icon fallback */
+                        <div className={cn("transform transition-transform group-hover:scale-105", colorStyle.icon)}>
+                            {TYPE_ICONS[activity.activity_type] ? (() => {
+                                const IconCard = TYPE_ICONS[activity.activity_type]
+                                return <IconCard className="w-16 h-16 drop-shadow-sm opacity-80" strokeWidth={1.5} />
+                            })() : <Pin className="w-16 h-16 drop-shadow-sm opacity-80" strokeWidth={1.5} />}
+                        </div>
+                    )}
 
                     {/* Bottom gradient fade for the date text overlay */}
-                    <div className="absolute bottom-0 left-0 w-full h-10 bg-linear-to-t from-black/50 to-transparent flex items-end px-3 pb-2">
-                        <div className="flex items-center gap-1.5 text-white/90 font-medium text-xs tracking-wide">
-                            <Calendar className="w-3.5 h-3.5 opacity-80" />
+                    <div className="absolute bottom-0 left-0 w-full bg-linear-to-t from-black/70 to-transparent flex flex-col justify-end px-3 py-2 z-10">
+                        <div className="flex items-center gap-1.5 text-white/90 font-medium text-[11px] tracking-wide mb-0.5">
+                            <Calendar className="w-3 h-3 text-emerald-300" />
+                            <span>Inicio:</span>
                             {new Date(activity.start_datetime).toLocaleDateString("es-CL", {
-                                day: "numeric", month: "short", year: "numeric",
+                                day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
                             })}
                         </div>
+                        {activity.end_datetime && (
+                            <div className="flex items-center gap-1.5 text-white/90 font-medium text-[11px] tracking-wide">
+                                <Calendar className="w-3 h-3 text-rose-300" />
+                                <span>Fin:</span>
+                                {new Date(activity.end_datetime).toLocaleDateString("es-CL", {
+                                    day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
+                                })}
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -629,11 +698,17 @@ function ActivityCard({
 
                     {/* Activity Type / Pills */}
                     <div className="flex flex-wrap items-center gap-2 mb-3">
-                        {activity.activity_type && (
-                            <span className="text-[11px] font-medium px-2 py-0.5 bg-slate-50 rounded-full border border-slate-200 text-slate-600">
-                                {TYPE_LABELS[activity.activity_type] || activity.activity_type}
-                            </span>
-                        )}
+                        {activity.activity_type && (() => {
+                            const badge = TYPE_BADGE_MAP[activity.activity_type]
+                            return (
+                                <span className={cn(
+                                    "text-[11px] font-semibold px-2.5 py-0.5 rounded-full",
+                                    badge ? `${badge.bg} ${badge.text}` : "bg-slate-100 text-slate-600"
+                                )}>
+                                    {TYPE_LABELS[activity.activity_type] || activity.activity_type}
+                                </span>
+                            )
+                        })()}
                         {creatorRole === "convivencia" || creatorRole === "dupla" ? (
                             <span className="text-[11px] font-medium px-2 py-0.5 bg-slate-50 rounded-full border border-slate-200 text-slate-600">
                                 Desarrollo socioemocional
@@ -682,8 +757,7 @@ export function ActivitiesClient({
     const [activities, setActivities] = useState(initialActivities)
     const [showForm, setShowForm] = useState(false)
     const [editActivity, setEditActivity] = useState<any | null>(null)
-    const [filter, setFilter] = useState<"todas" | "programada" | "en_desarrollo" | "finalizada" | "socioemocional">("todas")
-
+    const [filter, setFilter] = useState<"todas" | "programada" | "en_desarrollo" | "finalizada">("todas")
     const isStudent = userRole === "estudiante"
 
     const handleEdit = (activity: any) => {
@@ -704,7 +778,6 @@ export function ActivitiesClient({
 
     const filtered = useMemo(() => {
         if (filter === "todas") return activities
-        if (filter === "socioemocional") return activities.filter(a => a.target === "docentes" || a.activity_type === "socioemocional")
         return activities.filter(a =>
             computeStatus(a.start_datetime, a.end_datetime) === filter
         )
@@ -753,12 +826,11 @@ export function ActivitiesClient({
                 )}
             </div>
 
-            {/* Filtros */}
             <div className="flex flex-wrap gap-2 items-center">
-                {(["todas", "programada", "en_desarrollo", "finalizada", "socioemocional"] as const).map(f => (
+                {(["todas", "programada", "en_desarrollo", "finalizada"] as const).map(f => (
                     <button
                         key={f}
-                        onClick={() => setFilter(f)}
+                        onClick={() => setFilter(f as any)}
                         className={cn(
                             "px-3 py-1.5 rounded-full text-xs font-medium transition-all border",
                             filter === f
@@ -766,7 +838,7 @@ export function ActivitiesClient({
                                 : "bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
                         )}
                     >
-                        {f === "todas" ? "Todas" : STATUS_META[f]?.label ?? "Socioemocional"}
+                        {f === "todas" ? "Todas" : STATUS_META[f as keyof typeof STATUS_META]?.label}
                     </button>
                 ))}
                 <span className="text-xs text-slate-400">

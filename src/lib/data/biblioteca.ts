@@ -1,4 +1,4 @@
-export type ActivityTemplateType = "armadura" | "gafas" | "termometro" | "none"
+export type ActivityTemplateType = "armadura" | "gafas" | "termometro" | "mapa" | "none"
 
 export interface BibliotecaActivity {
     id: string
@@ -136,5 +136,34 @@ export const bibliotecaActivities: BibliotecaActivity[] = [
             ticketSalida: "Los estudiantes deben ingresar a la plataforma para evaluar los aspectos socioemocionales de la actividad."
         },
         template: "termometro"
+    },
+    {
+        id: "mapa-identidad",
+        title: "Mapa de mi Identidad",
+        eje: "Autoconciencia (Reconocer identidad y pertenencia)",
+        objective: "Explorar quién soy y cómo me presento ante mis compañeros para fortalecer el sentido de pertenencia.",
+        durationInfo: "40 min",
+        color: "bg-purple-500", // Representative color
+        content: {
+            rompehielo: {
+                time: "5 min",
+                text: "\"La Maleta Imaginaria\". \"Si hoy tuviéramos que irnos de viaje y solo pudieran llevar UN objeto que cuente algo sobre ti (no electrónico), ¿qué llevarías?\". Hablarlo entre todos."
+            },
+            desarrollo: {
+                time: "25 min",
+                intro: "La plantilla contiene un mapa mental con cuatro burbujas para completar.",
+                steps: [
+                    "Entregar la ficha con un círculo central donde escribirán su nombre.",
+                    "Alrededor, hay 4 burbujas que el alumno debe completar:\n- Mis Talentos: (Cosas que se me dan bien).\n- Mis Miedos: (Cosas que me ponen nervioso).\n- Mis Valores: (Las actitudes más importantes de la persona).\n- Mis Sueños: (Algo que quiero lograr este año).",
+                    "Los estudiantes decoran su mapa."
+                ]
+            },
+            cierre: {
+                time: "10 min",
+                text: "En parejas, comparten una burbuja de su mapa. Luego, el docente pregunta al grupo: \"¿Descubrieron algo en común con alguien que no esperaban?\"."
+            },
+            ticketSalida: "Los estudiantes deben ingresar a la plataforma para evaluar los aspectos socioemocionales de la actividad."
+        },
+        template: "mapa"
     }
 ]

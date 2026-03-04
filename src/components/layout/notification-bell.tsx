@@ -22,12 +22,13 @@ type Notification = {
 
 // ── Icono por tipo ────────────────────────────────────────────────────────────
 const TYPE_META: Record<string, { emoji: string; color: string }> = {
-    dec_nuevo: { emoji: "�️", color: "bg-rose-50   border-rose-100" },
+    dec_nuevo: { emoji: "🚨", color: "bg-rose-50   border-rose-100" },
     dec_resuelto: { emoji: "✅", color: "bg-emerald-50 border-emerald-100" },
     actividad_nueva: { emoji: "📅", color: "bg-indigo-50  border-indigo-100" },
     pulso_activo: { emoji: "⚡", color: "bg-violet-50  border-violet-100" },
-    estudiante_nuevo: { emoji: "�", color: "bg-green-50   border-green-100" },
+    estudiante_nuevo: { emoji: "👋", color: "bg-green-50   border-green-100" },
     usuario_nuevo: { emoji: "👤", color: "bg-blue-50    border-blue-100" },
+    actividad_evaluada: { emoji: "⭐", color: "bg-yellow-50 border-yellow-100" },
 }
 
 // ── Componente ────────────────────────────────────────────────────────────────
@@ -96,7 +97,7 @@ export function NotificationBell({ userId }: { userId: string }) {
         // Mapa: segmento de ruta → tipos que se marcan al visitar esa sección
         const ROUTE_TYPE_MAP: Array<{ segment: string; types: string[] }> = [
             { segment: "/dec", types: ["dec_nuevo", "dec_resuelto"] },
-            { segment: "/actividades", types: ["actividad_nueva"] },
+            { segment: "/actividades", types: ["actividad_nueva", "actividad_evaluada"] },
             { segment: "/pulso", types: ["pulso_activo"] },
             { segment: "/estudiantes", types: ["estudiante_nuevo"] },
             { segment: "/usuarios", types: ["usuario_nuevo"] },
@@ -200,7 +201,7 @@ export function NotificationBell({ userId }: { userId: string }) {
 
             {/* Panel desplegable */}
             {open && (
-                <div className="absolute right-0 sm:right-0 md:left-0 md:right-auto top-10 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 z-50 overflow-hidden">
+                <div className="fixed top-16 right-4 md:top-4 md:left-64 md:right-auto w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[200] overflow-hidden">
                     {/* Header */}
                     <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
                         <div className="flex items-center gap-2">

@@ -15,6 +15,7 @@ export type NotificationType =
     | "pulso_activo"
     | "estudiante_nuevo"
     | "usuario_nuevo"
+    | "actividad_evaluada"
 
 interface CreateNotificationsParams {
     institutionId: string

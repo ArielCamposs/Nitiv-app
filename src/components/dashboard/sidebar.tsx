@@ -109,13 +109,13 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
 
     biblioteca.push({ title: "Actividades", href: isStudent ? "/estudiante/actividades" : "/actividades", icon: Calendar })
     biblioteca.push({ title: "Recursos", href: isStudent ? "/estudiante/recursos" : "/recursos", icon: BookOpen })
-    biblioteca.push({ title: "Biblioteca Nitiv", href: "/biblioteca", icon: Library })
 
     if (isStudent) {
         biblioteca.push({ title: "Tienda", href: "/estudiante/tienda", icon: ShoppingBag })
     }
 
     if (!isStudent) {
+        biblioteca.push({ title: "Biblioteca Nitiv", href: "/biblioteca", icon: Library })
         biblioteca.push({ title: "Chat", href: "/chat", icon: MessageSquare, chatBadge: true })
     }
 

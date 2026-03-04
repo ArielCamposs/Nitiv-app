@@ -132,7 +132,6 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 }
 
 export function ClimateHistoryChart({ courses, historyLogs }: Props) {
-    const [activeCourse, setActiveCourse] = useState<string | null>(null)
     const [days, setDays] = useState(30)
 
     const chartData = useMemo(
@@ -173,38 +172,7 @@ export function ClimateHistoryChart({ courses, historyLogs }: Props) {
                 </div>
             </div>
 
-            {/* Selector de curso */}
-            <div className="flex flex-wrap gap-2">
-                <button
-                    onClick={() => setActiveCourse(null)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium transition-all border ${activeCourse === null
-                        ? "bg-slate-800 text-white border-slate-800"
-                        : "text-slate-500 border-slate-200 hover:border-slate-400"
-                        }`}
-                >
-                    Todos
-                </button>
-                {courses.map((c, i) => {
-                    const name = c.courses?.name ?? c.course_id
-                    return (
-                        <button
-                            key={c.course_id}
-                            onClick={() => setActiveCourse(activeCourse === name ? null : name)}
-                            className={`px-3 py-1 rounded-full text-xs font-medium transition-all border ${activeCourse === name
-                                ? "text-white border-transparent"
-                                : "text-slate-500 border-slate-200 hover:border-slate-400"
-                                }`}
-                            style={
-                                activeCourse === name
-                                    ? { background: COURSE_COLORS[i % COURSE_COLORS.length] }
-                                    : {}
-                            }
-                        >
-                            {name}
-                        </button>
-                    )
-                })}
-            </div>
+            {/* {Selector de curso removido - Ahora se maneja a nivel global en la cabecera) */}
 
             {/* Gráfico o estado vacío */}
             {isEmpty ? (
@@ -241,20 +209,19 @@ export function ClimateHistoryChart({ courses, historyLogs }: Props) {
                         <Tooltip content={<CustomTooltip />} />
                         {courses.map((c, i) => {
                             const name = c.courses?.name ?? c.course_id
-                            const isActive = activeCourse === null || activeCourse === name
                             return (
                                 <Area
                                     key={c.course_id}
                                     type="monotone"
                                     dataKey={name}
                                     stroke={COURSE_COLORS[i % COURSE_COLORS.length]}
-                                    strokeWidth={isActive ? 2.5 : 0.5}
+                                    strokeWidth={2.5}
                                     fill={`url(#grad-${i})`}
-                                    fillOpacity={isActive ? 1 : 0}
+                                    fillOpacity={1}
                                     dot={{ r: 3, fill: COURSE_COLORS[i % COURSE_COLORS.length] }}
                                     activeDot={{ r: 5 }}
                                     connectNulls
-                                    opacity={isActive ? 1 : 0.2}
+                                    opacity={1}
                                 />
                             )
                         })}
@@ -291,7 +258,7 @@ export function ClimateHistoryChart({ courses, historyLogs }: Props) {
                             <li className="flex items-start gap-2">
                                 <span>📋</span>
                                 <span>
-                                    Registraste <strong>{summary.total}</strong> registros en los últimos{" "}
+                                    Hubieron <strong>{summary.total}</strong> registros en los últimos{" "}
                                     <strong>{days} días</strong>.
                                 </span>
                             </li>

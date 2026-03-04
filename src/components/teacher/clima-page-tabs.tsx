@@ -33,6 +33,13 @@ export function ClimaPageTabs({
     historyLogs, pulseSession, pulseDoneCourses
 }: Props) {
     const [tab, setTab] = useState<"resumen" | "historial">("resumen")
+    const [selectedCourseId, setSelectedCourseId] = useState<string>(
+        courses.length > 0 ? courses[0].course_id : "todos"
+    )
+
+    const coursesToRender = selectedCourseId === "todos"
+        ? courses
+        : courses.filter(c => c.course_id === selectedCourseId)
 
     return (
         <div className="space-y-6">
@@ -46,8 +53,8 @@ export function ClimaPageTabs({
                         key={t.key}
                         onClick={() => setTab(t.key as any)}
                         className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${tab === t.key
-                                ? "bg-white text-slate-800 shadow-sm"
-                                : "text-slate-500 hover:text-slate-700"
+                            ? "bg-white text-slate-800 shadow-sm"
+                            : "text-slate-500 hover:text-slate-700"
                             }`}
                     >
                         {t.label}
@@ -55,8 +62,27 @@ export function ClimaPageTabs({
                 ))}
             </div>
 
+            {/* Selector de Curso Global */}
+            {courses.length > 0 && (
+                <div className="flex items-center gap-3 bg-white px-4 py-3 rounded-xl border border-slate-200 shadow-sm">
+                    <span className="text-sm font-semibold text-slate-700">Curso:</span>
+                    <select
+                        value={selectedCourseId}
+                        onChange={(e) => setSelectedCourseId(e.target.value)}
+                        className="text-sm border-none bg-slate-100/80 hover:bg-slate-100 text-slate-700 font-medium rounded-lg px-3 py-2 cursor-pointer outline-none focus:ring-2 focus:ring-indigo-500/20 w-fit sm:min-w-[200px]"
+                    >
+                        {courses.map(c => (
+                            <option key={c.course_id} value={c.course_id}>
+                                {c.courses?.name} {c.is_head_teacher ? "(Jefatura)" : ""}
+                            </option>
+                        ))}
+                        {courses.length > 1 && <option value="todos">Todos los cursos</option>}
+                    </select>
+                </div>
+            )}
+
             {/* ── TAB: RESUMEN ── */}
-            {tab === "resumen" && courses.map((c: any) => {
+            {tab === "resumen" && coursesToRender.map((c: any) => {
                 const courseLogs = teacherLogs.filter(l => l.course_id === c.course_id)
                 const avg = courseLogs.length > 0
                     ? courseLogs.reduce((a, l) => a + (ENERGY_SCORE[l.energy_level] ?? 3), 0) / courseLogs.length
@@ -142,7 +168,7 @@ export function ClimaPageTabs({
             {/* ── TAB: HISTORIAL ── */}
             {tab === "historial" && (
                 <ClimateHistoryChart
-                    courses={courses}
+                    courses={coursesToRender}
                     historyLogs={historyLogs}
                 />
             )}

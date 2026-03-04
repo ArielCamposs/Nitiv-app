@@ -118,25 +118,30 @@ function StudentPicker({
     allStudents,
     selected,
     onChange,
+    showAll = false,
 }: {
     allStudents: Student[]
     selected: Student[]
     onChange: (s: Student[]) => void
+    showAll?: boolean
 }) {
     const [query, setQuery] = useState("")
     const [open, setOpen] = useState(false)
 
     const filtered = useMemo(() => {
-        if (!query.trim()) return []
+        const available = allStudents.filter(s => !selected.find(x => x.id === s.id))
+        if (!query.trim()) {
+            // When a course is selected, show all students of that course
+            return showAll ? available.slice(0, 30) : []
+        }
         const q = query.toLowerCase()
-        return allStudents
-            .filter(s => !selected.find(x => x.id === s.id))
+        return available
             .filter(s =>
                 `${s.name} ${s.last_name}`.toLowerCase().includes(q) ||
                 (s.rut ?? "").toLowerCase().includes(q)
             )
-            .slice(0, 8)
-    }, [query, allStudents, selected])
+            .slice(0, 12)
+    }, [query, allStudents, selected, showAll])
 
     function pick(s: Student) {
         onChange([...selected, s])
@@ -387,7 +392,14 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                 return // Ignorar errores comunes de silencio o detención manual
             }
 
-            console.error("Speech recognition error:", event.error, event)
+            if (event.error === 'network') {
+                // Error transitorio de conectividad con el servicio de voz — no mostrar en consola
+                toast.warning("Sin conexión con el servicio de dictado. Inténtalo de nuevo.")
+                setIsListening(false)
+                setListeningField(null)
+                return
+            }
+
             if (event.error === 'not-allowed') {
                 toast.error("Permiso de micrófono denegado. Revisa la configuración de tu navegador.")
             } else {
@@ -512,7 +524,9 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                         type="button"
                                         key={s.value}
                                         onClick={() => setStatus(s.value)}
-                                        className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${status === s.value ? s.activeColor : s.color + " opacity-80"
+                                        className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${status === s.value
+                                            ? s.activeColor
+                                            : `${s.color} opacity-40 grayscale hover:opacity-70 hover:grayscale-0`
                                             }`}
                                     >
                                         {s.label}
@@ -529,253 +543,220 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                         </div>
                     </div>
 
-                    {/* ── I. Identificación y contexto ── */}
-                    <div className="space-y-4">
-                        <h2 className="text-base font-bold text-slate-800">I. Identificación y contexto</h2>
+                    {/* ── Row 1: Profesionales | Lugar | Gravedad ── */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
 
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 bg-slate-50/50 p-6 rounded-2xl border">
-                            {/* Profesionales */}
-                            <div className="md:col-span-4 space-y-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                                <h3 className="text-sm font-semibold text-slate-700 text-center mb-2">Profesionales</h3>
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 mb-1">Responsable</label>
-                                    <select
-                                        value={responsableId}
-                                        onChange={e => setResponsableId(e.target.value)}
-                                        className="w-full text-sm bg-slate-100 border-transparent focus:border-indigo-400 focus:bg-white rounded-lg px-3 py-2 transition-colors"
-                                    >
-                                        <option value="">Seleccione...</option>
-                                        {staffUsers.map(u => <option key={u.id} value={u.id}>{u.last_name}, {u.name}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-500 mb-1">Apoyo</label>
-                                    <select
-                                        value={apoyoId}
-                                        onChange={e => setApoyoId(e.target.value)}
-                                        className="w-full text-sm bg-slate-100 border-transparent focus:border-indigo-400 focus:bg-white rounded-lg px-3 py-2 transition-colors"
-                                    >
-                                        <option value="">Ninguno</option>
-                                        {staffUsers.map(u => <option key={u.id} value={u.id}>{u.last_name}, {u.name}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-
-                            {/* Cursos y Estudiantes */}
-                            <div className="md:col-span-5 space-y-4 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                                <div className="grid grid-cols-2 gap-4">
-                                    {/* Select de Curso */}
-                                    <div>
-                                        <h3 className="text-sm font-semibold text-slate-700 text-center mb-3">Curso</h3>
-                                        <div className="bg-slate-50 p-2 rounded-lg border border-dashed flex items-center min-h-[40px] focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-400 transition-all">
-                                            <select
-                                                value={selectedCourse}
-                                                onChange={(e) => setSelectedCourse(e.target.value)}
-                                                className="w-full text-sm bg-transparent border-none focus:outline-none focus:ring-0 text-slate-700 font-medium cursor-pointer"
-                                            >
-                                                <option value="">Todos los cursos</option>
-                                                {Array.from(new Set(students.map(s => (s.courses as any)?.name).filter(Boolean))).sort().map(courseName => (
-                                                    <option key={courseName as string} value={courseName as string}>{courseName as string}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    {/* Estudiantes Picker */}
-                                    <div>
-                                        <h3 className="text-sm font-semibold text-slate-700 text-center mb-3">Estudiante(s) Involucrado(s)</h3>
-                                        <div className="bg-slate-50 p-2 rounded-lg border border-dashed min-h-[40px]">
-                                            <StudentPicker
-                                                allStudents={selectedCourse ? students.filter(s => (s.courses as any)?.name === selectedCourse) : students}
-                                                selected={involvedStudents}
-                                                onChange={setInvolvedStudents}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Lugar del evento */}
-                            <div className="md:col-span-3 bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                                <h3 className="text-sm font-semibold text-slate-700 text-center mb-3">Lugar del evento</h3>
-                                <div className="flex flex-wrap gap-2 justify-center bg-slate-50 p-3 rounded-xl">
-                                    {["Patio", "Aula", "Baño", "Comedor", "Redes sociales", "Fuera del colegio"].map(loc => (
-                                        <button
-                                            key={loc}
-                                            type="button"
-                                            onClick={() => setLocation(loc)}
-                                            className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${location === loc
-                                                ? "bg-indigo-500 text-white shadow-sm"
-                                                : "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
-                                                }`}
-                                        >
-                                            {loc}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ── II. Tipificación del evento ── */}
-                    <div className="space-y-4">
-                        <h2 className="text-base font-bold text-slate-800">II. Tipificación del evento</h2>
-                        <div className="bg-slate-50/50 p-6 rounded-2xl border space-y-6">
-
-                            {/* Gravedad */}
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                                <span className="text-sm font-semibold text-slate-700 w-24">Gravedad</span>
-                                <div className="flex gap-2 flex-wrap">
-                                    {[
-                                        { value: "leve", label: "Leve", baseClass: "bg-indigo-100 text-indigo-700 border-indigo-200", activeClass: "bg-indigo-500 text-white shadow-md ring-2 ring-indigo-200" },
-                                        { value: "moderada", label: "Mediano", baseClass: "bg-purple-100 text-purple-700 border-purple-200", activeClass: "bg-purple-500 text-white shadow-md ring-2 ring-purple-200" },
-                                        { value: "grave", label: "Grave", baseClass: "bg-rose-100 text-rose-700 border-rose-200", activeClass: "bg-rose-500 text-white shadow-md ring-2 ring-rose-200" },
-                                        { value: "gravisimo", label: "Gravísimo", baseClass: "bg-red-100 text-red-700 border-red-200", activeClass: "bg-red-600 text-white shadow-md ring-2 ring-red-200" },
-                                    ].map(s => (
-                                        <button
-                                            type="button"
-                                            key={s.value}
-                                            onClick={() => setSeverity(s.value)}
-                                            className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${severity === s.value ? s.activeClass : s.baseClass + " opacity-80 hover:opacity-100"
-                                                } ${type === "Entrevista apoderado" ? "opacity-40 grayscale pointer-events-none" : ""}`}
-                                        >
-                                            {s.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Tipo Central / Frecuentes */}
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                                <span className="text-sm font-semibold text-slate-700 w-24">Tipo</span>
-                                <div className="flex-1 flex flex-col sm:flex-row gap-4 sm:items-center">
-                                    <div className="w-full sm:w-64">
-                                        {/* Dropdown nativo simple (se puede reemplazar por combobox si se requiere) */}
-                                        <select
-                                            value={type}
-                                            onChange={e => {
-                                                setType(e.target.value)
-                                                if (e.target.value === "Entrevista apoderado") setSeverity("n/a")
-                                            }}
-                                            className="w-full rounded-xl bg-white border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                                        >
-                                            <option value="">Seleccione o escriba...</option>
-                                            {RECORD_TYPES.map(t => (
-                                                <option key={t.value} value={t.label}>{t.label}</option>
-                                            ))}
-                                            <option value="Apoyo emocional">Apoyo emocional</option>
-                                            <option value="Entrevista apoderado">Entrevista apoderado</option>
-                                            <option value="Incumplimiento de normas">Incumplimiento de normas</option>
-                                        </select>
-                                    </div>
-
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="text-xs font-medium text-slate-500">Frecuentes:</span>
-                                        {[
-                                            { label: "Apoyo emocional", color: "border-yellow-400 text-yellow-700 bg-yellow-50 hover:bg-yellow-100" },
-                                            { label: "Entrevista apoderado", color: "border-red-400 text-red-700 bg-red-50 hover:bg-red-100" },
-                                            { label: "Incumplimiento de normas", color: "border-blue-400 text-blue-700 bg-blue-50 hover:bg-blue-100" },
-                                        ].map(shortcut => (
-                                            <button
-                                                key={shortcut.label}
-                                                type="button"
-                                                onClick={() => {
-                                                    setType(shortcut.label)
-                                                    if (shortcut.label === "Entrevista apoderado") setSeverity("n/a")
-                                                }}
-                                                className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${shortcut.color} ${type === shortcut.label ? "ring-2 ring-offset-1 ring-slate-300 font-bold" : ""}`}
-                                            >
-                                                {shortcut.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-
-                        </div>
-                    </div>
-
-                    {/* ── III. Descripción y Acuerdos ── */}
-                    <div className="space-y-4">
-                        <div className="bg-slate-50/50 p-6 rounded-2xl border space-y-6">
-                            {/* Descripción */}
+                        {/* Profesionales */}
+                        <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-200 space-y-3">
+                            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">Profesionales</h3>
                             <div>
-                                <h2 className="text-sm font-bold text-slate-800 mb-2">III. Descripción del evento <span className="text-red-500">*</span></h2>
-                                <div className="relative">
-                                    <textarea
-                                        rows={4}
-                                        value={description}
-                                        onChange={e => setDescription(e.target.value)}
-                                        placeholder="Describe detalladamente qué ocurrió, quiénes participaron y el contexto..."
-                                        className="w-full rounded-2xl bg-white border border-slate-200 p-4 pb-12 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none shadow-sm"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => toggleDictation("description")}
-                                        className={`absolute bottom-3 right-3 p-2.5 rounded-full transition-all ${isListening && listeningField === "description"
-                                            ? "bg-red-500 text-white shadow-md animate-pulse"
-                                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                                            }`}
-                                    >
-                                        {isListening && listeningField === "description" ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
-                                    </button>
-                                </div>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">Responsable</label>
+                                <select value={responsableId} onChange={e => setResponsableId(e.target.value)}
+                                    className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                                    <option value="">Seleccione...</option>
+                                    {staffUsers.map(u => <option key={u.id} value={u.id}>{u.last_name}, {u.name}</option>)}
+                                </select>
                             </div>
-
-                            {/* Acuerdos */}
                             <div>
-                                <h2 className="text-sm font-bold text-slate-800 mb-2">IV. Acuerdos y Resolución</h2>
-                                <div className="relative">
-                                    <textarea
-                                        rows={3}
-                                        value={agreements}
-                                        onChange={e => setAgreements(e.target.value)}
-                                        placeholder="Enumere los acuerdos o decisiones tomadas si aplica..."
-                                        className="w-full rounded-2xl bg-white border border-slate-200 p-4 pb-12 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none shadow-sm"
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => toggleDictation("agreements")}
-                                        className={`absolute bottom-3 right-3 p-2.5 rounded-full transition-all ${isListening && listeningField === "agreements"
-                                            ? "bg-red-500 text-white shadow-md animate-pulse"
-                                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                                            }`}
-                                    >
-                                        {isListening && listeningField === "agreements" ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
-                                    </button>
-                                </div>
+                                <label className="block text-xs font-semibold text-slate-500 mb-1">Apoyo</label>
+                                <select value={apoyoId} onChange={e => setApoyoId(e.target.value)}
+                                    className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                                    <option value="">Ninguno</option>
+                                    {staffUsers.map(u => <option key={u.id} value={u.id}>{u.last_name}, {u.name}</option>)}
+                                </select>
                             </div>
                         </div>
-                    </div>
 
-                    {/* ── V. Gestión y acciones ── */}
-                    <div>
-                        <h2 className="text-sm font-bold text-slate-800 mb-3">V. Gestión y acciones inmediatas</h2>
-                        <div className="bg-slate-50/50 p-6 rounded-2xl border">
-                            <div className="flex flex-col gap-3">
-                                {ACTIONS_OPTIONS.map(a => (
-                                    <label key={a} className="flex items-center gap-3 cursor-pointer w-fit">
-                                        <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors ${actions.includes(a) ? "bg-indigo-600 border-indigo-600" : "bg-white border-slate-300"
-                                            }`}>
-                                            {actions.includes(a) && <CheckCircle className="w-3.5 h-3.5 text-white" />}
-                                        </div>
-                                        <input
-                                            type="checkbox"
-                                            checked={actions.includes(a)}
-                                            onChange={() => toggleAction(a)}
-                                            className="hidden"
-                                        />
-                                        <span className="text-sm font-medium text-slate-700">{a}</span>
-                                    </label>
+                        {/* Lugar del evento */}
+                        <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-200">
+                            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Lugar del evento</h3>
+                            <div className="flex flex-wrap gap-2">
+                                {["Patio", "Aula", "Baño", "Comedor", "Redes sociales", "Fuera del colegio"].map(loc => (
+                                    <button key={loc} type="button"
+                                        onClick={() => setLocation(prev => prev === loc ? "" : loc)}
+                                        className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                                            location === loc
+                                                ? "bg-indigo-500 text-white shadow-sm ring-2 ring-indigo-200"
+                                                : location !== ""
+                                                    ? "bg-slate-100 text-slate-400 border border-slate-200 opacity-40 grayscale hover:opacity-70 hover:grayscale-0"
+                                                    : "bg-indigo-50 text-indigo-600 border border-indigo-100 hover:bg-indigo-100"
+                                        }`}
+                                    >{loc}</button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Gravedad */}
+                        <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-200">
+                            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Gravedad</h3>
+                            <div className="flex flex-wrap gap-2">
+                                {[
+                                    { value: "leve", label: "Leve", baseClass: "bg-indigo-100 text-indigo-700 border-indigo-200", activeClass: "bg-indigo-500 text-white shadow-md ring-2 ring-indigo-200" },
+                                    { value: "moderada", label: "Mediano", baseClass: "bg-purple-100 text-purple-700 border-purple-200", activeClass: "bg-purple-500 text-white shadow-md ring-2 ring-purple-200" },
+                                    { value: "grave", label: "Grave", baseClass: "bg-rose-100 text-rose-700 border-rose-200", activeClass: "bg-rose-500 text-white shadow-md ring-2 ring-rose-200" },
+                                    { value: "gravisimo", label: "Gravísimo", baseClass: "bg-red-100 text-red-700 border-red-200", activeClass: "bg-red-600 text-white shadow-md ring-2 ring-red-200" },
+                                ].map(s => (
+                                    <button type="button" key={s.value} onClick={() => setSeverity(s.value)}
+                                        className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                                            severity === s.value
+                                                ? s.activeClass
+                                                : `${s.baseClass} opacity-40 grayscale hover:opacity-70 hover:grayscale-0`
+                                        } ${type === "Entrevista apoderado" ? "opacity-40 grayscale pointer-events-none" : ""}`}
+                                    >{s.label}</button>
                                 ))}
                             </div>
                         </div>
                     </div>
 
+                    {/* ── Row 2: Curso | Estudiantes ── */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                        {/* Curso */}
+                        <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-200">
+                            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Curso</h3>
+                            {(() => {
+                                const courseNames = Array.from(new Set(
+                                    students.map(s => (s.courses as any)?.name).filter(Boolean)
+                                )).sort() as string[]
+                                const isMedia = (name: string) =>
+                                    /medio|media|1°m|2°m|3°m|4°m|i medio|ii medio|iii medio|iv medio/i.test(name)
+                                const basica = courseNames.filter(n => !isMedia(n))
+                                const media = courseNames.filter(n => isMedia(n))
+                                const renderGroup = (label: string, items: string[]) => items.length === 0 ? null : (
+                                    <div key={label} className="flex flex-wrap items-center gap-2">
+                                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{label}</span>
+                                        {items.map(name => (
+                                            <button key={name} type="button"
+                                                onClick={() => setSelectedCourse(prev => prev === name ? "" : name)}
+                                                className={`px-3 py-1 rounded-full text-xs font-medium transition-all border ${
+                                                    selectedCourse === name
+                                                        ? "bg-indigo-500 text-white border-indigo-500 shadow-sm ring-2 ring-indigo-200"
+                                                        : selectedCourse !== ""
+                                                            ? "bg-slate-100 text-slate-400 border-slate-200 opacity-40 grayscale hover:opacity-70 hover:grayscale-0"
+                                                            : "bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100"
+                                                }`}
+                                            >{name}</button>
+                                        ))}
+                                    </div>
+                                )
+                                return (
+                                    <div className="flex flex-col gap-3">
+                                        {renderGroup("Básica", basica)}
+                                        {basica.length > 0 && media.length > 0 && <div className="border-t border-slate-200" />}
+                                        {renderGroup("Media", media)}
+                                        {courseNames.length === 0 && <span className="text-xs text-slate-400">No hay cursos disponibles</span>}
+                                    </div>
+                                )
+                            })()}
+                        </div>
+
+                        {/* Estudiantes Involucrados */}
+                        <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-200">
+                            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Estudiantes Involucrados</h3>
+                            <StudentPicker
+                                allStudents={selectedCourse ? students.filter(s => (s.courses as any)?.name === selectedCourse) : students}
+                                selected={involvedStudents}
+                                onChange={setInvolvedStudents}
+                                showAll={!!selectedCourse}
+                            />
+                        </div>
+                    </div>
+
+                    {/* ── Tipo de evento ── */}
+                    <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-200">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Tipo de evento</h3>
+                        <div className="flex flex-col sm:flex-row gap-4 sm:items-center">
+                            <select value={type} onChange={e => { setType(e.target.value); if (e.target.value === "Entrevista apoderado") setSeverity("n/a") }}
+                                className="w-full sm:w-64 rounded-xl bg-white border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                                <option value="">Seleccione tipo...</option>
+                                {RECORD_TYPES.map(t => <option key={t.value} value={t.label}>{t.label}</option>)}
+                                <option value="Apoyo emocional">Apoyo emocional</option>
+                                <option value="Entrevista apoderado">Entrevista apoderado</option>
+                                <option value="Incumplimiento de normas">Incumplimiento de normas</option>
+                            </select>
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-xs font-medium text-slate-400">Frecuentes:</span>
+                                {[
+                                    { label: "Apoyo emocional", color: "border-yellow-400 text-yellow-700 bg-yellow-50 hover:bg-yellow-100" },
+                                    { label: "Entrevista apoderado", color: "border-red-400 text-red-700 bg-red-50 hover:bg-red-100" },
+                                    { label: "Incumplimiento de normas", color: "border-blue-400 text-blue-700 bg-blue-50 hover:bg-blue-100" },
+                                ].map(shortcut => (
+                                    <button key={shortcut.label} type="button"
+                                        onClick={() => { setType(shortcut.label); if (shortcut.label === "Entrevista apoderado") setSeverity("n/a") }}
+                                        className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
+                                            type === shortcut.label
+                                                ? `${shortcut.color} ring-2 ring-offset-1 ring-slate-300 font-bold`
+                                                : ["Apoyo emocional", "Entrevista apoderado", "Incumplimiento de normas"].includes(type)
+                                                    ? "bg-slate-100 text-slate-400 border-slate-200 opacity-40 grayscale hover:opacity-70 hover:grayscale-0"
+                                                    : shortcut.color
+                                        }`}
+                                    >{shortcut.label}</button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── Descripción + Acuerdos lado a lado ── */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                        {/* Descripción */}
+                        <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-200">
+                            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">
+                                Descripción del evento <span className="text-red-500">*</span>
+                            </h3>
+                            <div className="relative">
+                                <textarea rows={6} value={description} onChange={e => setDescription(e.target.value)}
+                                    placeholder="Describe detalladamente qué ocurrió, quiénes participaron y el contexto..."
+                                    className="w-full rounded-xl bg-white border border-slate-200 p-3 pb-12 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none shadow-sm"
+                                />
+                                <button type="button" onClick={() => toggleDictation("description")}
+                                    className={`absolute bottom-3 right-3 p-2.5 rounded-full transition-all ${isListening && listeningField === "description"
+                                        ? "bg-red-500 text-white shadow-md animate-pulse"
+                                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+                                    {isListening && listeningField === "description" ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Acuerdos */}
+                        <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-200">
+                            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">
+                                Acuerdos y Resolución
+                            </h3>
+                            <div className="relative">
+                                <textarea rows={6} value={agreements} onChange={e => setAgreements(e.target.value)}
+                                    placeholder="Enumere los acuerdos o decisiones tomadas si aplica..."
+                                    className="w-full rounded-xl bg-white border border-slate-200 p-3 pb-12 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none shadow-sm"
+                                />
+                                <button type="button" onClick={() => toggleDictation("agreements")}
+                                    className={`absolute bottom-3 right-3 p-2.5 rounded-full transition-all ${isListening && listeningField === "agreements"
+                                        ? "bg-red-500 text-white shadow-md animate-pulse"
+                                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+                                    {isListening && listeningField === "agreements" ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── Gestión y acciones ── */}
+                    <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-200">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Gestión y acciones inmediatas</h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {ACTIONS_OPTIONS.map(a => (
+                                <label key={a} className="flex items-center gap-3 cursor-pointer">
+                                    <div className={`w-5 h-5 rounded flex items-center justify-center border transition-colors shrink-0 ${actions.includes(a) ? "bg-indigo-600 border-indigo-600" : "bg-white border-slate-300"}`}>
+                                        {actions.includes(a) && <CheckCircle className="w-3.5 h-3.5 text-white" />}
+                                    </div>
+                                    <input type="checkbox" checked={actions.includes(a)} onChange={() => toggleAction(a)} className="hidden" />
+                                    <span className="text-sm font-medium text-slate-700">{a}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
                     <div className="pt-2">
                         <button type="submit" disabled={pending}
-                            className="w-full sm:w-auto px-8 py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
+                            className="w-full sm:w-auto px-8 py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                             {pending ? "Registrando..." : "Registrar Caso"}
                         </button>
                     </div>

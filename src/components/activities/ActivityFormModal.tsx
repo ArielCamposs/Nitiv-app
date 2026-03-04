@@ -12,6 +12,7 @@ import { es } from "date-fns/locale"
 import { X, MapPin, Paperclip, Palette, Mic, Trophy, PartyPopper, GraduationCap, Handshake, Pin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import Image from "next/image"
 
 const formSchema = z.object({
     title: z.string().min(3, "Mínimo 3 caracteres"),
@@ -22,10 +23,15 @@ const formSchema = z.object({
     materials: z.string().optional(),
     target: z.enum(["general", "por_curso", "docentes"]),
     course_ids: z.array(z.string()).optional(),
-    activity_type: z.enum(["taller", "charla", "deporte", "cultural", "academico", "reunion", "socioemocional", "otro"]).optional(),
+    activity_type: z.enum(["taller", "charla", "deporte", "cultural", "academico", "reunion", "otro"]).optional(),
     title_color: z.enum(["purple", "blue", "green", "amber", "rose", "slate"]),
     origin: z.enum(["institucional", "externa"]),
 }).refine(data => {
+    if (data.target === "por_curso") {
+        return data.course_ids && data.course_ids.length > 0
+    }
+    return true
+}, { message: "Selecciona al menos un curso", path: ["course_ids"] }).refine(data => {
     if (!data.start_datetime || !data.end_datetime) return true
     return new Date(data.end_datetime) > new Date(data.start_datetime)
 }, { message: "La fecha de término debe ser posterior al inicio", path: ["end_datetime"] })
@@ -51,6 +57,7 @@ interface Props {
         courseIds: string[]
         title_color: string | null
         origin: string | null
+        header_image: string | null
     } | null
     onClose: () => void
     onSaved: (activity: any) => void
@@ -115,9 +122,17 @@ export function ActivityFormModal({
                 activity_type: values.activity_type ?? null,
                 title_color: values.title_color,
                 origin: values.origin,
+                header_image: ({
+                    taller: "/tallerNitivGrande.png",
+                    charla: "/charla.png",
+                    deporte: "/deporte.png",
+                    cultural: "/cultural.png",
+                    academico: "/academica.png",
+                    reunion: "/reunion.png",
+                    otro: "/otro.png",
+                } as Record<string, string>)[values.activity_type ?? ""] ?? null,
                 active: true,
             }
-
             let activityId: string
 
             if (isEdit && editActivity) {
@@ -304,7 +319,6 @@ export function ActivityFormModal({
                                 { value: "cultural", icon: PartyPopper, label: "Cultural" },
                                 { value: "academico", icon: GraduationCap, label: "Académico" },
                                 { value: "reunion", icon: Handshake, label: "Reunión" },
-                                { value: "socioemocional", icon: Pin, label: "Socioemocional" },
                                 { value: "otro", icon: Pin, label: "Otro" },
                             ].map(opt => {
                                 const selected = form.watch("activity_type") === opt.value
@@ -314,9 +328,14 @@ export function ActivityFormModal({
                                         onClick={() => form.setValue("activity_type", opt.value as any)}
                                         className={cn(
                                             "flex flex-col items-center gap-2 rounded-xl border-2 px-2 py-3 text-xs font-medium transition-all",
-                                            selected
-                                                ? "border-indigo-400 bg-indigo-50 text-indigo-800"
-                                                : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
+                                            selected && opt.value === "taller" && "border-violet-400 bg-violet-50 text-violet-800",
+                                            selected && opt.value === "charla" && "border-sky-400 bg-sky-50 text-sky-800",
+                                            selected && opt.value === "deporte" && "border-emerald-400 bg-emerald-50 text-emerald-800",
+                                            selected && opt.value === "cultural" && "border-pink-400 bg-pink-50 text-pink-800",
+                                            selected && opt.value === "academico" && "border-amber-400 bg-amber-50 text-amber-800",
+                                            selected && opt.value === "reunion" && "border-slate-400 bg-slate-50 text-slate-800",
+                                            selected && opt.value === "otro" && "border-orange-400 bg-orange-50 text-orange-800",
+                                            !selected && "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
                                         )}>
                                         <Icon className="w-5 h-5" />
                                         <span>{opt.label}</span>
@@ -325,6 +344,107 @@ export function ActivityFormModal({
                             })}
                         </div>
                     </div>
+
+                    {/* Image notice: auto-set for 'taller' */}
+                    {form.watch("activity_type") === "taller" && (
+                        <div className="rounded-lg border border-indigo-100 bg-indigo-50 overflow-hidden">
+                            <Image
+                                src="/tallerNitivGrande.png"
+                                alt="Taller Nitiv"
+                                width={600}
+                                height={120}
+                                className="w-full h-52 object-contain bg-white"
+                            />
+                            <p className="text-xs text-indigo-600 font-medium px-3 py-1.5">
+                                ✓ Esta imagen se agregará automáticamente al encabezado del taller
+                            </p>
+                        </div>
+                    )}
+                    {form.watch("activity_type") === "charla" && (
+                        <div className="rounded-lg border border-indigo-100 bg-indigo-50 overflow-hidden">
+                            <Image
+                                src="/charla.png"
+                                alt="Charla"
+                                width={600}
+                                height={120}
+                                className="w-full h-52 object-contain bg-white"
+                            />
+                            <p className="text-xs text-indigo-600 font-medium px-3 py-1.5">
+                                ✓ Esta imagen se agregará automáticamente al encabezado del taller
+                            </p>
+                        </div>
+                    )}
+                    {form.watch("activity_type") === "deporte" && (
+                        <div className="rounded-lg border border-indigo-100 bg-indigo-50 overflow-hidden">
+                            <Image
+                                src="/deporte.png"
+                                alt="Deporte"
+                                width={600}
+                                height={120}
+                                className="w-full h-52 object-contain bg-white"
+                            />
+                            <p className="text-xs text-indigo-600 font-medium px-3 py-1.5">
+                                ✓ Esta imagen se agregará automáticamente al encabezado del taller
+                            </p>
+                        </div>
+                    )}
+                    {form.watch("activity_type") === "cultural" && (
+                        <div className="rounded-lg border border-indigo-100 bg-indigo-50 overflow-hidden">
+                            <Image
+                                src="/cultural.png"
+                                alt="Cultural"
+                                width={600}
+                                height={120}
+                                className="w-full h-52 object-contain bg-white"
+                            />
+                            <p className="text-xs text-indigo-600 font-medium px-3 py-1.5">
+                                ✓ Esta imagen se agregará automáticamente al encabezado del taller
+                            </p>
+                        </div>
+                    )}
+                    {form.watch("activity_type") === "academico" && (
+                        <div className="rounded-lg border border-indigo-100 bg-indigo-50 overflow-hidden">
+                            <Image
+                                src="/academica.png"
+                                alt="Academico"
+                                width={600}
+                                height={120}
+                                className="w-full h-52 object-contain bg-white"
+                            />
+                            <p className="text-xs text-indigo-600 font-medium px-3 py-1.5">
+                                ✓ Esta imagen se agregará automáticamente al encabezado del taller
+                            </p>
+                        </div>
+                    )}
+                    {form.watch("activity_type") === "reunion" && (
+                        <div className="rounded-lg border border-indigo-100 bg-indigo-50 overflow-hidden">
+                            <Image
+                                src="/reunion.png"
+                                alt="Reunion"
+                                width={600}
+                                height={120}
+                                className="w-full h-52 object-contain bg-white"
+                            />
+                            <p className="text-xs text-indigo-600 font-medium px-3 py-1.5">
+                                ✓ Esta imagen se agregará automáticamente al encabezado del taller
+                            </p>
+                        </div>
+                    )}
+                    {form.watch("activity_type") === "otro" && (
+                        <div className="rounded-lg border border-indigo-100 bg-indigo-50 overflow-hidden">
+                            <Image
+                                src="/otro.png"
+                                alt="Otro"
+                                width={600}
+                                height={120}
+                                className="w-full h-52 object-contain bg-white"
+                            />
+                            <p className="text-xs text-indigo-600 font-medium px-3 py-1.5">
+                                ✓ Esta imagen se agregará automáticamente al encabezado del taller
+                            </p>
+                        </div>
+                    )}
+
 
                     {/* Fechas */}
                     <div className="grid grid-cols-2 gap-3">
@@ -364,9 +484,8 @@ export function ActivityFormModal({
                         <label className="text-sm font-medium text-slate-800">Dirigido a</label>
                         <div className="grid grid-cols-3 gap-2">
                             {[
-                                { value: "general", label: "Todo el colegio" },
+                                { value: "general", label: "Toda la Institución" },
                                 { value: "por_curso", label: "Curso específico" },
-                                { value: "docentes", label: "Solo Docentes" },
                             ].map(opt => (
                                 <button key={opt.value} type="button"
                                     onClick={() => form.setValue("target", opt.value as any)}
