@@ -1,7 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
 import { EmotionSlider } from "@/components/emotional/emotion-slider"
-import { WeeklyCheckinCard } from "@/components/emotional/weekly-checkin-card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 async function getEmotionsData() {
     const supabase = await createClient()
@@ -63,24 +61,14 @@ export default async function EmocionesPage() {
                     </p>
                 </div>
 
-                <Tabs defaultValue="diario" className="w-full">
-                    <TabsList className="grid w-full grid-cols-2 mb-8">
-                        <TabsTrigger value="diario">Check-in Diario</TabsTrigger>
-                        <TabsTrigger value="semanal">Check-in Semanal</TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="diario">
-                        <EmotionSlider
-                            studentId={student.id}
-                            institutionId={student.institution_id}
-                            alreadyLogged={alreadyLoggedToday}
-                        />
-                    </TabsContent>
-
-                    <TabsContent value="semanal">
-                        <WeeklyCheckinCard />
-                    </TabsContent>
-                </Tabs>
+                <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                    <h2 className="text-lg font-semibold text-slate-800 mb-6">Tu check-in de hoy</h2>
+                    <EmotionSlider
+                        studentId={student.id}
+                        institutionId={student.institution_id}
+                        alreadyLogged={alreadyLoggedToday}
+                    />
+                </div>
             </div>
         </main>
     )

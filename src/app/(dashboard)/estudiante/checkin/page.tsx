@@ -1,9 +1,7 @@
-import { EmotionSlider } from "@/components/emotional/emotion-slider"
-import { WeeklyCheckinCard } from "@/components/emotional/weekly-checkin-card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import Link from "next/link"
+import { EmotionSlider } from "@/components/emotional/emotion-slider"
 import { PulseCheckinWrapper } from "@/components/pulse/pulse-checkin-wrapper"
 
 // ─── Tipo para pulse session ──────────────────────────────────────────────────
@@ -125,34 +123,24 @@ export default async function EstudianteCheckinPage() {
                     />
                 )}
 
-                {/* ── Registro emocional normal ── */}
+                {/* ── Registro emocional diario ── */}
                 <section>
-                    <Tabs defaultValue="diario" className="w-full">
-                        <TabsList className="grid w-full grid-cols-2 mb-8">
-                            <TabsTrigger value="diario">Check-in Diario</TabsTrigger>
-                            <TabsTrigger value="semanal">Trabajo Socioemocional</TabsTrigger>
-                        </TabsList>
-
-                        <TabsContent value="diario">
-                            <EmotionSlider
-                                studentId={student.id}
-                                institutionId={student.institution_id}
-                                alreadyLogged={alreadyLogged}
-                            />
-                            <div className="flex justify-end mt-2">
-                                <Link
-                                    href="/estudiante/historial"
-                                    className="text-sm text-indigo-600 hover:underline font-medium"
-                                >
-                                    Ver mi historial emocional →
-                                </Link>
-                            </div>
-                        </TabsContent>
-
-                        <TabsContent value="semanal">
-                            <WeeklyCheckinCard />
-                        </TabsContent>
-                    </Tabs>
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                        <h2 className="text-lg font-semibold text-slate-800 mb-6">¿Cómo te sientes hoy?</h2>
+                        <EmotionSlider
+                            studentId={student.id}
+                            institutionId={student.institution_id}
+                            alreadyLogged={alreadyLogged}
+                        />
+                        <div className="flex justify-end mt-6">
+                            <Link
+                                href="/estudiante/historial"
+                                className="text-sm text-indigo-600 hover:underline font-medium"
+                            >
+                                Ver mi historial emocional →
+                            </Link>
+                        </div>
+                    </div>
                 </section>
 
             </div>
