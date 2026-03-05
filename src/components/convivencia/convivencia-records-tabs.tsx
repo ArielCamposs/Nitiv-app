@@ -1,24 +1,25 @@
 "use client"
 
 import { useState, useTransition, useMemo } from "react"
-import { createConvivenciaRecord, resolveConvivenciaRecord } from "@/app/(dashboard)/registros-convivencia/actions"
+import { createConvivenciaRecord, updateConvivenciaRecord, resolveConvivenciaRecord } from "@/app/(dashboard)/registros-convivencia/actions"
+import { buildConvivenciaPdf } from "@/lib/pdf/convivencia-pdf"
 import { toast } from "sonner"
 import {
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-    ResponsiveContainer
+    AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
+    ResponsiveContainer, PieChart, Pie, Cell
 } from "recharts"
-import { ClipboardList, Plus, History, TrendingUp, TrendingDown, Minus, CheckCircle, ChevronDown, ChevronUp, Search, X, Mic, MicOff } from "lucide-react"
+import { ClipboardList, Plus, History, TrendingUp, TrendingDown, Minus, CheckCircle, ChevronDown, ChevronUp, Search, X, Mic, MicOff, BarChart3, Printer, Download, Edit } from "lucide-react"
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const RECORD_TYPES: { value: string; label: string }[] = [
-    { value: "pelea", label: "Pelea" },
-    { value: "fuga", label: "Fuga / Escapada" },
-    { value: "daño_material", label: "Daño Material" },
-    { value: "amenaza", label: "Amenaza" },
-    { value: "acoso", label: "Acoso" },
-    { value: "consumo", label: "Consumo de Sustancias" },
-    { value: "conflicto_grupal", label: "Conflicto Grupal" },
-    { value: "otro", label: "Otro" },
+const RECORD_TYPES: { value: string; label: string; color: string }[] = [
+    { value: "pelea", label: "Pelea", color: "#f43f5e" }, // red
+    { value: "fuga", label: "Fuga / Escapada", color: "#f97316" }, // orange
+    { value: "daño_material", label: "Daño Material", color: "#eab308" }, // yellow
+    { value: "amenaza", label: "Amenaza", color: "#8b5cf6" }, // purple
+    { value: "acoso", label: "Acoso", color: "#ec4899" }, // pink
+    { value: "consumo", label: "Consumo de Sustancias", color: "#14b8a6" }, // teal
+    { value: "conflicto_grupal", label: "Conflicto Grupal", color: "#3b82f6" }, // blue
+    { value: "otro", label: "Otro", color: "#94a3b8" }, // slate
 ]
 
 const SEVERITIES = [
@@ -279,9 +280,11 @@ function ResolveRow({ record, onResolved }: {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, reporterName }: Props) {
-    const [tab, setTab] = useState<"nuevo" | "historial">("nuevo")
+    const [tab, setTab] = useState<"nuevo" | "historial" | "estadisticas">("nuevo")
     const [records, setRecords] = useState<ConvivenciaRecord[]>(initialRecords)
     const [pending, startTransition] = useTransition()
+    const [createdRecord, setCreatedRecord] = useState<ConvivenciaRecord | null>(null)
+    const [editingRecordId, setEditingRecordId] = useState<string | null>(null)
 
     // Form state
     const [status, setStatus] = useState("abierto")
@@ -340,6 +343,32 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
     }, [last30])
 
     const weeklyData = useMemo(() => buildWeeklyChart(records), [records])
+
+    const pieData = useMemo(() => {
+        if (last30.length === 0) return []
+        const counts: { [key: string]: number } = {}
+        for (const r of last30) counts[r.type] = (counts[r.type] ?? 0) + 1
+
+        // Use a set to detect duplicates from unknowns vs authentic 'otro's if needed, though they map to same name/color.
+        return Object.entries(counts)
+            .map(([value, count]) => {
+                const typeInfo = RECORD_TYPES.find(t => t.value === value)
+                return {
+                    name: typeInfo?.label || "Otro",
+                    value: count,
+                    color: typeInfo?.color || "#94a3b8"
+                }
+            })
+            // sum duplicates if any (e.g. "unknownType" and "otro" both rendering as "Otro")
+            .reduce((acc, current) => {
+                const existing = acc.find(item => item.name === current.name)
+                if (existing) existing.value += current.value
+                else acc.push(current)
+                return acc
+            }, [] as { name: string, value: number, color: string }[])
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 5) // Top 5
+    }, [last30])
 
     function toggleAction(a: string) {
         setActions(prev => prev.includes(a) ? prev.filter(x => x !== a) : [...prev, a])
@@ -421,6 +450,53 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
         setRecords(prev => prev.map(r => r.id === id ? { ...r, resolved: true, resolution_notes: notes } : r))
     }
 
+    function handlePrint(record: ConvivenciaRecord) {
+        const doc = buildConvivenciaPdf(record, reporterName)
+        doc.autoPrint()
+        doc.output('dataurlnewwindow')
+    }
+
+    function handleDownloadPdf(record: ConvivenciaRecord) {
+        const doc = buildConvivenciaPdf(record, reporterName)
+        doc.save(`registro-convivencia-${record.type || 'caso'}.pdf`)
+    }
+
+    function handleEdit(record: ConvivenciaRecord) {
+        setEditingRecordId(record.id)
+        setStatus(record.status || "abierto")
+        setResponsableId(record.responsable_id || "")
+        setApoyoId(record.apoyo_id || "")
+        setType(record.type || "")
+        setSeverity(record.severity || "moderada")
+        setLocation(record.location || "")
+        setDescription(record.description || "")
+        setAgreements(record.agreements || "")
+
+        // Convert associated students
+        const studentsList = (record.convivencia_record_students ?? []).map(s => s.students).filter(Boolean) as any
+        setInvolvedStudents(studentsList)
+
+        // Pre-select course based on first student if available
+        if (studentsList.length > 0 && studentsList[0].courses?.name) {
+            setSelectedCourse(studentsList[0].courses.name)
+        } else {
+            setSelectedCourse("")
+        }
+
+        setActions(record.actions_taken || [])
+
+        // Format date for datetime-local
+        if (record.incident_date) {
+            const d = new Date(record.incident_date)
+            const offset = d.getTimezoneOffset()
+            const local = new Date(d.getTime() - (offset * 60 * 1000))
+            setIncidentDate(local.toISOString().slice(0, 16))
+        }
+
+        setTab("nuevo")
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
         if (!type) { toast.error("Selecciona el tipo de caso"); return }
@@ -430,7 +506,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
         const parsedDate = new Date(incidentDate).toISOString()
 
         startTransition(async () => {
-            const result = await createConvivenciaRecord({
+            const payload = {
                 status,
                 responsable_id: responsableId || null,
                 apoyo_id: apoyoId || null,
@@ -443,39 +519,52 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                 student_ids: involvedStudents.map(s => s.id),
                 actions_taken: allActions,
                 incident_date: parsedDate,
-            })
+            }
+
+            let result
+            if (editingRecordId) {
+                result = await updateConvivenciaRecord(editingRecordId, payload)
+            } else {
+                result = await createConvivenciaRecord(payload)
+            }
 
             if (result?.error) {
                 toast.error(result.error)
             } else {
-                toast.success("Registro creado correctamente")
+                toast.success(editingRecordId ? "Registro actualizado correctamente" : "Registro creado correctamente")
 
                 // Optimistic update
                 const newRecord: ConvivenciaRecord = {
-                    id: (result as any).id ?? crypto.randomUUID(),
+                    id: editingRecordId || (result as any).id || crypto.randomUUID(),
                     type,
                     severity,
                     location: location.trim() || null,
                     description: description.trim(),
                     involved_count: Math.max(involvedStudents.length, 1),
                     actions_taken: allActions,
-                    resolved: false,
-                    resolution_notes: null,
+                    resolved: editingRecordId ? records.find(r => r.id === editingRecordId)?.resolved ?? false : false,
+                    resolution_notes: editingRecordId ? records.find(r => r.id === editingRecordId)?.resolution_notes ?? null : null,
                     incident_date: parsedDate,
                     convivencia_record_students: involvedStudents.map(s => ({
                         student_id: s.id,
                         students: { id: s.id, name: s.name, last_name: s.last_name },
                     })),
                 } as any // using as any to ignore strict DB typing matching for optimistic updates
-                setRecords(prev => [newRecord, ...prev])
 
-                // Reset
-                setStatus("abierto"); setResponsableId(""); setApoyoId("")
-                setType(""); setSeverity("moderada"); setLocation("")
-                setDescription(""); setAgreements(""); setInvolvedStudents([])
-                setSelectedCourse(""); setActions([]); setOtherAction("")
-                setIncidentDate(new Date().toISOString().slice(0, 16))
-                setTab("historial")
+                if (editingRecordId) {
+                    setRecords(prev => prev.map(r => r.id === editingRecordId ? { ...r, ...newRecord } : r))
+                    setTab("historial")
+                    setEditingRecordId(null)
+                    // Reset
+                    setStatus("abierto"); setResponsableId(""); setApoyoId("")
+                    setType(""); setSeverity("moderada"); setLocation("")
+                    setDescription(""); setAgreements(""); setInvolvedStudents([])
+                    setSelectedCourse(""); setActions([]); setOtherAction("")
+                    setIncidentDate(new Date().toISOString().slice(0, 16))
+                } else {
+                    setRecords(prev => [newRecord, ...prev])
+                    setCreatedRecord(newRecord)
+                }
             }
         })
     }
@@ -485,12 +574,13 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
             {/* Tab switcher */}
             <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
                 {[
-                    { key: "nuevo", label: "Nuevo Registro", icon: Plus },
+                    { key: "nuevo", label: editingRecordId ? "Editar Registro" : "Nuevo Registro", icon: editingRecordId ? Edit : Plus },
                     { key: "historial", label: "Historial", icon: History },
+                    { key: "estadisticas", label: "Estadísticas", icon: BarChart3 },
                 ].map(({ key, label, icon: Icon }) => (
                     <button
                         key={key}
-                        onClick={() => setTab(key as "nuevo" | "historial")}
+                        onClick={() => setTab(key as "nuevo" | "historial" | "estadisticas")}
                         className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === key
                             ? "bg-white text-slate-800 shadow-sm"
                             : "text-slate-500 hover:text-slate-700"}`}
@@ -507,7 +597,42 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
             </div>
 
             {/* ── FORM ── */}
-            {tab === "nuevo" && (
+            {tab === "nuevo" && createdRecord && (
+                <div className="bg-white rounded-3xl border shadow-sm p-10 text-center space-y-6 max-w-xl mx-auto mt-8">
+                    <div className="mx-auto w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center">
+                        <CheckCircle className="w-8 h-8 text-emerald-600" />
+                    </div>
+                    <div>
+                        <h2 className="text-2xl font-bold text-slate-800">¡Registro creado exitosamente!</h2>
+                        <p className="text-slate-500 mt-2 text-sm">El caso ha sido guardado y ya forma parte del historial de convivencia.</p>
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
+                        <button type="button" onClick={() => handleDownloadPdf(createdRecord)}
+                            className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-indigo-50 text-indigo-700 font-semibold hover:bg-indigo-100 transition-colors w-full sm:w-auto">
+                            <Download className="w-4 h-4" /> Descargar PDF
+                        </button>
+                        <button type="button" onClick={() => handlePrint(createdRecord)}
+                            className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-semibold hover:bg-slate-50 transition-colors w-full sm:w-auto">
+                            <Printer className="w-4 h-4" /> Imprimir
+                        </button>
+                    </div>
+                    <div className="pt-2 border-t mt-6 border-slate-100">
+                        <button type="button" onClick={() => {
+                            setCreatedRecord(null)
+                            // Reset state
+                            setStatus("abierto"); setResponsableId(""); setApoyoId("")
+                            setType(""); setSeverity("moderada"); setLocation("")
+                            setDescription(""); setAgreements(""); setInvolvedStudents([])
+                            setSelectedCourse(""); setActions([]); setOtherAction("")
+                            setIncidentDate(new Date().toISOString().slice(0, 16))
+                            setTab("historial")
+                        }} className="text-indigo-600 font-semibold hover:underline text-sm">
+                            Volver al historial
+                        </button>
+                    </div>
+                </div>
+            )}
+            {tab === "nuevo" && !createdRecord && (
                 <form onSubmit={handleSubmit} className="bg-white rounded-3xl border shadow-sm p-8 space-y-10">
 
                     {/* Header: Estado y Fecha */}
@@ -574,13 +699,12 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                 {["Patio", "Aula", "Baño", "Comedor", "Redes sociales", "Fuera del colegio"].map(loc => (
                                     <button key={loc} type="button"
                                         onClick={() => setLocation(prev => prev === loc ? "" : loc)}
-                                        className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                                            location === loc
-                                                ? "bg-indigo-500 text-white shadow-sm ring-2 ring-indigo-200"
-                                                : location !== ""
-                                                    ? "bg-slate-100 text-slate-400 border border-slate-200 opacity-40 grayscale hover:opacity-70 hover:grayscale-0"
-                                                    : "bg-indigo-50 text-indigo-600 border border-indigo-100 hover:bg-indigo-100"
-                                        }`}
+                                        className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${location === loc
+                                            ? "bg-indigo-500 text-white shadow-sm ring-2 ring-indigo-200"
+                                            : location !== ""
+                                                ? "bg-slate-100 text-slate-400 border border-slate-200 opacity-40 grayscale hover:opacity-70 hover:grayscale-0"
+                                                : "bg-indigo-50 text-indigo-600 border border-indigo-100 hover:bg-indigo-100"
+                                            }`}
                                     >{loc}</button>
                                 ))}
                             </div>
@@ -597,11 +721,10 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                     { value: "gravisimo", label: "Gravísimo", baseClass: "bg-red-100 text-red-700 border-red-200", activeClass: "bg-red-600 text-white shadow-md ring-2 ring-red-200" },
                                 ].map(s => (
                                     <button type="button" key={s.value} onClick={() => setSeverity(s.value)}
-                                        className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                                            severity === s.value
-                                                ? s.activeClass
-                                                : `${s.baseClass} opacity-40 grayscale hover:opacity-70 hover:grayscale-0`
-                                        } ${type === "Entrevista apoderado" ? "opacity-40 grayscale pointer-events-none" : ""}`}
+                                        className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${severity === s.value
+                                            ? s.activeClass
+                                            : `${s.baseClass} opacity-40 grayscale hover:opacity-70 hover:grayscale-0`
+                                            } ${type === "Entrevista apoderado" ? "opacity-40 grayscale pointer-events-none" : ""}`}
                                     >{s.label}</button>
                                 ))}
                             </div>
@@ -628,13 +751,12 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                         {items.map(name => (
                                             <button key={name} type="button"
                                                 onClick={() => setSelectedCourse(prev => prev === name ? "" : name)}
-                                                className={`px-3 py-1 rounded-full text-xs font-medium transition-all border ${
-                                                    selectedCourse === name
-                                                        ? "bg-indigo-500 text-white border-indigo-500 shadow-sm ring-2 ring-indigo-200"
-                                                        : selectedCourse !== ""
-                                                            ? "bg-slate-100 text-slate-400 border-slate-200 opacity-40 grayscale hover:opacity-70 hover:grayscale-0"
-                                                            : "bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100"
-                                                }`}
+                                                className={`px-3 py-1 rounded-full text-xs font-medium transition-all border ${selectedCourse === name
+                                                    ? "bg-indigo-500 text-white border-indigo-500 shadow-sm ring-2 ring-indigo-200"
+                                                    : selectedCourse !== ""
+                                                        ? "bg-slate-100 text-slate-400 border-slate-200 opacity-40 grayscale hover:opacity-70 hover:grayscale-0"
+                                                        : "bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100"
+                                                    }`}
                                             >{name}</button>
                                         ))}
                                     </div>
@@ -683,13 +805,12 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                 ].map(shortcut => (
                                     <button key={shortcut.label} type="button"
                                         onClick={() => { setType(shortcut.label); if (shortcut.label === "Entrevista apoderado") setSeverity("n/a") }}
-                                        className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
-                                            type === shortcut.label
-                                                ? `${shortcut.color} ring-2 ring-offset-1 ring-slate-300 font-bold`
-                                                : ["Apoyo emocional", "Entrevista apoderado", "Incumplimiento de normas"].includes(type)
-                                                    ? "bg-slate-100 text-slate-400 border-slate-200 opacity-40 grayscale hover:opacity-70 hover:grayscale-0"
-                                                    : shortcut.color
-                                        }`}
+                                        className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${type === shortcut.label
+                                            ? `${shortcut.color} ring-2 ring-offset-1 ring-slate-300 font-bold`
+                                            : ["Apoyo emocional", "Entrevista apoderado", "Incumplimiento de normas"].includes(type)
+                                                ? "bg-slate-100 text-slate-400 border-slate-200 opacity-40 grayscale hover:opacity-70 hover:grayscale-0"
+                                                : shortcut.color
+                                            }`}
                                     >{shortcut.label}</button>
                                 ))}
                             </div>
@@ -754,17 +875,30 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                         </div>
                     </div>
 
-                    <div className="pt-2">
+                    <div className="pt-2 flex flex-col sm:flex-row gap-3">
                         <button type="submit" disabled={pending}
-                            className="w-full sm:w-auto px-8 py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                            {pending ? "Registrando..." : "Registrar Caso"}
+                            className="flex-1 sm:flex-none px-8 py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            {pending ? "Guardando..." : editingRecordId ? "Guardar Cambios" : "Registrar Caso"}
                         </button>
+                        {editingRecordId && (
+                            <button type="button" disabled={pending} onClick={() => {
+                                setEditingRecordId(null)
+                                setStatus("abierto"); setResponsableId(""); setApoyoId("")
+                                setType(""); setSeverity("moderada"); setLocation("")
+                                setDescription(""); setAgreements(""); setInvolvedStudents([])
+                                setSelectedCourse(""); setActions([]); setOtherAction("")
+                                setIncidentDate(new Date().toISOString().slice(0, 16))
+                                setTab("historial")
+                            }} className="px-6 py-3 rounded-xl bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200 transition-colors flex-1 sm:flex-none text-center">
+                                Cancelar
+                            </button>
+                        )}
                     </div>
                 </form>
             )}
 
-            {/* ── HISTORIAL ── */}
-            {tab === "historial" && (
+            {/* ── ESTADÍSTICAS ── */}
+            {tab === "estadisticas" && (
                 <div className="space-y-6">
                     {/* Stat cards */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -800,19 +934,76 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                         </div>
                     </div>
 
-                    {/* Chart */}
-                    <div className="bg-white rounded-2xl border shadow-sm p-6">
-                        <h3 className="text-sm font-semibold text-slate-700 mb-4">Casos por semana (últimas 6 semanas)</h3>
-                        <ResponsiveContainer width="100%" height={180}>
-                            <BarChart data={weeklyData} margin={{ top: 0, right: 10, left: -20, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                <XAxis dataKey="semana" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                                <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                                <Tooltip contentStyle={{ borderRadius: "12px", border: "1px solid #e2e8f0", fontSize: "12px" }} formatter={(v) => [v, "Casos"]} />
-                                <Bar dataKey="casos" fill="#6366f1" radius={[6, 6, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
+                    {/* Charts */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        {/* Weekly Timeline */}
+                        <div className="bg-white rounded-2xl border shadow-sm p-6 lg:col-span-2">
+                            <h3 className="text-sm font-semibold text-slate-700 mb-4">Evolución de casos (últimas 6 semanas)</h3>
+                            <ResponsiveContainer width="100%" height={220}>
+                                <AreaChart data={weeklyData} margin={{ top: 0, right: 10, left: -20, bottom: 0 }}>
+                                    <defs>
+                                        <linearGradient id="colorCasos" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                                    <XAxis dataKey="semana" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                                    <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                    <RechartsTooltip
+                                        contentStyle={{ borderRadius: "12px", border: "1px solid #e2e8f0", fontSize: "12px", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
+                                        formatter={(v) => [v, "Casos"]}
+                                    />
+                                    <Area type="monotone" dataKey="casos" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorCasos)" />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        {/* Top Types Donut Chart */}
+                        <div className="bg-white rounded-2xl border shadow-sm p-6 lg:col-span-1 flex flex-col items-center">
+                            <h3 className="text-sm font-semibold text-slate-700 w-full mb-2">Distribución (30 días)</h3>
+                            {pieData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height={180}>
+                                    <PieChart>
+                                        <Pie
+                                            data={pieData}
+                                            innerRadius={50}
+                                            outerRadius={75}
+                                            paddingAngle={3}
+                                            dataKey="value"
+                                            stroke="none"
+                                        >
+                                            {pieData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={entry.color} />
+                                            ))}
+                                        </Pie>
+                                        <RechartsTooltip
+                                            contentStyle={{ borderRadius: "12px", border: "1px solid #e2e8f0", fontSize: "12px" }}
+                                        />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="flex-1 flex items-center justify-center text-sm font-medium text-slate-400">Sin datos registrados</div>
+                            )}
+                            <div className="w-full space-y-1.5 mt-2 max-h-[80px] overflow-y-auto pr-1">
+                                {pieData.map((entry, index) => (
+                                    <div key={entry.name} className="flex items-center justify-between text-xs">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
+                                            <span className="text-slate-600 truncate max-w-[120px]" title={entry.name}>{entry.name}</span>
+                                        </div>
+                                        <span className="font-semibold text-slate-700">{entry.value}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
                     </div>
+                </div>
+            )}
+
+            {/* ── HISTORIAL ── */}
+            {tab === "historial" && (
+                <div className="space-y-6">
 
                     {/* List */}
                     <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
@@ -887,6 +1078,21 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                                     ))}
                                                 </div>
                                             )}
+
+                                            <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-100">
+                                                <button type="button" onClick={() => handleDownloadPdf(r)}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100 text-xs font-semibold transition-colors">
+                                                    <Download className="w-3.5 h-3.5" /> PDF
+                                                </button>
+                                                <button type="button" onClick={() => handlePrint(r)}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 text-xs font-semibold transition-colors">
+                                                    <Printer className="w-3.5 h-3.5" /> Imprimir
+                                                </button>
+                                                <button type="button" onClick={() => handleEdit(r)}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 text-xs font-semibold transition-colors ml-auto shadow-sm">
+                                                    <Edit className="w-3.5 h-3.5" /> Editar
+                                                </button>
+                                            </div>
 
                                             <ResolveRow record={r} onResolved={handleResolved} />
                                         </div>

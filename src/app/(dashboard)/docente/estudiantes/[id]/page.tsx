@@ -42,7 +42,7 @@ async function getStudentForTeacher(studentId: string) {
         // Staff can view any student in their institution
         const { data } = await supabase
             .from("students")
-            .select("id, name, last_name, rut, course_id, courses(name, level)")
+            .select("id, name, last_name, rut, birthdate, guardian_name, guardian_phone, guardian_email, course_id, courses(name, level)")
             .eq("id", studentId)
             .eq("institution_id", profile.institution_id)
             .maybeSingle()
@@ -59,7 +59,7 @@ async function getStudentForTeacher(studentId: string) {
 
         const { data } = await supabase
             .from("students")
-            .select("id, name, last_name, rut, course_id, courses(name, level)")
+            .select("id, name, last_name, rut, birthdate, guardian_name, guardian_phone, guardian_email, course_id, courses(name, level)")
             .eq("id", studentId)
             .in("course_id", courseIds)
             .maybeSingle()
@@ -138,6 +138,7 @@ async function getStudentForTeacher(studentId: string) {
         convivenciaRecords: convivenciaRecords ?? [],
         teacherId: profile.id,
         institutionId: profile.institution_id,
+        role: profile.role,
     }
 }
 
@@ -153,7 +154,18 @@ export default async function StudentProfilePage({
 
     const { student, recentLogs, paec, decRecords, convivenciaRecords, teacherId, institutionId } = data
 
-    // Calcular edad (si tuviera birthdate, aquí usamos lo del estudiante si se agrega fetch de rut/birthdate, por ahora omitido)
+    // Calcular edad
+    let ageText = "No registrada"
+    if (student.birthdate) {
+        const birthDate = new Date(student.birthdate)
+        const today = new Date()
+        let age = today.getFullYear() - birthDate.getFullYear()
+        const m = today.getMonth() - birthDate.getMonth()
+        if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--
+        }
+        ageText = `${age} años`
+    }
 
     return (
         <main className="min-h-screen bg-slate-50">
@@ -172,29 +184,59 @@ export default async function StudentProfilePage({
                 </div>
 
                 <Tabs defaultValue="perfil" className="w-full">
-                    <TabsList className="grid w-full grid-cols-6">
+                    <TabsList className={`grid w-full ${data.role === 'docente' ? 'grid-cols-6' : 'grid-cols-5'}`}>
                         <TabsTrigger value="perfil">Perfil</TabsTrigger>
                         <TabsTrigger value="emocional">Emocional</TabsTrigger>
                         <TabsTrigger value="paec">PAEC</TabsTrigger>
                         <TabsTrigger value="dec">Historial DEC</TabsTrigger>
                         <TabsTrigger value="convivencia">Convivencia</TabsTrigger>
-                        <TabsTrigger value="docente">Docente</TabsTrigger>
+                        {data.role === "docente" && (
+                            <TabsTrigger value="docente">Docente</TabsTrigger>
+                        )}
                     </TabsList>
 
                     <TabsContent value="perfil" className="mt-6 space-y-6">
-                        {/* Datos personales simplificados por ahora */}
                         <Card>
                             <CardHeader>
-                                <CardTitle className="text-base">Datos personales</CardTitle>
+                                <CardTitle className="text-base">Datos personales y de contacto</CardTitle>
                             </CardHeader>
-                            <CardContent className="grid grid-cols-2 gap-4 text-sm">
+                            <CardContent className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 text-sm">
                                 <div>
                                     <p className="text-xs text-slate-400">RUT</p>
                                     <p className="font-medium text-slate-700">{student.rut ?? "No registrado"}</p>
                                 </div>
                                 <div>
+                                    <p className="text-xs text-slate-400">Edad</p>
+                                    <p className="font-medium text-slate-700">{ageText}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-slate-400">Fecha de Nacimiento</p>
+                                    <p className="font-medium text-slate-700">
+                                        {student.birthdate
+                                            ? new Date(student.birthdate + "T00:00:00").toLocaleDateString("es-CL", { day: '2-digit', month: '2-digit', year: 'numeric' })
+                                            : "No registrada"}
+                                    </p>
+                                </div>
+                                <div>
                                     <p className="text-xs text-slate-400">Curso</p>
-                                    <p className="font-medium text-slate-700">{(student.courses as any)?.name ?? "No registrado"}</p>
+                                    <p className="font-medium text-slate-700">{(student.courses as any)?.name ?? "No asignado"}</p>
+                                </div>
+                                <div className="sm:col-span-2 lg:col-span-3 border-t pt-4 mt-2">
+                                    <h4 className="text-sm font-semibold text-slate-800 mb-3">Apoderado / Contacto de Emergencia</h4>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        <div>
+                                            <p className="text-xs text-slate-400">Nombre del Apoderado</p>
+                                            <p className="font-medium text-slate-700">{student.guardian_name ?? "No registrado"}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-slate-400">Teléfono</p>
+                                            <p className="font-medium text-slate-700">{student.guardian_phone ?? "No registrado"}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-slate-400">Correo Electrónico</p>
+                                            <p className="font-medium text-slate-700">{student.guardian_email ?? "No registrado"}</p>
+                                        </div>
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>
@@ -471,14 +513,16 @@ export default async function StudentProfilePage({
                         </Card>
                     </TabsContent>
 
-                    <TabsContent value="docente" className="mt-6 space-y-6">
-                        {/* Formulario de percepción docente */}
-                        <PerceptionForm
-                            teacherId={teacherId}
-                            studentId={student.id}
-                            institutionId={institutionId}
-                        />
-                    </TabsContent>
+                    {data.role === "docente" && (
+                        <TabsContent value="docente" className="mt-6 space-y-6">
+                            {/* Formulario de percepción docente */}
+                            <PerceptionForm
+                                teacherId={teacherId}
+                                studentId={student.id}
+                                institutionId={institutionId}
+                            />
+                        </TabsContent>
+                    )}
                 </Tabs>
             </div>
         </main>
