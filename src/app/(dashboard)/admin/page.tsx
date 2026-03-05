@@ -129,48 +129,48 @@ export default async function AdminDashboardPage() {
             </div>
 
             {/* ── KPIs principales ────────────────────────────────────────── */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
                     {
                         label: "Staff activo",
                         value: totalUsers ?? 0,
                         icon: Users,
                         href: "/admin/usuarios",
-                        color: "bg-indigo-50 text-indigo-600",
+                        color: "bg-indigo-500",
                     },
                     {
                         label: "Estudiantes",
                         value: totalStudents ?? 0,
                         icon: GraduationCap,
                         href: "/admin/estudiantes",
-                        color: "bg-emerald-50 text-emerald-600",
+                        color: "bg-emerald-500",
                     },
                     {
                         label: "Cursos",
                         value: totalCourses ?? 0,
                         icon: BookOpen,
                         href: "/admin/cursos",
-                        color: "bg-blue-50 text-blue-600",
+                        color: "bg-blue-500",
                     },
                     {
                         label: "Actividades",
                         value: totalActivities ?? 0,
                         icon: Activity,
                         href: "/actividades",
-                        color: "bg-amber-50 text-amber-600",
+                        color: "bg-amber-500",
                     },
                 ].map(stat => (
                     <Link
                         key={stat.label}
                         href={stat.href}
-                        className="bg-white rounded-2xl border border-slate-100 p-4 hover:shadow-md transition-shadow space-y-2"
+                        className="flex flex-col items-center text-center gap-3 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md transition-shadow p-5 group"
                     >
-                        <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center", stat.color)}>
-                            <stat.icon className="w-4 h-4" />
+                        <div className={`relative flex h-16 w-16 items-center justify-center rounded-full ${stat.color} shadow-sm`}>
+                            <stat.icon className="absolute top-1.5 right-1.5 h-3.5 w-3.5 text-white/50" />
+                            <span className="text-2xl font-extrabold text-white tabular-nums leading-none">{stat.value}</span>
                         </div>
                         <div>
-                            <p className="text-2xl font-bold text-slate-900">{stat.value}</p>
-                            <p className="text-[11px] text-slate-500 mt-0.5">{stat.label}</p>
+                            <p className="text-sm font-semibold text-slate-700">{stat.label}</p>
                         </div>
                     </Link>
                 ))}

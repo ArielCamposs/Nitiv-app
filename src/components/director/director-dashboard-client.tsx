@@ -37,20 +37,18 @@ interface Props {
 }
 
 function StatCard({ icon: Icon, label, value, color }: {
-    icon: React.ElementType; label: string; value: number | string; color?: string
+    icon: React.ElementType; label: string; value: number | string; color: string
 }) {
     return (
-        <Card className="border-0 shadow-sm">
-            <CardContent className="pt-4 pb-3 flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${color ?? "bg-slate-100"}`}>
-                    <Icon className="w-5 h-5 text-slate-700" />
-                </div>
-                <div>
-                    <p className="text-xs text-slate-500">{label}</p>
-                    <p className="text-xl font-bold text-slate-900">{value}</p>
-                </div>
-            </CardContent>
-        </Card>
+        <div className="flex flex-col items-center text-center gap-3 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md transition-shadow p-5 group">
+            <div className={`relative flex h-16 w-16 items-center justify-center rounded-full ${color} shadow-sm`}>
+                <Icon className="absolute top-1.5 right-1.5 h-3.5 w-3.5 text-white/50" />
+                <span className="text-2xl font-extrabold text-white tabular-nums leading-none">{value}</span>
+            </div>
+            <div>
+                <p className="text-sm font-semibold text-slate-700">{label}</p>
+            </div>
+        </div>
     )
 }
 
@@ -75,11 +73,11 @@ export function DirectorDashboardClient({
         <div className="space-y-6">
 
             {/* ── Tarjetas resumen ── */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <StatCard icon={Users} label="Estudiantes activos" value={totalStudents} color="bg-blue-50" />
-                <StatCard icon={AlertTriangle} label="Alertas sin resolver" value={totalAlerts} color={totalAlerts > 0 ? "bg-red-50" : "bg-slate-100"} />
-                <StatCard icon={FileText} label="DEC pendientes" value={totalIncidents} color={totalIncidents > 0 ? "bg-orange-50" : "bg-slate-100"} />
-                <StatCard icon={ClipboardList} label="PAEC por revisar" value={paecPendingReview} color={paecPendingReview > 0 ? "bg-yellow-50" : "bg-slate-100"} />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <StatCard icon={Users} label="Estudiantes activos" value={totalStudents} color="bg-indigo-500" />
+                <StatCard icon={AlertTriangle} label="Alertas sin resolver" value={totalAlerts} color={totalAlerts > 0 ? "bg-rose-500" : "bg-slate-400"} />
+                <StatCard icon={FileText} label="DEC pendientes" value={totalIncidents} color={totalIncidents > 0 ? "bg-orange-500" : "bg-slate-400"} />
+                <StatCard icon={ClipboardList} label="PAEC por revisar" value={paecPendingReview} color={paecPendingReview > 0 ? "bg-amber-500" : "bg-slate-400"} />
             </div>
 
             {/* ── Bienestar institucional ── */}

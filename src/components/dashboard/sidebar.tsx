@@ -6,7 +6,7 @@ import { useState, useEffect } from "react"
 import {
     Home, LogOut, ShoppingBag, ThermometerSun, Users, LifeBuoy,
     Shield, BarChart3, FileText, MessageSquare, Activity, UserCircle,
-    Calendar, BookOpen, Library, Zap, ClipboardList
+    Calendar, BookOpen, Library, ClipboardList
 } from "lucide-react"
 import { useChatUnread } from "@/context/chat-unread-context"
 import { DecBadge } from "@/components/dashboard/dec-badge"
@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { NotificationBell } from "@/components/layout/notification-bell"
 
-// ─── Tipos ────────────────────────────────────────────────────────────────────
+// ─── Tipos ─────────────
 type NavItem = {
     title: string
     href: string
@@ -96,26 +96,19 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
         gestionCasos.push({ title: "Estudiantes", href: `/${currentRole}/estudiantes`, icon: Users })
     }
 
-    if (currentRole === "director" || currentRole === "dupla") {
-        gestionCasos.push({
-            title: "Modo Pulso",
-            href: `/${currentRole}/pulso`,
-            icon: Zap,
-        })
-    }
 
     // ── Bloque 3: Biblioteca y Comunidad ──────────────────────────────────────
     const biblioteca: NavItem[] = []
 
     biblioteca.push({ title: "Actividades", href: isStudent ? "/estudiante/actividades" : "/actividades", icon: Calendar })
-    biblioteca.push({ title: "Recursos", href: isStudent ? "/estudiante/recursos" : "/recursos", icon: BookOpen })
+    biblioteca.push({ title: "Recursos", href: "/recursos", icon: BookOpen })
+    biblioteca.push({ title: "Biblioteca Nitiv", href: isStudent ? "/estudiante/biblioteca" : "/biblioteca", icon: Library })
 
     if (isStudent) {
         biblioteca.push({ title: "Tienda", href: "/estudiante/tienda", icon: ShoppingBag })
     }
 
     if (!isStudent) {
-        biblioteca.push({ title: "Biblioteca Nitiv", href: "/biblioteca", icon: Library })
         biblioteca.push({ title: "Chat", href: "/chat", icon: MessageSquare, chatBadge: true })
     }
 
@@ -235,8 +228,8 @@ export function SidebarContent({ userId, showBell = true }: { userId: string; sh
     return (
         <div className="flex h-full flex-col">
             {/* Logo + campana */}
-            <div className="mb-6 flex items-center gap-2 px-2 justify-between">
-                <span className="text-xl font-bold text-primary">Nitiv</span>
+            <div className="mb-2 flex items-center gap-2 px-1 justify-between">
+                <img src="/logo.svg" alt="Nitiv Logo" className="h-24 w-auto max-w-[75%] object-contain -ml-2" />
                 {showBell && <NotificationBell userId={userId} />}
             </div>
 

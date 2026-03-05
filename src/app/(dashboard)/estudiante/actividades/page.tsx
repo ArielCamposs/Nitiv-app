@@ -44,13 +44,14 @@ export default async function EstudianteActividadesPage() {
         : []
 
     // ── Actividades de la institución ─────────────────────────────────
-    const { data: allActivities } = await supabase
+    const { data: allActivities, error: actError } = await supabase
         .from("activities")
         .select(`
             id, title, description, location,
             start_datetime, end_datetime,
             materials, target, activity_type,
-            created_by, active, status, header_image,
+            title_color, origin, header_image,
+            created_by, active,
             users:created_by(id, name, last_name, role),
             activity_courses(
                 course_id,
@@ -60,6 +61,10 @@ export default async function EstudianteActividadesPage() {
         .eq("institution_id", profile.institution_id)
         .eq("active", true)
         .order("start_datetime", { ascending: true })
+
+    if (actError) {
+        console.error("[estudiante/actividades] query error:", actError.message)
+    }
 
     // ── Filtrar: general siempre, por_curso solo si el estudiante está ─
     const activities = (allActivities ?? []).filter(a => {

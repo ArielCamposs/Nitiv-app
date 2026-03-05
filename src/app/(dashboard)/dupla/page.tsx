@@ -1,84 +1,167 @@
-import { getActiveAlerts } from "@/lib/utils/get-alerts"
-import { AlertsList } from "@/components/alerts/alerts-list"
-import { HelpRequestsPanel } from "@/components/help/HelpRequestsPanel"
-import { PulseActivatePanel } from "@/components/pulse/pulse-activate-panel"
 import { createClient } from "@/lib/supabase/server"
-import Link from "next/link"
+import { redirect } from "next/navigation"
+import { HelpRequestsPanel } from "@/components/help/HelpRequestsPanel"
+import { DuplaDashboardClient, DuplaStats } from "@/components/dupla/DuplaDashboardClient"
+
+const EMOTION_SCORE: Record<string, number> = {
+    muy_mal: 1, mal: 2, neutral: 3, bien: 4, muy_bien: 5,
+}
+const ENERGY_SCORE: Record<string, number> = {
+    explosiva: 1, apatica: 2, inquieta: 3, regulada: 4,
+}
 
 export default async function DuplaPage() {
-    const alerts = await getActiveAlerts()
     const supabase = await createClient()
-
     const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return redirect("/login")
 
     const { data: profile } = await supabase
         .from("users")
-        .select("id, institution_id")
-        .eq("id", user!.id)
+        .select("id, name, last_name, institution_id")
+        .eq("id", user.id)
         .single()
 
-    // Pulso activo
-    const { data: pulseSession } = profile?.institution_id
-        ? await supabase
-            .from("pulse_sessions")
-            .select("id, week_start, week_end")
-            .eq("institution_id", profile.institution_id)
-            .eq("active", true)
-            .maybeSingle()
-        : { data: null }
+    if (!profile?.institution_id) return redirect("/login")
+    const iid = profile.institution_id
 
-    // Dupla ve: registros_negativos, discrepancia_docente, sin_registro
-    const duplaTypes = [
-        "registros_negativos",
-        "discrepancia_docente",
-        "sin_registro",
-    ]
+    const now = new Date()
+    const day28Ago = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+    const day7Ago = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const weekStart = new Date(now)
+    weekStart.setDate(now.getDate() - now.getDay())
+    weekStart.setHours(0, 0, 0, 0)
+
+    const [
+        { data: students },
+        { data: alerts },
+        { data: helpRequests },
+        { data: emotionLogs7d },
+        { data: emotionLogsWeek },
+        { data: teacherLogs },
+        { data: courses },
+    ] = await Promise.all([
+        supabase.from("students").select("id, name, last_name, course_id").eq("institution_id", iid).eq("active", true),
+        supabase.from("alerts").select("id, student_id, type, created_at, resolved").eq("institution_id", iid).eq("resolved", false).order("created_at", { ascending: false }),
+        supabase.from("help_requests").select("id, status").eq("institution_id", iid).eq("status", "pending"),
+        supabase.from("emotional_logs").select("student_id, emotion, created_at").eq("institution_id", iid).gte("created_at", day7Ago).order("created_at"),
+        supabase.from("emotional_logs").select("student_id, emotion, created_at").eq("institution_id", iid).gte("created_at", weekStart.toISOString()),
+        supabase.from("teacher_logs").select("course_id, energy_level, log_date").eq("institution_id", iid).gte("log_date", day28Ago),
+        supabase.from("courses").select("id, name, section").eq("institution_id", iid).eq("active", true),
+    ])
+
+    // ── KPI counts ──────────────────────────────────────────────────────────────
+    const totalStudents = students?.length ?? 0
+    const activeAlerts = alerts?.length ?? 0
+    const helpCount = helpRequests?.length ?? 0
+    const checkinsThisWeek = emotionLogsWeek?.length ?? 0
+
+    // ── Bienestar promedio (últimos 7 días) ─────────────────────────────────────
+    const last30Scores = (emotionLogs7d ?? []).map(l => EMOTION_SCORE[l.emotion] ?? 3)
+    const bienestarPromedio = last30Scores.length > 0
+        ? Math.round((last30Scores.reduce((a, b) => a + b, 0) / last30Scores.length) * 10) / 10
+        : null
+
+    // ── Distribución emocional (últimos 7 días) ─────────────────────────────────
+    const emotionCount: Record<string, number> = { muy_bien: 0, bien: 0, neutral: 0, mal: 0, muy_mal: 0 }
+    for (const l of (emotionLogs7d ?? [])) {
+        if (emotionCount[l.emotion] !== undefined) emotionCount[l.emotion]++
+    }
+    const emotionColors: Record<string, string> = {
+        muy_bien: "#10b981", bien: "#34d399", neutral: "#94a3b8", mal: "#f97316", muy_mal: "#ef4444",
+    }
+    const emotionLabels: Record<string, string> = {
+        muy_bien: "Muy bien", bien: "Bien", neutral: "Neutral", mal: "Mal", muy_mal: "Muy mal",
+    }
+    const emotionDistribution = Object.entries(emotionCount).map(([key, value]) => ({
+        name: emotionLabels[key],
+        value,
+        color: emotionColors[key],
+    }))
+
+    // ── Tendencia diaria últimos 7 días ─────────────────────────────────────────
+    const dayLabels = ["Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sá"]
+    const weeklyTrend = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(now.getTime() - (6 - i) * 24 * 60 * 60 * 1000)
+        const dateStr = d.toISOString().split("T")[0]
+        const dayLogs = (emotionLogs7d ?? []).filter(l => l.created_at.startsWith(dateStr))
+        const positivo = dayLogs.filter(l => l.emotion === "bien" || l.emotion === "muy_bien").length
+        const neutro = dayLogs.filter(l => l.emotion === "neutral").length
+        const negativo = dayLogs.filter(l => l.emotion === "mal" || l.emotion === "muy_mal").length
+        return { day: dayLabels[d.getDay()], positivo, neutro, negativo }
+    })
+
+    // ── Clima de aula por curso ──────────────────────────────────────────────────
+    const climatePorCurso = (courses ?? []).map(c => {
+        const logs = (teacherLogs ?? []).filter(l => l.course_id === c.id)
+        const score = logs.length > 0
+            ? Math.round((logs.reduce((s, l) => s + (ENERGY_SCORE[l.energy_level] ?? 3), 0) / logs.length) * 10) / 10
+            : 0
+        const label = score === 0 ? "Sin datos" : score >= 3.5 ? "Regulada" : score >= 2.5 ? "Inquieta" : "Apática/Explosiva"
+        return { curso: `${c.name}${c.section ? " " + c.section : ""}`, score, label }
+    }).filter(c => c.score > 0).sort((a, b) => a.score - b.score)
+
+    // ── Alertas por tipo ─────────────────────────────────────────────────────────
+    const alertTypeCounts: Record<string, number> = {}
+    for (const a of (alerts ?? [])) {
+        alertTypeCounts[a.type] = (alertTypeCounts[a.type] ?? 0) + 1
+    }
+    const typeLabels: Record<string, string> = {
+        registros_negativos: "Emoc. negativa",
+        discrepancia_docente: "Discrepancia",
+        sin_registro: "Sin registro",
+        comportamiento: "Conducta",
+        otro: "Otro",
+    }
+    const typeColors: Record<string, string> = {
+        registros_negativos: "#ef4444",
+        discrepancia_docente: "#f97316",
+        sin_registro: "#94a3b8",
+        comportamiento: "#8b5cf6",
+        otro: "#64748b",
+    }
+    const alertsByType = Object.entries(alertTypeCounts).map(([type, count]) => ({
+        name: typeLabels[type] ?? type,
+        count,
+        color: typeColors[type] ?? "#64748b",
+    }))
+
+    // ── Alertas recientes enriquecidas ───────────────────────────────────────────
+    const studentsMap = Object.fromEntries((students ?? []).map(s => [s.id, s]))
+    const coursesMap = Object.fromEntries((courses ?? []).map(c => [c.id, c]))
+    const recentAlerts = (alerts ?? []).slice(0, 5).map(a => {
+        const st = studentsMap[a.student_id]
+        const co = st ? coursesMap[st.course_id ?? ""] : null
+        return {
+            id: a.id, type: a.type, created_at: a.created_at,
+            studentName: st ? `${st.name} ${st.last_name}` : "Estudiante",
+            courseName: co ? `${co.name}${co.section ? " " + co.section : ""}` : "Sin curso",
+        }
+    })
+
+    const stats: DuplaStats = {
+        totalStudents, activeAlerts, helpRequests: helpCount,
+        checkinsThisWeek, emotionDistribution, weeklyTrend,
+        climatePorCurso, alertsByType, bienestarPromedio, recentAlerts,
+    }
 
     return (
         <main className="min-h-screen bg-slate-50">
-            <div className="mx-auto max-w-4xl px-4 py-8 space-y-6">
-                <div className="flex items-center justify-between">
-                    <h1 className="text-2xl font-semibold text-slate-900">
-                        Dashboard Dupla Psicosocial
-                    </h1>
-                    {alerts.filter((a: any) => duplaTypes.includes(a.type)).length > 0 && (
-                        <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-medium text-rose-700">
-                            {alerts.filter((a: any) => duplaTypes.includes(a.type)).length} alertas activas
-                        </span>
-                    )}
-                </div>
-
+            <div className="mx-auto max-w-5xl px-4 py-8 space-y-6">
+                {/* Header */}
                 <div>
-                    <Link
-                        href="/dupla/heatmap"
-                        className="inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:underline"
-                    >
-                        Ver mapa de clima emocional por curso →
-                    </Link>
+                    <h1 className="text-2xl font-semibold text-slate-900">Dashboard Dupla</h1>
+                    <p className="text-slate-500 text-sm mt-1">
+                        Bienvenido/a, <span className="font-medium text-slate-700">{profile.name} {profile.last_name}</span>
+                    </p>
                 </div>
 
-                {/* Modo Pulso */}
-                {profile?.institution_id && (
-                    <PulseActivatePanel
-                        institutionId={profile.institution_id}
-                        userId={profile.id}
-                        activeSession={pulseSession ?? null}
-                    />
-                )}
+                {/* Charts + KPI */}
+                <DuplaDashboardClient stats={stats} />
 
-                <section className="space-y-3">
-                    <h2 className="text-sm font-medium text-slate-500 uppercase tracking-wide">
-                        Alertas activas
-                    </h2>
-                    <AlertsList
-                        initialAlerts={alerts as any}
-                        filterTypes={duplaTypes}
-                    />
-                </section>
-
-                {profile?.institution_id && (
-                    <section className="space-y-3">
-                        <HelpRequestsPanel institutionId={profile.institution_id} />
+                {/* Help requests */}
+                {iid && (
+                    <section className="rounded-2xl border border-slate-100 bg-white shadow-sm p-5">
+                        <HelpRequestsPanel institutionId={iid} />
                     </section>
                 )}
             </div>

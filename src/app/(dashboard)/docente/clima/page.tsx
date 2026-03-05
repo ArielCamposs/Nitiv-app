@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { ClimaPageTabs } from "@/components/teacher/clima-page-tabs"
-
-type PulseSession = { id: string; week_start: string; week_end: string } | null
+import { redirect } from "next/navigation"
 
 async function getTeacherCourses() {
     const supabase = await createClient()
@@ -10,11 +9,14 @@ async function getTeacherCourses() {
 
     const { data: profile } = await supabase
         .from("users")
-        .select("id, institution_id")
+        .select("id, institution_id, role")
         .eq("id", user.id)
         .maybeSingle()
 
     if (!profile) return null
+
+    // Admin cannot access the climate page
+    if (profile.role === "admin") return redirect("/")
 
     const { data: courses } = await supabase
         .from("course_teachers")
@@ -48,31 +50,12 @@ async function getTeacherCourses() {
         .gte("log_date", since90.toISOString().split("T")[0])
         .order("log_date", { ascending: true })
 
-    const { data: pulseSession } = await supabase
-        .from("pulse_sessions")
-        .select("id, week_start, week_end")
-        .eq("institution_id", profile.institution_id)
-        .eq("active", true)
-        .maybeSingle()
-
-    let pulseDoneCourses: string[] = []
-    if (pulseSession && courseIds.length > 0) {
-        const { data: pulseEntries } = await supabase
-            .from("pulse_teacher_entries")
-            .select("course_id")
-            .eq("pulse_session_id", pulseSession.id)
-            .eq("teacher_id", user.id)
-        pulseDoneCourses = (pulseEntries ?? []).map((e: any) => e.course_id)
-    }
-
     return {
         teacherId: profile.id,
         institutionId: profile.institution_id,
         courses: courses ?? [],
         teacherLogs: teacherLogs ?? [],
         historyLogs: historyLogs ?? [],
-        pulseSession: pulseSession as PulseSession,
-        pulseDoneCourses,
     }
 }
 
@@ -80,29 +63,15 @@ export default async function ClimaPage() {
     const data = await getTeacherCourses()
     if (!data) return <div>No se encontró tu perfil docente.</div>
 
-    const fmtDate = (d: string) =>
-        new Date(d + "T12:00:00").toLocaleDateString("es-CL", { day: "numeric", month: "short" })
-
     return (
         <main className="min-h-screen bg-slate-50">
             <div className="mx-auto max-w-3xl px-4 py-8 space-y-8">
                 {/* Header */}
-                <div className="flex items-start justify-between">
-                    <div>
-                        <h1 className="text-2xl font-semibold text-slate-900">Clima de aula</h1>
-                        <p className="text-sm text-slate-500 mt-1">
-                            Estadísticas de tus cursos
-                        </p>
-                    </div>
-                    {data.pulseSession && (
-                        <div className="flex items-center gap-1.5 rounded-full bg-indigo-100 px-3 py-1.5 text-xs font-semibold text-indigo-700">
-                            <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500" />
-                            </span>
-                            Modo Pulso · {fmtDate(data.pulseSession.week_start)} — {fmtDate(data.pulseSession.week_end)}
-                        </div>
-                    )}
+                <div>
+                    <h1 className="text-2xl font-semibold text-slate-900">Clima de aula</h1>
+                    <p className="text-sm text-slate-500 mt-1">
+                        Estadísticas de tus cursos
+                    </p>
                 </div>
 
                 {data.courses.length === 0 ? (
@@ -116,8 +85,6 @@ export default async function ClimaPage() {
                         courses={data.courses}
                         teacherLogs={data.teacherLogs}
                         historyLogs={data.historyLogs}
-                        pulseSession={data.pulseSession}
-                        pulseDoneCourses={data.pulseDoneCourses}
                     />
                 )}
             </div>

@@ -29,6 +29,7 @@ export function TemplateViewer({ type, title }: { type: ActivityTemplateType, ti
                 {type === "gafas" && <GafasSVG />}
                 {type === "termometro" && <TermometroSVG />}
                 {type === "mapa" && <MapaSVG />}
+                {type === "armadura" && <ArmaduraSVG />}
             </div>
         </div>
     )
@@ -177,6 +178,67 @@ function MapaSVG() {
                     <circle cx="0" cy="0" r="133" className="fill-transparent stroke-slate-300" strokeWidth="1" />
                     <text x="0" y="-95" textAnchor="middle" className="fill-slate-900 stroke-none font-semibold text-2xl" style={{ fontFamily: "inherit" }}>Mis Miedos</text>
                 </g>
+            </svg>
+        </div>
+    )
+}
+
+function ArmaduraSVG() {
+    return (
+        <div className="w-full flex items-center justify-center max-h-[85vh] print:max-h-[26cm]">
+            <svg viewBox="0 0 500 530" className="w-full max-w-xl h-auto" fill="white" stroke="black" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round">
+
+                {/* Neck opening - large dark oval */}
+                <ellipse cx="250" cy="118" rx="46" ry="30" fill="black" stroke="black" />
+
+                {/* Main chest plate */}
+                <path d="M172 132 Q205 112 250 110 Q295 112 328 132 L348 352 Q305 385 250 388 Q195 385 152 352 Z" />
+                {/* Center ridge line */}
+                <line x1="250" y1="110" x2="250" y2="388" strokeWidth="3" />
+                {/* Chest rivets */}
+                <circle cx="212" cy="208" r="7" fill="black" />
+                <circle cx="288" cy="208" r="7" fill="black" />
+                <circle cx="212" cy="318" r="7" fill="black" />
+                <circle cx="288" cy="318" r="7" fill="black" />
+
+                {/* ===== LEFT PAULDRON ===== */}
+                <ellipse cx="105" cy="196" rx="80" ry="88" />
+                <path d="M44 172 Q78 158 105 157" fill="none" strokeWidth="3" />
+                <path d="M40 204 Q76 190 105 190" fill="none" strokeWidth="3" />
+                <circle cx="115" cy="242" r="7" fill="black" />
+
+                {/* ===== RIGHT PAULDRON ===== */}
+                <ellipse cx="395" cy="196" rx="80" ry="88" />
+                <path d="M456 172 Q422 158 395 157" fill="none" strokeWidth="3" />
+                <path d="M460 204 Q424 190 395 190" fill="none" strokeWidth="3" />
+                <circle cx="385" cy="242" r="7" fill="black" />
+
+                {/* ===== LEFT ARM GUARDS ===== */}
+                <rect x="35" y="282" width="125" height="32" rx="9" />
+                <rect x="42" y="320" width="115" height="30" rx="8" />
+                <rect x="48" y="355" width="105" height="28" rx="7" />
+
+                {/* ===== RIGHT ARM GUARDS ===== */}
+                <rect x="340" y="282" width="125" height="32" rx="9" />
+                <rect x="343" y="320" width="115" height="30" rx="8" />
+                <rect x="347" y="355" width="105" height="28" rx="7" />
+
+                {/* ===== TASSETS / WAIST ===== */}
+                {/* Left tasset */}
+                <path d="M155 382 L155 440 Q180 448 205 440 L208 382 Z" />
+                <rect x="160" y="390" width="18" height="14" rx="2" />
+                <rect x="182" y="390" width="16" height="14" rx="2" />
+                <circle cx="188" cy="426" r="6" fill="black" />
+                {/* Center tasset */}
+                <path d="M214 382 L214 445 Q250 452 286 445 L286 382 Z" />
+                <circle cx="250" cy="398" r="7" fill="black" />
+                <circle cx="250" cy="432" r="7" fill="black" />
+                {/* Right tasset */}
+                <path d="M292 382 L292 440 Q320 448 345 440 L345 382 Z" />
+                <rect x="322" y="390" width="16" height="14" rx="2" />
+                <rect x="302" y="390" width="18" height="14" rx="2" />
+                <circle cx="312" cy="426" r="6" fill="black" />
+
             </svg>
         </div>
     )

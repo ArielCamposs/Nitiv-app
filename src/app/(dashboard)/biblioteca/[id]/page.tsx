@@ -1,8 +1,9 @@
-import { notFound } from "next/navigation"
+import { notFound, redirect } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Clock, Info } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { TemplateViewer } from "@/components/biblioteca/template-viewer"
+import { TemplatePreview } from "@/components/biblioteca/template-preview"
 import { PrintButton } from "@/components/biblioteca/print-button"
 import { FinishActivityModal } from "@/components/biblioteca/finish-activity-modal"
 import { ActivityResultsTab } from "@/components/biblioteca/activity-results-tab"
@@ -26,6 +27,8 @@ export default async function ActivityPage({ params }: { params: Promise<{ id: s
 
     const institutionId = dbUser?.institution_id
     const userRole = dbUser?.role
+
+    if (userRole === "admin") redirect("/")
 
     if (!institutionId) return notFound()
 
@@ -107,9 +110,6 @@ export default async function ActivityPage({ params }: { params: Promise<{ id: s
                                 activityTitle={activity.title}
                                 courses={courses}
                             />
-                        )}
-                        {userRole === "admin" && (
-                            <BibliotecaAdminActions activityId={activity.id} />
                         )}
                         {/* We use the extracted client component to trigger window.print() */}
                         {activity.template !== "none" && (
@@ -196,19 +196,8 @@ export default async function ActivityPage({ params }: { params: Promise<{ id: s
                             {/* Right section info */}
                             <div className="space-y-6">
                                 <div className="bg-white rounded-xl p-5 border shadow-sm">
-                                    <h3 className="font-semibold text-slate-800 mb-2">Acerca de la Plantilla</h3>
-                                    {activity.template === "none" ? (
-                                        <p className="text-sm text-slate-500">Esta actividad no requiere material impreso para los estudiantes.</p>
-                                    ) : (
-                                        <div className="space-y-4">
-                                            <p className="text-sm text-slate-500">Esta actividad requiere una plantilla impresa por cada estudiante. Haz clic en el botón superior para imprimir el diseño adaptado.</p>
-
-                                            {/* Mini preview thumbnail purely CSS based on template type to look nice */}
-                                            <div className="aspect-[1/1.4] w-full bg-slate-100 border-2 border-slate-200 border-dashed rounded flex flex-col items-center justify-center text-slate-400 p-4 text-center">
-                                                Vista previa de {activity.template}
-                                            </div>
-                                        </div>
-                                    )}
+                                    <h3 className="font-semibold text-slate-800 mb-3">Acerca de la Plantilla</h3>
+                                    <TemplatePreview type={activity.template} />
                                 </div>
                             </div>
                         </div>

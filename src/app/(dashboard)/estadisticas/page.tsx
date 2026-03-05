@@ -3,7 +3,7 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { StatisticsDashboard } from "@/components/statistics/StatisticsDashboard"
 
-const ALLOWED_ROLES = ["director", "dupla", "utp"]  // sin admin ni estudiantes
+const ALLOWED_ROLES = ["admin", "director", "dupla", "utp"]
 
 export default async function EstadisticasPage() {
     const cookieStore = await cookies()

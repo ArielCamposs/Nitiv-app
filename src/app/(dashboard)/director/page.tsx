@@ -2,7 +2,6 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { DirectorDashboardClient } from "@/components/director/director-dashboard-client"
-import { PulseActivatePanel } from "@/components/pulse/pulse-activate-panel"
 import Link from "next/link"
 
 const EMOTION_SCORE: Record<string, number> = {
@@ -62,14 +61,6 @@ async function getDirectorData() {
         supabase.from("emotional_logs").select("student_id, emotion, created_at").eq("institution_id", iid).gte("created_at", new Date(new Date().setMonth(new Date().getMonth() - 6)).toISOString()).order("created_at", { ascending: true }),
         supabase.from("teacher_logs").select("course_id, energy_level, log_date").eq("institution_id", iid).gte("log_date", new Date(new Date().setDate(new Date().getDate() - 28)).toISOString().split("T")[0]),
     ])
-
-    // ── Pulso activo ──
-    const { data: pulseSession } = await supabase
-        .from("pulse_sessions")
-        .select("id, week_start, week_end")
-        .eq("institution_id", iid)
-        .eq("active", true)
-        .maybeSingle()
 
     // ── Estadísticas generales ──
     const totalStudents = students?.length ?? 0
@@ -175,7 +166,6 @@ async function getDirectorData() {
         alertsEnriched,
         incidentsEnriched,
         bienestarPromedio,
-        pulseSession: pulseSession ?? null,
     }
 }
 
@@ -199,13 +189,6 @@ export default async function DirectorDashboardPage() {
                         </Link>
                     </div>
                 </div>
-
-                {/* Modo Pulso */}
-                <PulseActivatePanel
-                    institutionId={data.profile.institution_id}
-                    userId={data.profile.id}
-                    activeSession={data.pulseSession}
-                />
 
                 <DirectorDashboardClient {...data} />
             </div>

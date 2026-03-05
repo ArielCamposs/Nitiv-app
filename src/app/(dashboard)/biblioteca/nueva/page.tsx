@@ -20,8 +20,8 @@ async function checkAuth() {
     const role = dbUser?.role
     const institutionId = dbUser?.institution_id
 
-    if (!institutionId || role !== "admin") {
-        redirect("/biblioteca") // Unauthorized, redirect back to index
+    if (!institutionId || role === "admin") {
+        redirect("/") // Admin is not allowed to create biblioteca activities
     }
 
     return institutionId

@@ -1,175 +1,160 @@
+import { createClient } from "@/lib/supabase/server"
+import { redirect } from "next/navigation"
 import { getActiveAlerts } from "@/lib/utils/get-alerts"
-import { AlertsList } from "@/components/alerts/alerts-list"
-import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
-import Link from "next/link"
-import { ShieldAlert, Users, Activity, FileText, ChevronRight } from "lucide-react"
+import { ConvivenciaDashboardClient, ConvivenciaStats } from "@/components/convivencia/ConvivenciaDashboardClient"
 
 export default async function ConvivenciaPage() {
-    const alerts = await getActiveAlerts()
-
-    // Convivencia ve: dec_repetido + registros_negativos
-    const convivenciaTypes = ["dec_repetido", "registros_negativos"]
-    const activeAlertsCount = alerts.filter((a: any) => convivenciaTypes.includes(a.type)).length
-
-    // Load institution stats
-    const cookieStore = await cookies()
-    const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-            cookies: {
-                getAll() { return cookieStore.getAll() },
-                setAll() { /* readonly in server components */ },
-            },
-        }
-    )
-
+    const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return redirect("/login")
+
     const { data: profile } = await supabase
         .from("users")
-        .select("institution_id")
-        .eq("id", user!.id)
-        .maybeSingle()
+        .select("id, name, last_name, institution_id")
+        .eq("id", user.id)
+        .single()
 
-    let openDecsCount = 0
-    let activePaecsCount = 0
+    if (!profile?.institution_id) return redirect("/login")
+    const iid = profile.institution_id
 
-    if (profile?.institution_id) {
-        const iid = profile.institution_id
-        const [{ count: incidentCount }, { count: paecCount }] = await Promise.all([
-            // Casos DEC no resueltos
-            supabase.from("incidents").select("id", { count: "exact", head: true })
-                .eq("institution_id", iid)
-                .eq("resolved", false),
-            // PAECs activos
-            supabase.from("paec").select("id", { count: "exact", head: true })
-                .eq("institution_id", iid)
-                .eq("active", true),
-        ])
-        openDecsCount = incidentCount ?? 0
-        activePaecsCount = paecCount ?? 0
+    const now = new Date()
+    const monthsAgo6 = new Date(now)
+    monthsAgo6.setMonth(now.getMonth() - 5)
+    monthsAgo6.setDate(1)
+    monthsAgo6.setHours(0, 0, 0, 0)
+
+    // Parallel fetch
+    const [
+        { data: students },
+        alerts,
+        { data: incidents },
+        { data: paecs },
+    ] = await Promise.all([
+        supabase.from("students").select("id, name, last_name").eq("institution_id", iid).eq("active", true),
+        getActiveAlerts(),
+        supabase.from("incidents").select("id, folio, student_id, type, severity, incident_date, resolved, end_date").eq("institution_id", iid).gte("incident_date", monthsAgo6.toISOString().split("T")[0]),
+        supabase.from("paec").select("id").eq("institution_id", iid).eq("active", true),
+    ])
+
+    const convivenciaTypes = ["dec_repetido", "registros_negativos"]
+    const filteredAlerts = alerts.filter((a: any) => convivenciaTypes.includes(a.type))
+
+    const activePAECs = paecs?.length ?? 0
+    const totalStudents = students?.length ?? 0
+    const activeAlerts = filteredAlerts.length
+
+    const allIncidents = incidents ?? []
+    const openDecs = allIncidents.filter(i => !i.resolved)
+
+    // ── DECs por tipo (solo no resueltos o todos? Asumamos todos los de los ultimes 6 meses para estadistica o los abiertos? Mejor SOLO ABIERTOS para la torta/barras)
+    const typeCount: Record<string, number> = {}
+    const severityCount: Record<string, number> = {}
+
+    for (const d of openDecs) {
+        typeCount[d.type] = (typeCount[d.type] ?? 0) + 1
+        severityCount[d.severity] = (severityCount[d.severity] ?? 0) + 1
+    }
+
+    const LABEL_TYPE: Record<string, string> = {
+        pelea: "Pelea/Agresión Física",
+        bullying: "Acoso escolar (Bullying)",
+        ciberacoso: "Ciberacoso (Cyberbullying)",
+        drogas: "Posesión/uso de drogas",
+        alcohol: "Posesión/uso de alcohol",
+        armas: "Porte de armas",
+        robo: "Robo o hurto",
+        insultos: "Agresión verbal a pares",
+        falta_respeto: "Falta de respeto a docentes",
+        danio_propiedad: "Daño a propiedad del colegio",
+        acoso_sexual: "Acoso sexual",
+        fuga: "Fuga del establecimiento",
+        incumplimiento: "Incumplimiento reiterado de normas",
+        redes_sociales: "Mal uso de redes sociales institucional",
+        otro: "Otro",
+    }
+    const COLORS_TYPE: string[] = ["#ef4444", "#f97316", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4"]
+
+    const decsByType = Object.entries(typeCount)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([type, count], i) => ({
+            name: LABEL_TYPE[type] ?? type,
+            count,
+            color: COLORS_TYPE[i % COLORS_TYPE.length],
+        }))
+
+    const SEVERITY_COLOR: Record<string, string> = { leve: "#3b82f6", grave: "#f97316", muy_grave: "#ef4444" }
+    const SEVERITY_LABEL: Record<string, string> = { leve: "Leve", grave: "Grave", muy_grave: "Muy grave" }
+
+    const decsBySeverity = Object.entries(severityCount).map(([sev, count]) => ({
+        name: SEVERITY_LABEL[sev] ?? sev,
+        count,
+        color: SEVERITY_COLOR[sev] ?? "#94a3b8"
+    }))
+
+    // ── Tendencia 6 meses ──
+    const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+    const monthlyTrendMap: Record<string, { decs: number; cierres: number; label: string }> = {}
+
+    for (let i = 5; i >= 0; i--) {
+        const d = new Date(now)
+        d.setMonth(now.getMonth() - i)
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+        monthlyTrendMap[key] = { decs: 0, cierres: 0, label: monthNames[d.getMonth()] }
+    }
+
+    for (const d of allIncidents) {
+        const dDate = new Date(d.incident_date)
+        const dKey = `${dDate.getFullYear()}-${String(dDate.getMonth() + 1).padStart(2, '0')}`
+        if (monthlyTrendMap[dKey]) monthlyTrendMap[dKey].decs++
+
+        if (d.resolved && d.end_date) {
+            const eDate = new Date(d.end_date)
+            const eKey = `${eDate.getFullYear()}-${String(eDate.getMonth() + 1).padStart(2, '0')}`
+            if (monthlyTrendMap[eKey]) monthlyTrendMap[eKey].cierres++
+        }
+    }
+    const monthlyTrend = Object.values(monthlyTrendMap).map(v => ({ mes: v.label, decs: v.decs, cierres: v.cierres }))
+
+    // ── DECs recientes ──
+    const studentsMap = Object.fromEntries((students ?? []).map(s => [s.id, s]))
+    const recentDecs = openDecs
+        .sort((a, b) => new Date(b.incident_date).getTime() - new Date(a.incident_date).getTime())
+        .slice(0, 5)
+        .map(d => {
+            const st = studentsMap[d.student_id]
+            return {
+                id: d.id,
+                folio: d.folio,
+                studentName: st ? `${st.name} ${st.last_name}` : "Estudiante",
+                severity: d.severity,
+                type: LABEL_TYPE[d.type] ?? d.type,
+                incident_date: d.incident_date,
+            }
+        })
+
+    const stats: ConvivenciaStats = {
+        openDecs: openDecs.length,
+        activeAlerts,
+        activePaecs: activePAECs,
+        totalStudents,
+        decsByType,
+        decsBySeverity,
+        monthlyTrend,
+        recentDecs,
     }
 
     return (
         <main className="min-h-screen bg-slate-50">
-            <div className="mx-auto max-w-5xl px-4 py-8 space-y-8">
-                {/* Cabecera */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-2xl font-semibold text-slate-900">
-                            Dashboard Convivencia Escolar
-                        </h1>
-                        <p className="text-slate-500 text-sm mt-1">
-                            Resumen general y accesos rápidos
-                        </p>
-                    </div>
+            <div className="mx-auto max-w-5xl px-4 py-8 space-y-6">
+                <div>
+                    <h1 className="text-2xl font-semibold text-slate-900">Dashboard Convivencia Escolar</h1>
+                    <p className="text-slate-500 text-sm mt-1">
+                        Bienvenido/a, <span className="font-medium text-slate-700">{profile.name} {profile.last_name}</span>
+                    </p>
                 </div>
 
-                {/* Estadísticas Clave */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="rounded-2xl border bg-white p-6 shadow-sm flex items-center gap-4">
-                        <div className="bg-rose-100 p-3 rounded-xl text-rose-600">
-                            <ShieldAlert className="w-6 h-6" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-medium text-slate-500">Casos DEC Abiertos</p>
-                            <p className="text-2xl font-bold text-slate-800">{openDecsCount}</p>
-                        </div>
-                    </div>
-                    <div className="rounded-2xl border bg-white p-6 shadow-sm flex items-center gap-4">
-                        <div className="bg-amber-100 p-3 rounded-xl text-amber-600">
-                            <Activity className="w-6 h-6" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-medium text-slate-500">Alertas Activas</p>
-                            <p className="text-2xl font-bold text-slate-800">{activeAlertsCount}</p>
-                        </div>
-                    </div>
-                    <div className="rounded-2xl border bg-white p-6 shadow-sm flex items-center gap-4">
-                        <div className="bg-indigo-100 p-3 rounded-xl text-indigo-600">
-                            <FileText className="w-6 h-6" />
-                        </div>
-                        <div>
-                            <p className="text-sm font-medium text-slate-500">PAECs en Curso</p>
-                            <p className="text-2xl font-bold text-slate-800">{activePaecsCount}</p>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Acciones Rápidas */}
-                <section>
-                    <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4">
-                        Acciones Rápidas
-                    </h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <Link href="/convivencia/dec/nuevo" className="group rounded-2xl border bg-white p-5 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all flex flex-col justify-between">
-                            <div className="bg-indigo-50 w-fit p-3 rounded-lg text-indigo-600 mb-4 group-hover:scale-110 transition-transform">
-                                <ShieldAlert className="w-5 h-5" />
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="font-semibold text-slate-700 group-hover:text-indigo-600 transition-colors">Nuevo DEC</span>
-                                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
-                            </div>
-                        </Link>
-
-                        <Link href="/convivencia/estudiantes" className="group rounded-2xl border bg-white p-5 shadow-sm hover:border-cyan-300 hover:shadow-md transition-all flex flex-col justify-between">
-                            <div className="bg-cyan-50 w-fit p-3 rounded-lg text-cyan-600 mb-4 group-hover:scale-110 transition-transform">
-                                <Users className="w-5 h-5" />
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="font-semibold text-slate-700 group-hover:text-cyan-600 transition-colors">Estudiantes</span>
-                                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-cyan-600 transition-colors" />
-                            </div>
-                        </Link>
-
-                        <Link href="/convivencia/heatmap" className="group rounded-2xl border bg-white p-5 shadow-sm hover:border-emerald-300 hover:shadow-md transition-all flex flex-col justify-between">
-                            <div className="bg-emerald-50 w-fit p-3 rounded-lg text-emerald-600 mb-4 group-hover:scale-110 transition-transform">
-                                <Activity className="w-5 h-5" />
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="font-semibold text-slate-700 group-hover:text-emerald-600 transition-colors">Clima Emocional</span>
-                                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 transition-colors" />
-                            </div>
-                        </Link>
-
-                        <Link href="/paec" className="group rounded-2xl border bg-white p-5 shadow-sm hover:border-violet-300 hover:shadow-md transition-all flex flex-col justify-between">
-                            <div className="bg-violet-50 w-fit p-3 rounded-lg text-violet-600 mb-4 group-hover:scale-110 transition-transform">
-                                <FileText className="w-5 h-5" />
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="font-semibold text-slate-700 group-hover:text-violet-600 transition-colors">Gestión PAEC</span>
-                                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-violet-600 transition-colors" />
-                            </div>
-                        </Link>
-                    </div>
-                </section>
-
-                {/* Panel de Alertas Activas */}
-                <section className="bg-white rounded-2xl border shadow-sm p-6 space-y-6">
-                    <div>
-                        <h2 className="text-lg font-semibold text-slate-800">
-                            Alertas que requieren atención
-                        </h2>
-                        <p className="text-slate-500 text-sm mt-1">
-                            Discrepancias, derivaciones o anomalías detectadas en estudiantes.
-                        </p>
-                    </div>
-                    {activeAlertsCount === 0 ? (
-                        <div className="text-center py-8">
-                            <div className="bg-emerald-50 text-emerald-600 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
-                                <ShieldAlert className="w-6 h-6" />
-                            </div>
-                            <p className="text-slate-600 font-medium">No tienes alertas pendientes</p>
-                            <p className="text-slate-400 text-sm">Todo está en orden por ahora.</p>
-                        </div>
-                    ) : (
-                        <AlertsList
-                            initialAlerts={alerts as any}
-                            filterTypes={convivenciaTypes}
-                        />
-                    )}
-                </section>
+                <ConvivenciaDashboardClient stats={stats} />
             </div>
         </main>
     )

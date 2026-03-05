@@ -120,7 +120,49 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* ── Custom utilities ──────────────────────────────────────────────────────── */
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.22s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+@keyframes modal-in {
+  from {
+    transform: scale(0.95) translateY(8px);
+    opacity: 0;
+  }
+
+  to {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-modal-in {
+  animation: modal-in 0.2s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }

@@ -1,7 +1,8 @@
 import Link from "next/link"
-import { ArrowRight, Clock, Target, Plus } from "lucide-react"
+import { ArrowRight, Clock, Target } from "lucide-react"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { createClient } from "@/lib/supabase/server"
+import { redirect } from "next/navigation"
 
 export default async function BibliotecaPage() {
     const supabase = await createClient()
@@ -18,6 +19,9 @@ export default async function BibliotecaPage() {
             .single()
 
         userRole = dbUser?.role || null
+
+        // Admin cannot access Biblioteca
+        if (userRole === "admin") redirect("/")
 
         if (dbUser?.institution_id) {
             const { data } = await supabase
@@ -41,15 +45,6 @@ export default async function BibliotecaPage() {
                         </p>
                     </div>
 
-                    {userRole === "admin" && (
-                        <Link
-                            href="/biblioteca/nueva"
-                            className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background bg-primary text-primary-foreground hover:bg-primary/90 h-10 py-2 px-4 gap-2"
-                        >
-                            <Plus className="w-4 h-4" />
-                            Agregar Actividad
-                        </Link>
-                    )}
                 </div>
 
                 <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -59,12 +54,12 @@ export default async function BibliotecaPage() {
                             <div className={`h-2 w-full bg-indigo-500`} />
 
                             <CardHeader className="pb-4">
-                                <div className="text-xs font-semibold text-indigo-600 mb-2 uppercase tracking-wider">
-                                    {activity.eje}
-                                </div>
-                                <CardTitle className="text-xl leading-tight text-slate-900">
+                                <CardTitle className="text-xl leading-tight text-slate-900 mb-2">
                                     {activity.title}
                                 </CardTitle>
+                                <div className="text-xs font-semibold text-indigo-600 uppercase tracking-wider">
+                                    {activity.eje}
+                                </div>
                             </CardHeader>
 
                             <CardContent className="flex-1 space-y-4">

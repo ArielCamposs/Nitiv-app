@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { ClimateRegisterCard } from "@/components/teacher/climate-register-card"
-import { PulseTeacherRegister } from "@/components/pulse/pulse-teacher-register"
 import { ClimateHistoryChart } from "@/components/teacher/climate-history-chart"
 
 const ENERGY_SCORE: Record<string, number> = {
@@ -24,13 +23,10 @@ interface Props {
     courses: any[]
     teacherLogs: any[]
     historyLogs: any[]
-    pulseSession: PulseSession
-    pulseDoneCourses: string[]
 }
 
 export function ClimaPageTabs({
-    teacherId, institutionId, courses, teacherLogs,
-    historyLogs, pulseSession, pulseDoneCourses
+    teacherId, institutionId, courses, teacherLogs, historyLogs
 }: Props) {
     const [tab, setTab] = useState<"resumen" | "historial">("resumen")
     const [selectedCourseId, setSelectedCourseId] = useState<string>(
@@ -98,7 +94,6 @@ export function ClimaPageTabs({
                     : null
 
                 const cfg = dominantLevel ? ENERGY_LABEL[dominantLevel] : null
-                const pulseDoneThisCourse = pulseDoneCourses.includes(c.course_id)
 
                 return (
                     <div key={c.course_id} className="space-y-4">
@@ -141,24 +136,6 @@ export function ClimaPageTabs({
                                     courseId={c.course_id}
                                     institutionId={institutionId}
                                 />
-                                {pulseSession && (
-                                    <>
-                                        <div className="border-t border-dashed border-indigo-200" />
-                                        {pulseDoneThisCourse ? (
-                                            <p className="text-xs text-indigo-500 font-medium">
-                                                ✓ Pulso registrado para este curso esta semana.
-                                            </p>
-                                        ) : (
-                                            <PulseTeacherRegister
-                                                teacherId={teacherId}
-                                                courseId={c.course_id}
-                                                institutionId={institutionId}
-                                                pulseSessionId={pulseSession.id}
-                                                courseName={c.courses?.name ?? ""}
-                                            />
-                                        )}
-                                    </>
-                                )}
                             </div>
                         </details>
                     </div>

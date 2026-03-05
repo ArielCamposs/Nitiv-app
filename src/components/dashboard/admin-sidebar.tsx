@@ -11,8 +11,8 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
     LayoutDashboard, UserCog, GraduationCap, School,
-    ClipboardList, Activity, BarChart3,
-    FileText, Calendar, BookOpen, Library, MessageSquare,
+    ClipboardList, BarChart3,
+    FileText, Calendar, BookOpen, MessageSquare,
     Building2, LogOut,
 } from "lucide-react"
 
@@ -48,7 +48,6 @@ const ADMIN_GROUPS: NavGroup[] = [
     {
         label: "Bienestar y Clima",
         items: [
-            { title: "Clima Emocional", href: "/admin/heatmap", icon: Activity },
             { title: "Estadísticas", href: "/estadisticas", icon: BarChart3 },
             { title: "Reportes", href: "/reportes", icon: FileText },
         ],
@@ -58,7 +57,6 @@ const ADMIN_GROUPS: NavGroup[] = [
         items: [
             { title: "Actividades", href: "/actividades", icon: Calendar },
             { title: "Recursos", href: "/recursos", icon: BookOpen },
-            { title: "Biblioteca Nitiv", href: "/biblioteca", icon: Library },
         ],
     },
     {
@@ -93,10 +91,10 @@ export function AdminSidebarContent({ userId, showBell = true }: { userId: strin
     return (
         <div className="flex h-full flex-col">
             {/* Logo + campana */}
-            <div className="mb-6 flex items-center justify-between px-2">
-                <div className="flex flex-col">
-                    <span className="text-xl font-bold text-primary">Nitiv</span>
-                    <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 -mt-0.5">
+            <div className="mb-2 flex items-center justify-between px-1">
+                <div className="flex flex-col max-w-[75%] -ml-2">
+                    <img src="/logo.svg" alt="Nitiv Logo" className="h-24 w-auto object-contain" />
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 -mt-2 ml-2">
                         Admin
                     </span>
                 </div>

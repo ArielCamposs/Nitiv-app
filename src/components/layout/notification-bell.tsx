@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
+import { createPortal } from "react-dom"
 import { usePathname } from "next/navigation"
 import { Bell, CheckCheck, X } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
@@ -41,8 +42,12 @@ export function NotificationBell({ userId }: { userId: string }) {
     const [institutionId, setInstitutionId] = useState<string | null>(null)
     const [userRole, setUserRole] = useState<string | null>(null)
     const panelRef = useRef<HTMLDivElement>(null)
+    const [mounted, setMounted] = useState(false)
 
     const pathname = usePathname()
+
+    // SSR-safe: only render the portal on the client
+    useEffect(() => { setMounted(true) }, [])
 
     const unreadCount = notifications.filter(n => !n.read).length
 
@@ -199,9 +204,9 @@ export function NotificationBell({ userId }: { userId: string }) {
                 )}
             </button>
 
-            {/* Panel desplegable */}
-            {open && (
-                <div className="fixed top-16 right-4 md:top-4 md:left-64 md:right-auto w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 z-[200] overflow-hidden">
+            {/* Panel desplegable — renderizado via portal en body para escapar cualquier stacking context del sidebar */}
+            {open && mounted && createPortal(
+                <div className="fixed top-16 right-4 md:top-4 md:left-64 md:right-auto w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 z-9999 overflow-hidden" ref={panelRef}>
                     {/* Header */}
                     <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
                         <div className="flex items-center gap-2">
@@ -306,7 +311,8 @@ export function NotificationBell({ userId }: { userId: string }) {
                             </ul>
                         )}
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             {shareNotif && institutionId && (

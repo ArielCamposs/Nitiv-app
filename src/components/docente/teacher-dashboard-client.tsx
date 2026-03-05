@@ -87,31 +87,38 @@ export function TeacherDashboardClient({
                 </div>
             )}
 
-            {/* Tarjetas resumen */}
-            <div className="grid grid-cols-3 gap-3">
-                <Card className="border-0 shadow-sm">
-                    <CardContent className="pt-4 pb-3">
-                        <p className="text-xs text-slate-500">Tendencia</p>
-                        <div className="flex items-center gap-1.5 mt-1">
-                            <TrendIcon className="w-4 h-4" style={{ color: trendColor }} />
-                            <span className="font-semibold text-sm text-slate-800">{trendLabel}</span>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card className="border-0 shadow-sm">
-                    <CardContent className="pt-4 pb-3">
-                        <p className="text-xs text-slate-500">Estudiantes</p>
-                        <p className="font-semibold text-sm text-slate-800 mt-1">{filteredStudents.length}</p>
-                    </CardContent>
-                </Card>
-                <Card className="border-0 shadow-sm">
-                    <CardContent className="pt-4 pb-3">
-                        <p className="text-xs text-slate-500">Alertas activas</p>
-                        <p className={`font-semibold text-sm mt-1 ${alertsEnriched.length > 0 ? "text-red-600" : "text-slate-800"}`}>
-                            {alertsEnriched.length}
-                        </p>
-                    </CardContent>
-                </Card>
+            {/* KPI cards — circle style */}
+            <div className="grid grid-cols-3 gap-4">
+                <div className="flex flex-col items-center text-center gap-3 rounded-2xl bg-white border border-slate-100 shadow-sm p-6">
+                    <div className="relative flex h-24 w-24 items-center justify-center rounded-full bg-indigo-500 shadow-md">
+                        <Users className="absolute top-2.5 right-2.5 h-4 w-4 text-white/50" />
+                        <span className="text-4xl font-extrabold text-white tabular-nums leading-none">{filteredStudents.length}</span>
+                    </div>
+                    <div>
+                        <p className="text-sm font-semibold text-slate-700">Estudiantes</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">En tu curso</p>
+                    </div>
+                </div>
+                <div className="flex flex-col items-center text-center gap-3 rounded-2xl bg-white border border-slate-100 shadow-sm p-6">
+                    <div className={`relative flex h-24 w-24 items-center justify-center rounded-full shadow-md ${tendencia === "mejorando" ? "bg-emerald-500" : tendencia === "empeorando" ? "bg-rose-500" : "bg-amber-500"}`}>
+                        <TrendIcon className="absolute top-2.5 right-2.5 h-4 w-4 text-white/50" />
+                        <span className="text-xs font-bold text-white text-center leading-tight px-2">{trendLabel}</span>
+                    </div>
+                    <div>
+                        <p className="text-sm font-semibold text-slate-700">Tendencia</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">Clima del aula</p>
+                    </div>
+                </div>
+                <div className="flex flex-col items-center text-center gap-3 rounded-2xl bg-white border border-slate-100 shadow-sm p-6">
+                    <div className={`relative flex h-24 w-24 items-center justify-center rounded-full shadow-md ${alertsEnriched.length > 0 ? "bg-rose-500" : "bg-slate-400"}`}>
+                        <AlertTriangle className="absolute top-2.5 right-2.5 h-4 w-4 text-white/50" />
+                        <span className="text-4xl font-extrabold text-white tabular-nums leading-none">{alertsEnriched.length}</span>
+                    </div>
+                    <div>
+                        <p className="text-sm font-semibold text-slate-700">Alertas</p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">{alertsEnriched.length > 0 ? "Requieren atención" : "Sin alertas"}</p>
+                    </div>
+                </div>
             </div>
 
             {/* Heatmap — rediseñado */}

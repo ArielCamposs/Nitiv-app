@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { Plus, Pencil, BookOpen, Users, ChevronDown, X } from "lucide-react"
@@ -40,12 +40,23 @@ export function CoursesClient({ courses: initial, teachers, assignments: initial
     const [form, setForm] = useState(EMPTY_FORM)
     const [loading, setLoading] = useState(false)
     const [expandedId, setExpandedId] = useState<string | null>(null)
+    const [yearFilter, setYearFilter] = useState<number>(CURRENT_YEAR)
 
+    // All unique years present in data
+    const allYears = useMemo(() =>
+        [...new Set(courses.map(c => c.year))].sort((a, b) => b - a)
+        , [courses])
+
+    // Courses filtered by selected year
+    const filteredCourses = useMemo(() =>
+        courses.filter(c => c.year === yearFilter)
+        , [courses, yearFilter])
     // Confirmaciones
     const [confirmToggle, setConfirmToggle] = useState<Course | null>(null)
     const [showEditConfirm, setShowEditConfirm] = useState(false)
 
     const isEdit = !!form.id
+
 
     const getTeachersForCourse = (courseId: string) =>
         assignments
@@ -234,7 +245,7 @@ export function CoursesClient({ courses: initial, teachers, assignments: initial
         }
     }
 
-    const activeCount = courses.filter(c => c.active).length
+    const activeCount = filteredCourses.filter(c => c.active).length
 
     return (
         <>
@@ -243,22 +254,43 @@ export function CoursesClient({ courses: initial, teachers, assignments: initial
                 <div className="flex items-center justify-between">
                     <div>
                         <h1 className="text-2xl font-bold text-slate-900">Cursos</h1>
-                        <p className="text-sm text-slate-500 mt-0.5">{activeCount} activos · {CURRENT_YEAR}</p>
+                        <p className="text-sm text-slate-500 mt-0.5">{activeCount} activos · {yearFilter}</p>
                     </div>
-                    <Button onClick={openCreate} className="gap-1.5 bg-indigo-600 hover:bg-indigo-700">
-                        <Plus className="w-4 h-4" /> Nuevo curso
-                    </Button>
+                    <div className="flex items-center gap-2">
+                        {/* Year selector */}
+                        {allYears.length > 1 && (
+                            <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
+                                {allYears.map(y => (
+                                    <button
+                                        key={y}
+                                        onClick={() => setYearFilter(y)}
+                                        className={cn(
+                                            "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                                            yearFilter === y
+                                                ? "bg-white shadow-sm text-indigo-600"
+                                                : "text-slate-500 hover:text-slate-700"
+                                        )}
+                                    >
+                                        {y}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                        <Button onClick={openCreate} className="gap-1.5 bg-indigo-600 hover:bg-indigo-700">
+                            <Plus className="w-4 h-4" /> Nuevo curso
+                        </Button>
+                    </div>
                 </div>
 
                 {/* Lista */}
                 <div className="space-y-3">
-                    {courses.length === 0 ? (
+                    {filteredCourses.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-slate-200 bg-white py-16 text-center">
                             <BookOpen className="w-8 h-8 mx-auto mb-2 text-slate-300" />
-                            <p className="text-sm text-slate-500">No hay cursos creados aún</p>
+                            <p className="text-sm text-slate-500">No hay cursos para {yearFilter}</p>
                         </div>
                     ) : (
-                        courses.map(c => {
+                        filteredCourses.map(c => {
                             const isExpanded = expandedId === c.id
                             const assignedTeachers = getTeachersForCourse(c.id)
                             const studentCount = studentCountMap[c.id] ?? 0

@@ -23,7 +23,9 @@ export default async function AdminEstudiantesPage() {
         .from("users").select("role, institution_id").eq("id", user.id).single()
     if (profile?.role !== "admin") redirect("/")
 
-    const [{ data: students }, { data: courses }] = await Promise.all([
+    const currentYear = new Date().getFullYear()
+
+    const [{ data: students }, { data: courses }, { data: yearRows }] = await Promise.all([
         supabase
             .from("students")
             .select("id, name, last_name, rut, birthdate, guardian_name, guardian_phone, guardian_email, course_id, active, created_at")
@@ -31,11 +33,18 @@ export default async function AdminEstudiantesPage() {
             .order("last_name"),
         supabase
             .from("courses")
-            .select("id, name, level, section")
+            .select("id, name, level, section, year")
             .eq("institution_id", profile.institution_id)
             .eq("active", true)
             .order("name"),
+        supabase
+            .from("courses")
+            .select("year")
+            .eq("institution_id", profile.institution_id)
+            .order("year", { ascending: false }),
     ])
+
+    const availableYears = [...new Set((yearRows ?? []).map(c => c.year))].filter(Boolean) as number[]
 
     return (
         <div className="px-6 py-8 max-w-5xl mx-auto">
@@ -43,6 +52,8 @@ export default async function AdminEstudiantesPage() {
                 students={students ?? []}
                 courses={courses ?? []}
                 institutionId={profile.institution_id}
+                currentYear={currentYear}
+                availableYears={availableYears}
             />
         </div>
     )

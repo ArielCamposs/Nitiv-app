@@ -33,9 +33,10 @@ export function LoginForm() {
     return (
         <main className="flex min-h-screen items-center justify-center bg-slate-50">
             <Card className="w-full max-w-sm">
-                <CardHeader>
-                    <CardTitle className="text-lg font-semibold">
-                        Inicia sesión en Nitiv
+                <CardHeader className="flex flex-col items-center gap-2 pb-2">
+                    <img src="/logo.svg" alt="Nitiv Logo" className="h-70 w-auto object-contain -mb-8" />
+                    <CardTitle className="text-lg font-semibold text-center">
+                        Inicia sesión
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
