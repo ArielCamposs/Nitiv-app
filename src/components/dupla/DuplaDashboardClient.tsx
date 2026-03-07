@@ -18,7 +18,7 @@ export interface DuplaStats {
     helpRequests: number
     checkinsThisWeek: number
     emotionDistribution: { name: string; value: number; color: string }[]
-    weeklyTrend: { day: string; positivo: number; neutro: number; negativo: number }[]
+    weeklyTrend: { day: string; muy_bien: number; bien: number; neutral: number; mal: number; muy_mal: number }[]
     climatePorCurso: { curso: string; score: number; label: string }[]
     alertsByType: { name: string; count: number; color: string }[]
     bienestarPromedio: number | null
@@ -199,11 +199,30 @@ export function DuplaDashboardClient({ stats }: { stats: DuplaStats }) {
                             <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#94a3b8" }} />
                             <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} />
                             <Tooltip content={<ChartTooltip />} />
-                            <Line type="monotone" dataKey="positivo" stroke="#10b981" strokeWidth={2} dot={false} name="Positivo" />
-                            <Line type="monotone" dataKey="neutro" stroke="#94a3b8" strokeWidth={2} dot={false} name="Neutro" />
-                            <Line type="monotone" dataKey="negativo" stroke="#ef4444" strokeWidth={2} dot={false} name="Negativo" />
+                            <Line type="monotone" dataKey="muy_bien" stroke="#10b981" strokeWidth={2} dot={false} name="Muy Bien" />
+                            <Line type="monotone" dataKey="bien" stroke="#34d399" strokeWidth={2} dot={false} name="Bien" />
+                            <Line type="monotone" dataKey="neutral" stroke="#94a3b8" strokeWidth={2} dot={false} name="Neutral" />
+                            <Line type="monotone" dataKey="mal" stroke="#f97316" strokeWidth={2} dot={false} name="Mal" />
+                            <Line type="monotone" dataKey="muy_mal" stroke="#ef4444" strokeWidth={2} dot={false} name="Muy Mal" />
                         </LineChart>
                     </ResponsiveContainer>
+                    <div className="flex flex-wrap items-center justify-center gap-3 mt-4 pt-3 border-t border-slate-100">
+                        <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500 uppercase tracking-wide">
+                            <div className="w-2.5 h-2.5 rounded-full bg-[#10b981]" /> Muy Bien
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500 uppercase tracking-wide">
+                            <div className="w-2.5 h-2.5 rounded-full bg-[#34d399]" /> Bien
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500 uppercase tracking-wide">
+                            <div className="w-2.5 h-2.5 rounded-full bg-[#94a3b8]" /> Neutral
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500 uppercase tracking-wide">
+                            <div className="w-2.5 h-2.5 rounded-full bg-[#f97316]" /> Mal
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500 uppercase tracking-wide">
+                            <div className="w-2.5 h-2.5 rounded-full bg-[#ef4444]" /> Muy Mal
+                        </div>
+                    </div>
                 </div>
 
                 {/* Clima por curso */}

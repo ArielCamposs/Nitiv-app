@@ -2,7 +2,6 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 
 async function getData() {
     const supabase = await createClient()
@@ -73,50 +72,29 @@ export default async function DirectorEstudiantesPage() {
                     <p className="text-slate-400 text-sm">No hay cursos activos en la institución.</p>
                 )}
 
-                {courses.map(course => (
-                    <div key={course.id} className="space-y-3">
-                        {/* Header del curso */}
-                        <div className="flex items-center gap-3">
-                            <h2 className="text-base font-semibold text-slate-800">
-                                {course.name}{course.section ? ` ${course.section}` : ""}
-                            </h2>
-                            <span className="text-xs text-slate-400">
-                                {course.students.length} estudiantes
-                            </span>
-                        </div>
-
-                        {course.students.length === 0 ? (
-                            <p className="text-sm text-slate-400">Sin estudiantes asignados.</p>
-                        ) : (
-                            <div className="grid gap-2 sm:grid-cols-2">
-                                {course.students.map(student => (
-                                    <Link key={student.id} href={`/docente/estudiantes/${student.id}`}>
-                                        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-                                            <CardContent className="flex items-center justify-between py-4 px-4">
-                                                <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <p className="text-sm font-medium text-slate-900">
-                                                            {student.last_name}, {student.name}
-                                                        </p>
-                                                        {student.hasAlert && (
-                                                            <span className="h-2 w-2 rounded-full bg-rose-400 shrink-0" title="Tiene alertas activas" />
-                                                        )}
-                                                    </div>
-                                                    {student.rut && (
-                                                        <p className="text-xs text-slate-400">{student.rut}</p>
-                                                    )}
-                                                </div>
-                                                <span className="text-xs text-indigo-500 font-medium shrink-0">
-                                                    Ver perfil →
-                                                </span>
-                                            </CardContent>
-                                        </Card>
-                                    </Link>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                ))}
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {courses.map(course => (
+                        <Link key={course.id} href={`/director/estudiantes/curso/${course.id}`}>
+                            <Card className="cursor-pointer hover:border-indigo-200 hover:shadow-md transition-all h-full">
+                                <CardContent className="flex flex-col justify-center p-6 h-full">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                            <h2 className="text-lg font-semibold text-slate-800">
+                                                {course.name}{course.section ? ` ${course.section}` : ""}
+                                            </h2>
+                                            <p className="text-sm text-slate-500 mt-1">
+                                                {course.students.length} estudiante{course.students.length !== 1 ? "s" : ""}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="mt-6 flex items-center text-sm font-medium text-indigo-600 group">
+                                        Abrir curso <span className="ml-1 group-hover:translate-x-1 transition-transform">→</span>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </Link>
+                    ))}
+                </div>
             </div>
         </main>
     )

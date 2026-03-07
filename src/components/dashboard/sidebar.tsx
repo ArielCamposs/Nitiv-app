@@ -115,10 +115,6 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
     // ── Bloque 4: Análisis ────────────────────────────────────────────────────
     const analisis: NavItem[] = []
 
-    if (isStudent) {
-        analisis.push({ title: "Mi historial", href: "/estudiante/historial", icon: BarChart3 })
-    }
-
     if (hasDeepAccess || currentRole === "utp") {
         analisis.push({ title: "Estadísticas", href: "/estadisticas", icon: BarChart3 })
     }

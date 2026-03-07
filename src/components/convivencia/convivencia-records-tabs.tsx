@@ -8,7 +8,7 @@ import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
     ResponsiveContainer, PieChart, Pie, Cell
 } from "recharts"
-import { ClipboardList, Plus, History, TrendingUp, TrendingDown, Minus, CheckCircle, ChevronDown, ChevronUp, Search, X, Mic, MicOff, BarChart3, Printer, Download, Edit } from "lucide-react"
+import { ClipboardList, Plus, History, TrendingUp, TrendingDown, Minus, CheckCircle, ChevronDown, ChevronUp, Search, X, Mic, MicOff, BarChart3, Printer, Download, Edit, AlertCircle, Trophy, CalendarDays, Activity } from "lucide-react"
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const RECORD_TYPES: { value: string; label: string; color: string }[] = [
@@ -369,6 +369,89 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
             .sort((a, b) => b.value - a.value)
             .slice(0, 5) // Top 5
     }, [last30])
+
+    const topReincidentStudents = useMemo(() => {
+        if (records.length === 0) return []
+        const counts: { [id: string]: { name: string, last_name: string, count: number } } = {}
+        for (const r of records) {
+            for (const inv of r.convivencia_record_students || []) {
+                const s = inv.students
+                if (!s) continue
+                if (!counts[s.id]) counts[s.id] = { name: s.name, last_name: s.last_name, count: 0 }
+                counts[s.id].count++
+            }
+        }
+        return Object.values(counts).sort((a, b) => b.count - a.count).slice(0, 5)
+    }, [records])
+
+    const topActionsTaken = useMemo(() => {
+        if (records.length === 0) return []
+        const counts: { [action: string]: number } = {}
+        for (const r of records) {
+            for (const action of r.actions_taken || []) {
+                counts[action] = (counts[action] || 0) + 1
+            }
+        }
+        return Object.entries(counts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(x => ({ name: x[0], count: x[1] }))
+    }, [records])
+
+    const resolutionRate = useMemo(() => {
+        if (records.length === 0) return 0
+        const resolved = records.filter(r => r.resolved).length
+        return Math.round((resolved / records.length) * 100)
+    }, [records])
+
+    const daysHeatmap = useMemo(() => {
+        const daysTemplate = [
+            { id: 1, name: "Lunes", count: 0 },
+            { id: 2, name: "Martes", count: 0 },
+            { id: 3, name: "Miércoles", count: 0 },
+            { id: 4, name: "Jueves", count: 0 },
+            { id: 5, name: "Viernes", count: 0 },
+        ]
+
+        for (const r of records) {
+            const date = new Date(r.incident_date)
+            const day = date.getDay()
+            if (day >= 1 && day <= 5) {
+                daysTemplate[day - 1].count++
+            }
+        }
+
+        const maxCount = Math.max(...daysTemplate.map(d => d.count), 1)
+
+        return daysTemplate.map(d => {
+            const intensity = d.count / maxCount
+            let color = "bg-slate-100 text-slate-400"
+            if (intensity > 0) {
+                if (intensity <= 0.33) color = "bg-indigo-100 text-indigo-700"
+                else if (intensity <= 0.66) color = "bg-indigo-300 text-indigo-900 font-medium"
+                else color = "bg-indigo-500 text-white font-semibold"
+            }
+            return { ...d, color }
+        })
+    }, [records])
+
+    const severityDist = useMemo(() => {
+        if (records.length === 0) return []
+        const counts: Record<string, number> = { leve: 0, moderada: 0, grave: 0, gravisimo: 0 }
+
+        for (const r of records) {
+            const sev = r.severity as keyof typeof counts
+            if (counts[sev] !== undefined) counts[sev]++
+            else counts.moderada++
+        }
+
+        return [
+            { label: "Leve", count: counts.leve, color: "bg-indigo-100", textColor: "text-indigo-700" },
+            { label: "Moderada", count: counts.moderada, color: "bg-purple-100", textColor: "text-purple-700" },
+            { label: "Grave", count: counts.grave, color: "bg-rose-100", textColor: "text-rose-700" },
+            { label: "Gravísimo", count: counts.gravisimo, color: "bg-red-200", textColor: "text-red-700" },
+        ]
+    }, [records])
 
     function toggleAction(a: string) {
         setActions(prev => prev.includes(a) ? prev.filter(x => x !== a) : [...prev, a])
@@ -998,6 +1081,136 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             </div>
                         </div>
                     </div>
+
+                    {/* Insights avanzados */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
+                        {/* 1. Tasa de Resolución */}
+                        <div className="bg-white rounded-2xl border shadow-sm p-6 flex flex-col items-center justify-center text-center">
+                            <h3 className="text-sm font-semibold text-slate-700 mb-2">Tasa de Resolución</h3>
+                            <div className="relative w-28 h-28 flex items-center justify-center rounded-full border-8 border-slate-50">
+                                <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 36 36">
+                                    <path
+                                        className="text-slate-100"
+                                        strokeWidth="3.8"
+                                        stroke="currentColor"
+                                        fill="none"
+                                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                    />
+                                    <path
+                                        className="text-emerald-500"
+                                        strokeWidth="3.8"
+                                        strokeDasharray={`${resolutionRate}, 100`}
+                                        strokeLinecap="round"
+                                        stroke="currentColor"
+                                        fill="none"
+                                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                                    />
+                                </svg>
+                                <div className="absolute flex flex-col items-center justify-center">
+                                    <span className="text-2xl font-bold text-slate-800">{resolutionRate}%</span>
+                                </div>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-4">
+                                {records.filter(r => r.resolved).length} de {records.length} casos resueltos
+                            </p>
+                        </div>
+
+                        {/* 2. Distribución por Gravedad */}
+                        <div className="bg-white rounded-2xl border shadow-sm p-6 pl-5">
+                            <h3 className="text-sm font-semibold text-slate-700 mb-5">Distribución de Gravedad</h3>
+                            <div className="space-y-4">
+                                {severityDist.map(s => {
+                                    const pct = records.length > 0 ? Math.round((s.count / records.length) * 100) : 0
+                                    return (
+                                        <div key={s.label}>
+                                            <div className="flex items-center justify-between text-xs mb-1">
+                                                <span className={`font-medium ${s.textColor}`}>{s.label}</span>
+                                                <span className="text-slate-500">{s.count} ({pct}%)</span>
+                                            </div>
+                                            <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                                <div className={`h-full ${s.color.replace('bg-', 'bg-').replace('-100', '-500').replace('-200', '-600')}`} style={{ width: `${pct}%` }} />
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+
+                        {/* 3. Días Críticos */}
+                        <div className="bg-white rounded-2xl border shadow-sm p-5 flex flex-col">
+                            <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                                <CalendarDays className="w-4 h-4 text-indigo-500" />
+                                Mapa de Días (Lun - Vie)
+                            </h3>
+                            <div className="flex-1 flex items-center justify-center gap-2 mt-2">
+                                {daysHeatmap.map(d => (
+                                    <div key={d.id} className="flex flex-col items-center gap-2">
+                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm transition-colors ${d.color}`} title={`${d.count} casos`}>
+                                            {d.count > 0 ? d.count : "-"}
+                                        </div>
+                                        <span className="text-[10px] font-medium text-slate-400 uppercase">{d.name.slice(0, 2)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 4. Top Estudiantes Reincidentes */}
+                        <div className="bg-white rounded-2xl border shadow-sm p-5 md:col-span-2 lg:col-span-1">
+                            <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                                <AlertCircle className="w-4 h-4 text-red-500" />
+                                Estudiantes Reincidentes
+                            </h3>
+                            {topReincidentStudents.length === 0 ? (
+                                <p className="text-sm text-slate-400 py-6 text-center">Sin reincidencias</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    {topReincidentStudents.map((st, i) => (
+                                        <div key={st.name + st.last_name + i} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i === 0 ? "bg-red-100 text-red-600" :
+                                                    i === 1 ? "bg-orange-100 text-orange-600" :
+                                                        "bg-slate-200 text-slate-500"
+                                                    }`}>
+                                                    {i + 1}
+                                                </div>
+                                                <span className="text-sm font-medium text-slate-700">{st.last_name}, {st.name}</span>
+                                            </div>
+                                            <span className="text-xs font-bold text-slate-500 px-2.5 py-1 rounded-full bg-white border border-slate-200 shadow-sm">
+                                                {st.count} casos
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 5. Acciones Más Frecuentes */}
+                        <div className="bg-white rounded-2xl border shadow-sm p-5 md:col-span-2 lg:col-span-2">
+                            <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                                <div className="relative flex items-center justify-center">
+                                    <Activity className="w-5 h-5 text-emerald-500 animate-pulse drop-shadow-md z-10" />
+                                    <div className="absolute inset-0 bg-emerald-400 rounded-full animate-ping opacity-20"></div>
+                                </div>
+                                Medidas y Acciones Frecuentes
+                            </h3>
+                            {topActionsTaken.length === 0 ? (
+                                <div className="flex-1 flex items-center justify-center text-sm font-medium text-slate-400 h-32">
+                                    Sin acciones registradas
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                                    {topActionsTaken.map((a, i) => (
+                                        <div key={a.name} className="flex flex-col items-center justify-center bg-slate-50 border border-slate-200 rounded-2xl p-4 transition-colors hover:bg-slate-100 min-h-[110px]">
+                                            <span className="text-sm font-medium text-slate-700 text-center mb-3 leading-tight line-clamp-3" title={a.name}>{a.name}</span>
+                                            <span className="text-xs font-semibold text-slate-500 mt-auto bg-white px-3 py-1 rounded-full border border-slate-200 shadow-sm">{a.count} veces</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                    </div>
                 </div>
             )}
 
@@ -1023,7 +1236,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                 </button>
                             </div>
                         ) : (
-                            <div className="divide-y">
+                            <div className="p-4 space-y-4 bg-slate-50/50">
                                 {records.map(r => {
                                     const rtype = RECORD_TYPES.find(t => t.value === r.type)
                                     const involvedList = (r.convivencia_record_students ?? [])
@@ -1031,70 +1244,87 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                         .filter(Boolean)
 
                                     return (
-                                        <div key={r.id} className={`px-6 py-4 hover:bg-slate-50 transition-colors ${r.resolved ? "opacity-70" : ""}`}>
-                                            <div className="flex items-start justify-between gap-3">
-                                                <div className="min-w-0">
-                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                        <span className="font-semibold text-slate-800 text-sm">{rtype?.label ?? r.type}</span>
-                                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${SEVERITY_COLORS[r.severity] ?? ""}`}>
-                                                            {r.severity}
+                                        <div key={r.id} className={`bg-white rounded-2xl border p-5 shadow-sm transition-all hover:border-slate-300 ${r.resolved ? "opacity-75 grayscale-[30%]" : "border-l-4 border-l-indigo-500"}`}>
+                                            <div className="flex flex-col md:flex-row items-start justify-between gap-4">
+
+                                                {/* Left Column: Info */}
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                        <span className="font-bold text-slate-800 text-sm">{rtype?.label ?? r.type}</span>
+                                                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${SEVERITY_COLORS[r.severity] ?? "bg-slate-100 text-slate-600"}`}>
+                                                            {r.severity.toUpperCase()}
                                                         </span>
                                                         {r.resolved && (
-                                                            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
-                                                                Resuelto
+                                                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 flex items-center gap-1 border border-emerald-200">
+                                                                <CheckCircle className="w-3 h-3" /> Resuelto
                                                             </span>
                                                         )}
                                                     </div>
-                                                    <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{r.description}</p>
-                                                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-slate-400">
-                                                        {r.location && <span>📍 {r.location}</span>}
-                                                        <span>👥 {r.involved_count} persona{r.involved_count > 1 ? "s" : ""}</span>
+
+                                                    <p className="text-sm text-slate-600 mt-2 leading-relaxed whitespace-pre-wrap">{r.description}</p>
+
+                                                    <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-slate-500 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                                        {r.location && <span className="flex items-center gap-1.5"><span className="text-base">📍</span> {r.location}</span>}
+                                                        <span className="flex items-center gap-1.5"><span className="text-base">👥</span> {r.involved_count} involucrado{r.involved_count !== 1 && "s"}</span>
                                                     </div>
+
                                                     {/* Involved students */}
                                                     {involvedList.length > 0 && (
-                                                        <div className="flex flex-wrap gap-1.5 mt-2">
-                                                            {involvedList.map((s: any) => (
-                                                                <span key={s.id} className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">
-                                                                    {s.last_name}, {s.name}
-                                                                </span>
-                                                            ))}
+                                                        <div className="mt-3">
+                                                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Estudiantes Asociados</p>
+                                                            <div className="flex flex-wrap gap-2">
+                                                                {involvedList.map((s: any) => (
+                                                                    <span key={s.id} className="px-2.5 py-1 rounded-lg bg-indigo-50/50 text-indigo-700 border border-indigo-100 text-xs font-medium">
+                                                                        {s.last_name}, {s.name}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
                                                         </div>
                                                     )}
                                                 </div>
-                                                <div className="text-right shrink-0">
-                                                    <p className="text-xs text-slate-400">
-                                                        {new Date(r.incident_date).toLocaleDateString("es-CL", { day: "numeric", month: "short", year: "numeric" })}
-                                                    </p>
-                                                    <p className="text-xs text-slate-300 mt-0.5">
-                                                        {new Date(r.incident_date).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
-                                                    </p>
+
+                                                {/* Right Column: Meta & Actions */}
+                                                <div className="flex flex-col items-end shrink-0 md:w-48">
+                                                    <div className="text-right bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 w-full mb-3">
+                                                        <p className="text-xs font-bold text-slate-700">
+                                                            {new Date(r.incident_date).toLocaleDateString("es-CL", { day: "numeric", month: "long", year: "numeric" })}
+                                                        </p>
+                                                        <p className="text-xs font-medium text-slate-500 mt-0.5 flex items-center justify-end gap-1">
+                                                            <History className="w-3 h-3" />
+                                                            {new Date(r.incident_date).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })} hrs
+                                                        </p>
+                                                    </div>
+
+                                                    {r.actions_taken?.length > 0 && (
+                                                        <div className="w-full flex flex-wrap justify-end gap-1.5 mb-4">
+                                                            {r.actions_taken.map(a => (
+                                                                <span key={a} className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md text-[10px] uppercase font-bold tracking-wide">{a}</span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+
+                                                    <div className="w-full mt-auto space-y-2">
+                                                        <div className="flex justify-end gap-2">
+                                                            <button type="button" onClick={() => handleDownloadPdf(r)}
+                                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100 text-xs font-bold transition-colors">
+                                                                <Download className="w-3.5 h-3.5" /> PDF
+                                                            </button>
+                                                            <button type="button" onClick={() => handlePrint(r)}
+                                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 text-xs font-bold transition-colors">
+                                                                <Printer className="w-3.5 h-3.5" /> Imprimir
+                                                            </button>
+                                                        </div>
+                                                        <button type="button" onClick={() => handleEdit(r)}
+                                                            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-xs font-bold transition-colors shadow-sm">
+                                                            <Edit className="w-3.5 h-3.5" /> Editar Registro
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
 
-                                            {r.actions_taken?.length > 0 && (
-                                                <div className="flex flex-wrap gap-1 mt-2">
-                                                    {r.actions_taken.map(a => (
-                                                        <span key={a} className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full text-xs">{a}</span>
-                                                    ))}
-                                                </div>
-                                            )}
-
-                                            <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-100">
-                                                <button type="button" onClick={() => handleDownloadPdf(r)}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100 text-xs font-semibold transition-colors">
-                                                    <Download className="w-3.5 h-3.5" /> PDF
-                                                </button>
-                                                <button type="button" onClick={() => handlePrint(r)}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 text-xs font-semibold transition-colors">
-                                                    <Printer className="w-3.5 h-3.5" /> Imprimir
-                                                </button>
-                                                <button type="button" onClick={() => handleEdit(r)}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 text-xs font-semibold transition-colors ml-auto shadow-sm">
-                                                    <Edit className="w-3.5 h-3.5" /> Editar
-                                                </button>
+                                            <div className="mt-4 pt-4 border-t border-slate-100">
+                                                <ResolveRow record={r} onResolved={handleResolved} />
                                             </div>
-
-                                            <ResolveRow record={r} onResolved={handleResolved} />
                                         </div>
                                     )
                                 })}

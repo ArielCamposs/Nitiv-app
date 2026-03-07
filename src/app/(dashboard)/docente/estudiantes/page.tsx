@@ -3,9 +3,6 @@ import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import {
     Card,
-    CardHeader,
-    CardTitle,
-    CardDescription,
     CardContent,
 } from "@/components/ui/card"
 
@@ -70,56 +67,34 @@ export default async function EstudiantesDocentePage() {
                     Mis estudiantes
                 </h1>
 
-                {data.courses.map((courseData: any) => (
-                    <div key={courseData.course_id} className="space-y-3">
-                        <div className="flex items-center gap-2">
-                            <h2 className="text-lg font-medium text-slate-800">
-                                {courseData.courses?.name}
-                            </h2>
-                            {courseData.is_head_teacher && (
-                                <Badge variant="outline" className="text-xs">
-                                    Profesor Jefe
-                                </Badge>
-                            )}
-                            <span className="text-xs text-slate-400">
-                                {courseData.students.length} estudiantes
-                            </span>
-                        </div>
-
-                        {courseData.students.length === 0 ? (
-                            <p className="text-sm text-slate-400">
-                                No hay estudiantes en este curso todavía.
-                            </p>
-                        ) : (
-                            <div className="grid gap-2 sm:grid-cols-2">
-                                {courseData.students.map((student: any) => (
-                                    <Link
-                                        key={student.id}
-                                        href={`/docente/estudiantes/${student.id}`}
-                                    >
-                                        <Card className="cursor-pointer hover:shadow-md transition-shadow">
-                                            <CardContent className="flex items-center justify-between py-4 px-4">
-                                                <div>
-                                                    <p className="text-sm font-medium text-slate-900">
-                                                        {student.last_name}, {student.name}
-                                                    </p>
-                                                    {student.rut && (
-                                                        <p className="text-xs text-slate-400">
-                                                            {student.rut}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                                <span className="text-xs text-indigo-500 font-medium">
-                                                    Ver perfil →
-                                                </span>
-                                            </CardContent>
-                                        </Card>
-                                    </Link>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                ))}
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {data.courses.map((courseData: any) => (
+                        <Link key={courseData.course_id} href={`/docente/estudiantes/curso/${courseData.course_id}`}>
+                            <Card className="cursor-pointer hover:border-indigo-200 hover:shadow-md transition-all h-full">
+                                <CardContent className="flex flex-col justify-center p-6 h-full">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <div>
+                                            <h2 className="text-lg font-semibold text-slate-800">
+                                                {courseData.courses?.name}
+                                            </h2>
+                                            <p className="text-sm text-slate-500 mt-1">
+                                                {courseData.students.length} estudiante{courseData.students.length !== 1 ? "s" : ""}
+                                            </p>
+                                        </div>
+                                        {courseData.is_head_teacher && (
+                                            <Badge variant="outline" className="text-xs bg-indigo-50 text-indigo-700 border-indigo-200 whitespace-nowrap">
+                                                Prof. Jefe
+                                            </Badge>
+                                        )}
+                                    </div>
+                                    <div className="mt-6 flex items-center text-sm font-medium text-indigo-600 group">
+                                        Abrir curso <span className="ml-1 group-hover:translate-x-1 transition-transform">→</span>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </Link>
+                    ))}
+                </div>
             </div>
         </main>
     )

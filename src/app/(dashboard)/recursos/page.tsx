@@ -43,7 +43,11 @@ export default async function RecursosPage() {
             .eq("institution_id", profile.institution_id)
             .order("created_at", { ascending: false })
 
-        if (!isAdmin) query = (query as any).eq("active", true)
+        if (!isAdmin) {
+            query = (query as any)
+                .eq("active", true)
+                .contains("rol_destino", [profile.role])
+        }
 
         const [resourcesRes, etiquetasRes] = await Promise.all([
             query,

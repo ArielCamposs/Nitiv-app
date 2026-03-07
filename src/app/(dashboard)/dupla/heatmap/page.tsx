@@ -4,7 +4,7 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 
 export default async function DuplaHeatmapPage() {
-    const { courses, historyLogs } = await getHeatmapData()
+    const { courses, historyLogs, teachers } = await getHeatmapData()
     return (
         <main className="min-h-screen bg-slate-50">
             <div className="mx-auto max-w-5xl px-4 py-8 space-y-6">
@@ -19,7 +19,7 @@ export default async function DuplaHeatmapPage() {
                         </p>
                     </div>
                 </div>
-                <ClimateHistoryChart courses={courses} historyLogs={historyLogs} />
+                <ClimateHistoryChart courses={courses} historyLogs={historyLogs} showFilters={true} teachers={teachers} />
             </div>
         </main>
     )

@@ -3,6 +3,8 @@ import { cookies } from "next/headers"
 import Link from "next/link"
 import { EmotionSlider } from "@/components/emotional/emotion-slider"
 import { PulseCheckinWrapper } from "@/components/pulse/pulse-checkin-wrapper"
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 
 // ─── Tipo para pulse session ──────────────────────────────────────────────────
 type PulseSession = {
@@ -79,12 +81,29 @@ async function getCheckinData() {
         pulseAlreadyDone = !!pulseEntry
     }
 
+    // ── Todo el Historial Emocional ──
+    const { data: logs } = await supabase
+        .from("emotional_logs")
+        .select("id, emotion, stress_level, anxiety_level, reflection, type, created_at")
+        .eq("student_id", student.id)
+        .order("created_at", { ascending: false })
+        .limit(50)
+
     return {
         student,
         alreadyLogged,
         pulseSession: pulseSession as PulseSession,
         pulseAlreadyDone,
+        logs: logs || [],
     }
+}
+
+const EMOTION_CONFIG: Record<string, { label: string; emoji: string; color: string }> = {
+    muy_bien: { label: "Muy bien", emoji: "😄", color: "bg-emerald-100 text-emerald-700" },
+    bien: { label: "Bien", emoji: "🙂", color: "bg-emerald-50 text-emerald-600" },
+    neutral: { label: "Neutral", emoji: "😐", color: "bg-slate-100 text-slate-600" },
+    mal: { label: "Mal", emoji: "😔", color: "bg-rose-100 text-rose-600" },
+    muy_mal: { label: "Muy mal", emoji: "😢", color: "bg-rose-200 text-rose-700" },
 }
 
 export default async function EstudianteCheckinPage() {
@@ -99,7 +118,26 @@ export default async function EstudianteCheckinPage() {
         alreadyLogged,
         pulseSession,
         pulseAlreadyDone,
+        logs,
     } = data
+
+    // Calcular estadísticas
+    const total = logs.length
+    const conReflexion = logs.filter(l => l.reflection).length
+
+    const emotionCount = logs.reduce((acc: Record<string, number>, l: any) => {
+        acc[l.emotion] = (acc[l.emotion] ?? 0) + 1
+        return acc
+    }, {})
+    const topEmotion = Object.entries(emotionCount).sort((a, b) => b[1] - a[1])[0]?.[0]
+
+    const avgStress = total > 0
+        ? (logs.reduce((a, l) => a + (l.stress_level ?? 3), 0) / total).toFixed(1)
+        : "—"
+
+    const avgAnxiety = total > 0
+        ? (logs.reduce((a, l) => a + (l.anxiety_level ?? 3), 0) / total).toFixed(1)
+        : "—"
 
     return (
         <main className="min-h-screen bg-slate-50">
@@ -132,15 +170,74 @@ export default async function EstudianteCheckinPage() {
                             institutionId={student.institution_id}
                             alreadyLogged={alreadyLogged}
                         />
-                        <div className="flex justify-end mt-6">
-                            <Link
-                                href="/estudiante/historial"
-                                className="text-sm text-indigo-600 hover:underline font-medium"
-                            >
-                                Ver mi historial emocional →
-                            </Link>
-                        </div>
                     </div>
+                </section>
+
+                {/* ── Historial Emocional Completo ── */}
+                <section className="mt-8 space-y-6">
+                    <h2 className="text-xl font-semibold text-slate-900">Mi historial emocional</h2>
+
+                    {/* Estadísticas */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[
+                            { label: "Registros totales", value: total },
+                            { label: "Con reflexión", value: conReflexion },
+                            { label: "Estrés / Ansiedad prom.", value: avgStress !== "—" && avgAnxiety !== "—" ? `${avgStress} / ${avgAnxiety}` : "—" },
+                            { label: "Emoción frecuente", value: topEmotion ? EMOTION_CONFIG[topEmotion]?.emoji + " " + EMOTION_CONFIG[topEmotion]?.label : "—" },
+                        ].map((stat) => (
+                            <Card key={stat.label}>
+                                <CardContent className="pt-4 text-center">
+                                    <p className="text-xl font-bold text-indigo-600">{stat.value}</p>
+                                    <p className="text-xs text-slate-500 mt-1">{stat.label}</p>
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
+
+                    {/* Lista de registros */}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-base">Registros recientes</CardTitle>
+                        </CardHeader>
+                        <CardContent className="divide-y">
+                            {logs.length === 0 && (
+                                <p className="text-sm text-slate-500 py-4 text-center">
+                                    Aún no tienes registros emocionales.
+                                </p>
+                            )}
+                            {logs.map((log: any) => {
+                                const cfg = EMOTION_CONFIG[log.emotion] ?? EMOTION_CONFIG.neutral
+                                return (
+                                    <div key={log.id} className="flex items-start gap-3 py-4">
+                                        <span className="text-2xl mt-1">{cfg.emoji}</span>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                                                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${cfg.color}`}>
+                                                    {cfg.label}
+                                                </span>
+                                                <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider text-slate-500 border-slate-200">
+                                                    {log.type === "daily" ? "Diario" : "Semanal"}
+                                                </Badge>
+                                                <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                                                    😰 Estrés: {log.stress_level ?? "—"}/5 <span className="text-slate-300 mx-1">·</span> 😟 Ansiedad: {log.anxiety_level ?? "—"}/5
+                                                </span>
+                                            </div>
+                                            {log.reflection && (
+                                                <p className="text-sm text-slate-600 mt-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                                    "{log.reflection}"
+                                                </p>
+                                            )}
+                                            <p className="text-xs font-medium text-slate-400 mt-2">
+                                                {new Date(log.created_at).toLocaleDateString("es-CL", {
+                                                    weekday: "long", day: "numeric", month: "long"
+                                                })}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </CardContent>
+                    </Card>
                 </section>
 
             </div>

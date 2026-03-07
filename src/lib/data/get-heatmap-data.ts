@@ -49,11 +49,26 @@ export async function getHeatmapData() {
             .order("name"),
         supabase
             .from("teacher_logs")
-            .select("course_id, energy_level, log_date")
+            .select("course_id, energy_level, log_date, teacher_id")
             .eq("institution_id", profile.institution_id)
             .gte("log_date", since90.toISOString().split("T")[0])
             .order("log_date", { ascending: true }),
     ])
+
+    const uniqueTeacherIds = Array.from(new Set((logs ?? []).map(l => l.teacher_id).filter(Boolean)))
+
+    let teachers: { id: string, name: string }[] = []
+    if (uniqueTeacherIds.length > 0) {
+        const { data: usersData } = await supabase
+            .from("users")
+            .select("id, name, last_name")
+            .in("id", uniqueTeacherIds)
+
+        if (usersData) {
+            teachers = usersData.map(u => ({ id: u.id, name: `${u.name} ${u.last_name || ""}`.trim() }))
+            teachers.sort((a, b) => a.name.localeCompare(b.name))
+        }
+    }
 
     // Adaptar cursos al formato esperado por ClimateHistoryChart: { course_id, courses: { name } }
     const adaptedCourses = (courses ?? []).map(c => ({
@@ -61,5 +76,5 @@ export async function getHeatmapData() {
         courses: { name: `${c.name} ${c.section ?? ""}`.trim() }
     }))
 
-    return { courses: adaptedCourses, historyLogs: logs ?? [] }
+    return { courses: adaptedCourses, historyLogs: logs ?? [], teachers }
 }

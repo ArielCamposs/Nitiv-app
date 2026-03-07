@@ -172,7 +172,7 @@ export function ConvivenciaDashboardClient({ stats }: { stats: ConvivenciaStats 
                     <Link href="/convivencia/dec" className="text-[10px] text-indigo-600 hover:underline font-medium">Ver todos →</Link>
                 </div>
                 {recentDecs.length === 0 ? (
-                    <p className="text-xs text-slate-400 text-center py-6">Sin casos activos 🎉</p>
+                    <p className="text-xs text-slate-400 text-center py-6">Sin casos activos.</p>
                 ) : (
                     <div className="divide-y divide-slate-100">
                         {recentDecs.map(d => {

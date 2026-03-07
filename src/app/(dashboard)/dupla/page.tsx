@@ -84,10 +84,14 @@ export default async function DuplaPage() {
         const d = new Date(now.getTime() - (6 - i) * 24 * 60 * 60 * 1000)
         const dateStr = d.toISOString().split("T")[0]
         const dayLogs = (emotionLogs7d ?? []).filter(l => l.created_at.startsWith(dateStr))
-        const positivo = dayLogs.filter(l => l.emotion === "bien" || l.emotion === "muy_bien").length
-        const neutro = dayLogs.filter(l => l.emotion === "neutral").length
-        const negativo = dayLogs.filter(l => l.emotion === "mal" || l.emotion === "muy_mal").length
-        return { day: dayLabels[d.getDay()], positivo, neutro, negativo }
+
+        const muy_bien = dayLogs.filter(l => l.emotion === "muy_bien").length
+        const bien = dayLogs.filter(l => l.emotion === "bien").length
+        const neutral = dayLogs.filter(l => l.emotion === "neutral").length
+        const mal = dayLogs.filter(l => l.emotion === "mal").length
+        const muy_mal = dayLogs.filter(l => l.emotion === "muy_mal").length
+
+        return { day: dayLabels[d.getDay()], muy_bien, bien, neutral, mal, muy_mal }
     })
 
     // ── Clima de aula por curso ──────────────────────────────────────────────────
