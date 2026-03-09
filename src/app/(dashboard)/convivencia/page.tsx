@@ -18,10 +18,10 @@ export default async function ConvivenciaPage() {
     const iid = profile.institution_id
 
     const now = new Date()
-    const monthsAgo6 = new Date(now)
-    monthsAgo6.setMonth(now.getMonth() - 5)
-    monthsAgo6.setDate(1)
-    monthsAgo6.setHours(0, 0, 0, 0)
+    const monthsAgo12 = new Date(now)
+    monthsAgo12.setMonth(now.getMonth() - 11)
+    monthsAgo12.setDate(1)
+    monthsAgo12.setHours(0, 0, 0, 0)
 
     // Parallel fetch
     const [
@@ -29,11 +29,13 @@ export default async function ConvivenciaPage() {
         alerts,
         { data: incidents },
         { data: paecs },
+        { data: courses },
     ] = await Promise.all([
-        supabase.from("students").select("id, name, last_name").eq("institution_id", iid).eq("active", true),
+        supabase.from("students").select("id, name, last_name, course_id").eq("institution_id", iid).eq("active", true),
         getActiveAlerts(),
-        supabase.from("incidents").select("id, folio, student_id, type, severity, incident_date, resolved, end_date").eq("institution_id", iid).gte("incident_date", monthsAgo6.toISOString().split("T")[0]),
+        supabase.from("incidents").select("id, folio, student_id, type, severity, incident_date, resolved, end_date").eq("institution_id", iid).gte("incident_date", monthsAgo12.toISOString().split("T")[0]),
         supabase.from("paec").select("id").eq("institution_id", iid).eq("active", true),
+        supabase.from("courses").select("id, name, section").eq("institution_id", iid).eq("active", true),
     ])
 
     const convivenciaTypes = ["dec_repetido", "registros_negativos"]
@@ -50,10 +52,15 @@ export default async function ConvivenciaPage() {
     const typeCount: Record<string, number> = {}
     const severityCount: Record<string, number> = {}
 
-    for (const d of openDecs) {
+    for (const d of allIncidents) {
         typeCount[d.type] = (typeCount[d.type] ?? 0) + 1
         severityCount[d.severity] = (severityCount[d.severity] ?? 0) + 1
     }
+
+    // ── Tasa de resolución ───────────────────────────────────────────────────────
+    const totalPeriodDecs = allIncidents.length
+    const resolvedDecs = allIncidents.filter(d => d.resolved).length
+    const resolutionRate = totalPeriodDecs > 0 ? Math.round((resolvedDecs / totalPeriodDecs) * 100) : 0
 
     const LABEL_TYPE: Record<string, string> = {
         pelea: "Pelea/Agresión Física",
@@ -92,11 +99,11 @@ export default async function ConvivenciaPage() {
         color: SEVERITY_COLOR[sev] ?? "#94a3b8"
     }))
 
-    // ── Tendencia 6 meses ──
+    // ── Tendencia 12 meses ──
     const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
     const monthlyTrendMap: Record<string, { decs: number; cierres: number; label: string }> = {}
 
-    for (let i = 5; i >= 0; i--) {
+    for (let i = 11; i >= 0; i--) {
         const d = new Date(now)
         d.setMonth(now.getMonth() - i)
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -118,15 +125,35 @@ export default async function ConvivenciaPage() {
 
     // ── DECs recientes ──
     const studentsMap = Object.fromEntries((students ?? []).map(s => [s.id, s]))
+    const coursesMap = Object.fromEntries((courses ?? []).map(c => [c.id, c]))
+
+    // ── Cursos con más incidentes (top 3) ────────────────────────────────────────
+    const courseIncidentCount: Record<string, number> = {}
+    for (const d of allIncidents) {
+        const st = studentsMap[d.student_id] as any
+        if (st?.course_id) {
+            courseIncidentCount[st.course_id] = (courseIncidentCount[st.course_id] ?? 0) + 1
+        }
+    }
+    const topCourses = Object.entries(courseIncidentCount)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([courseId, count]) => {
+            const c = coursesMap[courseId] as any
+            return { courseName: c ? `${c.name}${c.section ? " " + c.section : ""}` : "Sin curso", count }
+        })
+
     const recentDecs = openDecs
         .sort((a, b) => new Date(b.incident_date).getTime() - new Date(a.incident_date).getTime())
         .slice(0, 5)
         .map(d => {
-            const st = studentsMap[d.student_id]
+            const st = studentsMap[d.student_id] as any
+            const co = st ? coursesMap[st.course_id ?? ""] as any : null
             return {
                 id: d.id,
                 folio: d.folio,
                 studentName: st ? `${st.name} ${st.last_name}` : "Estudiante",
+                courseName: co ? `${co.name}${co.section ? " " + co.section : ""}` : "Sin curso",
                 severity: d.severity,
                 type: LABEL_TYPE[d.type] ?? d.type,
                 incident_date: d.incident_date,
@@ -142,6 +169,9 @@ export default async function ConvivenciaPage() {
         decsBySeverity,
         monthlyTrend,
         recentDecs,
+        resolutionRate,
+        topCourses,
+        totalPeriodDecs,
     }
 
     return (

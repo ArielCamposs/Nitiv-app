@@ -18,6 +18,8 @@ export type CourseRisk = {
     }[]
 }
 
+export type ConvivenciaSummary = { open: number; closed: number }
+
 export type DashboardData = {
     summary: {
         total_emotion_logs: number
@@ -25,12 +27,14 @@ export type DashboardData = {
         total_activities: number
         low_emotion_courses: number
     }
+    convivenciaSummary?: ConvivenciaSummary
     emotionDistribution: { emotion: string; count: number }[]
     courseRisks: CourseRisk[]
     incidents: {
         byMonth: IncidentByMonth[]
         bySeverity: CountByLabel[]
         byType: CountByLabel[]
+        byCourse: CountByLabel[]
         recent: {
             id: string
             folio: string | null
@@ -44,10 +48,12 @@ export type DashboardData = {
     activities: {
         byMonth: ActivitiesByMonth[]
         byType: CountByLabel[]
+        byCourse: CountByLabel[]
         recent: {
             id: string
             title: string
             start_datetime: string
+            activity_type?: string
         }[]
     }
 }
@@ -65,7 +71,8 @@ const LOW_RISK_THRESHOLD = 2.5
 
 export async function getDashboardData(
     institutionId: string,
-    days: number
+    days: number,
+    role?: string
 ): Promise<{ error?: string; data?: DashboardData }> {
     try {
         const cookieStore = await cookies()
@@ -151,6 +158,42 @@ export async function getDashboardData(
         if (activitiesError) {
             console.error("activitiesError", activitiesError)
             return { error: "No se pudieron cargar las actividades." }
+        }
+
+        const activityIds = (activities ?? []).map((a) => a.id)
+        let activitiesByCourse: CountByLabel[] = []
+        if (activityIds.length > 0) {
+            const { data: activityCourses } = await supabase
+                .from("activity_courses")
+                .select("activity_id, course_id, courses(id, name, section)")
+                .in("activity_id", activityIds)
+            const byCourseMap: Record<string, number> = {}
+            for (const row of activityCourses ?? []) {
+                const c = (row as any).courses
+                const name = c
+                    ? `${c.name ?? ""}${c.section ? ` ${c.section}` : ""}`.trim() || "Sin nombre"
+                    : "Sin curso"
+                byCourseMap[name] = (byCourseMap[name] ?? 0) + 1
+            }
+            activitiesByCourse = Object.entries(byCourseMap)
+                .map(([label, count]) => ({ label, count }))
+                .sort((a, b) => b.count - a.count)
+        }
+
+        // 4) Registros de convivencia (solo para dupla/convivencia)
+        let convivenciaSummary: ConvivenciaSummary | undefined
+        if (role === "dupla" || role === "convivencia") {
+            const fromStr = fromIso.slice(0, 10)
+            const toStr = toIso.slice(0, 10)
+            const { data: convRecords } = await supabase
+                .from("convivencia_records")
+                .select("id, resolved")
+                .eq("institution_id", institutionId)
+                .gte("incident_date", fromStr)
+                .lte("incident_date", toStr)
+            const open = (convRecords ?? []).filter((r) => !r.resolved).length
+            const closed = (convRecords ?? []).filter((r) => r.resolved).length
+            convivenciaSummary = { open, closed }
         }
 
         // ─────────────────────────────────────────────────────
@@ -241,12 +284,13 @@ export async function getDashboardData(
             .sort((a, b) => a.avg_score - b.avg_score)
 
         // ─────────────────────────────────────────────────────
-        // INCIDENTES: por mes, severidad, tipo, recientes
+        // INCIDENTES: por mes, severidad, tipo, curso, recientes
         // ─────────────────────────────────────────────────────
 
         const incidentsByMonthMap: Record<string, number> = {}
         const incidentsBySeverityMap: Record<string, number> = {}
         const incidentsByTypeMap: Record<string, number> = {}
+        const incidentsByCourseMap: Record<string, number> = {}
 
         for (const inc of incidents ?? []) {
             const d = new Date(inc.incident_date as string)
@@ -263,6 +307,13 @@ export async function getDashboardData(
 
             const type = inc.type as string
             incidentsByTypeMap[type] = (incidentsByTypeMap[type] ?? 0) + 1
+
+            const s = (inc as any).student
+            const course = s?.course
+            const courseName = course
+                ? `${course.name ?? ""}${course.section ? ` ${course.section}` : ""}`.trim() || "Sin curso"
+                : "Sin curso"
+            incidentsByCourseMap[courseName] = (incidentsByCourseMap[courseName] ?? 0) + 1
         }
 
         const byMonth: IncidentByMonth[] = Object.entries(incidentsByMonthMap)
@@ -276,6 +327,10 @@ export async function getDashboardData(
         const byType: CountByLabel[] = Object.entries(incidentsByTypeMap).map(
             ([label, count]) => ({ label, count })
         )
+
+        const byCourse: CountByLabel[] = Object.entries(incidentsByCourseMap)
+            .map(([label, count]) => ({ label, count }))
+            .sort((a, b) => b.count - a.count)
 
         const recent = (incidents ?? [])
             .slice()
@@ -349,6 +404,7 @@ export async function getDashboardData(
                 id: act.id as string,
                 title: (act as any).title || "Actividad sin título",
                 start_datetime: act.start_datetime as string,
+                activity_type: act.activity_type as string | undefined,
             }))
 
         // ─────────────────────────────────────────────────────
@@ -364,17 +420,20 @@ export async function getDashboardData(
 
         const data: DashboardData = {
             summary,
+            ...(convivenciaSummary && { convivenciaSummary }),
             emotionDistribution,
             courseRisks,
             incidents: {
                 byMonth,
                 bySeverity,
                 byType,
+                byCourse,
                 recent,
             },
             activities: {
                 byMonth: activitiesByMonth,
                 byType: activitiesByType,
+                byCourse: activitiesByCourse,
                 recent: activitiesRecent,
             },
         }

@@ -19,7 +19,10 @@ export interface ConvivenciaStats {
     decsByType: { name: string; count: number; color: string }[]
     decsBySeverity: { name: string; count: number; color: string }[]
     monthlyTrend: { mes: string; decs: number; cierres: number }[]
-    recentDecs: { id: string; folio: string; studentName: string; severity: string; type: string; incident_date: string }[]
+    recentDecs: { id: string; folio: string; studentName: string; courseName: string; severity: string; type: string; incident_date: string }[]
+    resolutionRate: number
+    topCourses: { courseName: string; count: number }[]
+    totalPeriodDecs: number
 }
 
 const SEVERITY_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -47,7 +50,8 @@ function ChartTooltip({ active, payload, label }: any) {
 // ─── Main component ────────────────────────────────────────────────────────────
 export function ConvivenciaDashboardClient({ stats }: { stats: ConvivenciaStats }) {
     const { openDecs, activeAlerts, activePaecs, totalStudents,
-        decsByType, decsBySeverity, monthlyTrend, recentDecs } = stats
+        decsByType, decsBySeverity, monthlyTrend, recentDecs,
+        resolutionRate, topCourses, totalPeriodDecs } = stats
 
     return (
         <div className="space-y-6">
@@ -73,6 +77,64 @@ export function ConvivenciaDashboardClient({ stats }: { stats: ConvivenciaStats 
                     )
                     return href ? <Link key={label} href={href}>{content}</Link> : content
                 })}
+            </div>
+
+            {/* ── Tasa de resolución + Top cursos ── */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {/* Tasa de resolución */}
+                <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm flex items-center gap-5">
+                    <div
+                        className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-4"
+                        style={{ borderColor: resolutionRate >= 70 ? "#10b981" : resolutionRate >= 40 ? "#f59e0b" : "#ef4444" }}
+                    >
+                        <span
+                            className="text-xl font-extrabold tabular-nums"
+                            style={{ color: resolutionRate >= 70 ? "#10b981" : resolutionRate >= 40 ? "#f59e0b" : "#ef4444" }}
+                        >
+                            {resolutionRate}%
+                        </span>
+                    </div>
+                    <div>
+                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Tasa de resolución</p>
+                        <p className="text-2xl font-extrabold text-slate-800 mt-0.5">{resolutionRate}%</p>
+                        <p className="text-xs text-slate-400 mt-1">{totalPeriodDecs} DECs en 12 meses · {Math.round(totalPeriodDecs * resolutionRate / 100)} resueltos</p>
+                        <div className="mt-2 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                            <div
+                                className="h-full rounded-full transition-all"
+                                style={{
+                                    width: `${resolutionRate}%`,
+                                    background: resolutionRate >= 70 ? "#10b981" : resolutionRate >= 40 ? "#f59e0b" : "#ef4444"
+                                }}
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Top cursos con más incidentes */}
+                <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Cursos con más incidentes</p>
+                    {topCourses.length > 0 ? (
+                        <div className="space-y-2.5">
+                            {topCourses.map((c, i) => (
+                                <div key={c.courseName}>
+                                    <div className="flex items-center justify-between text-xs mb-0.5">
+                                        <div className="flex items-center gap-2">
+                                            <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black text-white ${i === 0 ? "bg-rose-500" : i === 1 ? "bg-orange-400" : "bg-amber-400"}`}>{i + 1}</span>
+                                            <span className="text-slate-700 font-medium">{c.courseName}</span>
+                                        </div>
+                                        <span className="font-bold text-slate-800 tabular-nums">{c.count}</span>
+                                    </div>
+                                    <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                                        <div className="h-full rounded-full bg-rose-400"
+                                            style={{ width: `${Math.round((c.count / (topCourses[0]?.count ?? 1)) * 100)}%` }} />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-xs text-slate-400 text-center py-4">Sin incidentes en el período 🎉</p>
+                    )}
+                </div>
             </div>
 
             {/* ── Row 2: DEC por tipo + DEC por gravedad ── */}
@@ -142,7 +204,7 @@ export function ConvivenciaDashboardClient({ stats }: { stats: ConvivenciaStats 
 
             {/* ── Row 3: Tendencia mensual ── */}
             <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Tendencia de casos — últimos 6 meses</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Tendencia de casos — últimos 12 meses</p>
                 <ResponsiveContainer width="100%" height={160}>
                     <AreaChart data={monthlyTrend} margin={{ top: 4, right: 8, bottom: 0, left: -24 }}>
                         <defs>
@@ -181,7 +243,7 @@ export function ConvivenciaDashboardClient({ stats }: { stats: ConvivenciaStats 
                                 <div key={d.id} className="flex items-center justify-between py-2">
                                     <div className="min-w-0">
                                         <p className="text-xs font-medium text-slate-800 truncate">{d.studentName}</p>
-                                        <p className="text-[10px] text-slate-400">{d.type} · Folio {d.folio}</p>
+                                        <p className="text-[10px] text-slate-400">{d.courseName} · {d.type} · Folio {d.folio}</p>
                                     </div>
                                     <div className="flex flex-col items-end shrink-0 ml-3">
                                         <span className="rounded-full px-2 py-0.5 text-[10px] font-medium text-white" style={{ background: cfg.color }}>

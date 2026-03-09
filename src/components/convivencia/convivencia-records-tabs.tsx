@@ -2,13 +2,13 @@
 
 import { useState, useTransition, useMemo } from "react"
 import { createConvivenciaRecord, updateConvivenciaRecord, resolveConvivenciaRecord } from "@/app/(dashboard)/registros-convivencia/actions"
-import { buildConvivenciaPdf } from "@/lib/pdf/convivencia-pdf"
+import { buildConvivenciaPdf, buildConvivenciaStatsPdf } from "@/lib/pdf/convivencia-pdf"
 import { toast } from "sonner"
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
     ResponsiveContainer, PieChart, Pie, Cell
 } from "recharts"
-import { ClipboardList, Plus, History, TrendingUp, TrendingDown, Minus, CheckCircle, ChevronDown, ChevronUp, Search, X, Mic, MicOff, BarChart3, Printer, Download, Edit, AlertCircle, Trophy, CalendarDays, Activity } from "lucide-react"
+import { ClipboardList, Plus, History, TrendingUp, TrendingDown, Minus, CheckCircle, ChevronDown, ChevronUp, Search, X, Mic, MicOff, BarChart3, Printer, Download, Edit, AlertCircle, Trophy, CalendarDays, Activity, MapPin, Users, Inbox, FileDown } from "lucide-react"
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const RECORD_TYPES: { value: string; label: string; color: string }[] = [
@@ -41,6 +41,12 @@ const SEVERITY_COLORS: { [key: string]: string } = {
     leve: "bg-yellow-100 text-yellow-700",
     moderada: "bg-orange-100 text-orange-700",
     grave: "bg-red-100 text-red-700",
+}
+
+const STATUS_LABELS: Record<string, { label: string; class: string }> = {
+    abierto: { label: "Abierta", class: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+    seguimiento: { label: "En seguimiento", class: "bg-orange-100 text-orange-700 border-orange-200" },
+    cerrado: { label: "Cerrada", class: "bg-slate-200 text-slate-700 border-slate-300" },
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -453,6 +459,67 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
         ]
     }, [records])
 
+    // Estado de casos (abierta / en seguimiento / cerrada) — clave para dupla y convivencia
+    const statusCounts = useMemo(() => {
+        let abiertos = 0
+        let seguimiento = 0
+        let cerrados = 0
+        for (const r of records) {
+            const s = (r.status || (r.resolved ? "cerrado" : "abierto")).toLowerCase()
+            if (s === "cerrado" || r.resolved) cerrados++
+            else if (s === "seguimiento") seguimiento++
+            else abiertos++
+        }
+        return { abiertos, seguimiento, cerrados }
+    }, [records])
+
+    // Lugares donde ocurren más casos (prevención y foco)
+    const byLocation = useMemo(() => {
+        const counts: Record<string, number> = {}
+        for (const r of records) {
+            const loc = (r.location || "Sin especificar").trim()
+            counts[loc] = (counts[loc] ?? 0) + 1
+        }
+        return Object.entries(counts)
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 8)
+    }, [records])
+
+    // Promedio de involucrados por caso y distribución (individual vs grupal)
+    const involvedStats = useMemo(() => {
+        if (records.length === 0) return { avg: 0, soloUno: 0, dosOMas: 0 }
+        let total = 0
+        let soloUno = 0
+        let dosOMas = 0
+        for (const r of records) {
+            const n = r.involved_count ?? 0
+            total += n
+            if (n <= 1) soloUno++
+            else dosOMas++
+        }
+        return {
+            avg: records.length > 0 ? Number((total / records.length).toFixed(1)) : 0,
+            soloUno,
+            dosOMas,
+        }
+    }, [records])
+
+    // Tendencia: últimos 30 días vs 30 días anteriores
+    const last30Prev = useMemo(() => {
+        const from = new Date()
+        from.setDate(from.getDate() - 60)
+        const to = new Date()
+        to.setDate(to.getDate() - 30)
+        return records.filter((r: ConvivenciaRecord) => {
+            const d = new Date(r.incident_date)
+            return d >= from && d < to
+        })
+    }, [records])
+    const trendVsPrev = last30.length > 0 && last30Prev.length > 0
+        ? Math.round(((last30.length - last30Prev.length) / last30Prev.length) * 100)
+        : null
+
     function toggleAction(a: string) {
         setActions(prev => prev.includes(a) ? prev.filter(x => x !== a) : [...prev, a])
     }
@@ -530,7 +597,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
     }
 
     function handleResolved(id: string, notes: string) {
-        setRecords(prev => prev.map(r => r.id === id ? { ...r, resolved: true, resolution_notes: notes } : r))
+        setRecords(prev => prev.map(r => r.id === id ? { ...r, resolved: true, resolution_notes: notes, status: "cerrado" } : r))
     }
 
     function handlePrint(record: ConvivenciaRecord) {
@@ -542,6 +609,55 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
     function handleDownloadPdf(record: ConvivenciaRecord) {
         const doc = buildConvivenciaPdf(record, reporterName)
         doc.save(`registro-convivencia-${record.type || 'caso'}.pdf`)
+    }
+
+    function getStatsPdfData() {
+        return {
+            statusCounts: { abiertos: statusCounts.abiertos, seguimiento: statusCounts.seguimiento, cerrados: statusCounts.cerrados },
+            last30: last30.length,
+            lastWeek: lastWeek.length,
+            weekPct: weekPct,
+            weekDiff: weekDiff,
+            topTypeLabel: topType?.label ?? null,
+            gravesLast30: last30.filter(r => r.severity === "grave").length,
+            resolutionRate: resolutionRate,
+            resolvedCount: records.filter(r => r.resolved).length,
+            totalRecords: records.length,
+            trendVsPrev: trendVsPrev,
+            severityDist: severityDist.map(s => ({ label: s.label, count: s.count })),
+            daysHeatmap: daysHeatmap.map(d => ({ name: d.name, count: d.count })),
+            byLocation: byLocation.map(l => ({ name: l.name, count: l.count })),
+            involvedStats: { avg: involvedStats.avg, soloUno: involvedStats.soloUno, dosOMas: involvedStats.dosOMas },
+            weeklyData: weeklyData.map(w => ({ semana: w.semana, casos: w.casos })),
+            pieData: pieData.map(p => ({ name: p.name, value: p.value })),
+            topReincidentStudents: topReincidentStudents.map(s => ({ name: s.name, last_name: s.last_name, count: s.count })),
+            topActionsTaken: topActionsTaken.map(a => ({ name: a.name, count: a.count })),
+        }
+    }
+
+    function handleDownloadStatsPdf() {
+        try {
+            const data = getStatsPdfData()
+            const doc = buildConvivenciaStatsPdf(data)
+            doc.save(`estadisticas-convivencia-${new Date().toISOString().slice(0, 10)}.pdf`)
+            toast.success("PDF descargado")
+        } catch (e) {
+            console.error(e)
+            toast.error("No se pudo generar el PDF")
+        }
+    }
+
+    function handlePrintStats() {
+        try {
+            const data = getStatsPdfData()
+            const doc = buildConvivenciaStatsPdf(data)
+            doc.autoPrint()
+            doc.output("dataurlnewwindow")
+            toast.success("Abriendo impresión...")
+        } catch (e) {
+            console.error(e)
+            toast.error("No se pudo abrir la impresión")
+        }
     }
 
     function handleEdit(record: ConvivenciaRecord) {
@@ -983,12 +1099,64 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
             {/* ── ESTADÍSTICAS ── */}
             {tab === "estadisticas" && (
                 <div className="space-y-6">
+                    {/* Acciones: Descargar PDF e Imprimir */}
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-sm font-medium text-slate-600">Exportar informe</p>
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={handleDownloadStatsPdf}
+                                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
+                            >
+                                <FileDown className="w-4 h-4" />
+                                Descargar PDF
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handlePrintStats}
+                                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 transition-colors"
+                            >
+                                <Printer className="w-4 h-4" />
+                                Imprimir
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Estado de casos (abiertos / seguimiento / cerrados) — prioridad dupla y convivencia */}
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
+                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                            <Inbox className="w-3.5 h-3.5" /> Estado de casos (período)
+                        </p>
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="bg-white rounded-xl border border-amber-200/80 p-4 shadow-sm">
+                                <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide">Abiertos</p>
+                                <p className="text-2xl font-bold text-amber-700 mt-0.5">{statusCounts.abiertos}</p>
+                                <p className="text-xs text-slate-500 mt-0.5">Requieren atención</p>
+                            </div>
+                            <div className="bg-white rounded-xl border border-orange-200/80 p-4 shadow-sm">
+                                <p className="text-[10px] font-semibold text-orange-700 uppercase tracking-wide">En seguimiento</p>
+                                <p className="text-2xl font-bold text-orange-700 mt-0.5">{statusCounts.seguimiento}</p>
+                                <p className="text-xs text-slate-500 mt-0.5">En proceso</p>
+                            </div>
+                            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                                <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wide">Cerrados</p>
+                                <p className="text-2xl font-bold text-slate-700 mt-0.5">{statusCounts.cerrados}</p>
+                                <p className="text-xs text-slate-500 mt-0.5">Resueltos</p>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Stat cards */}
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         <div className="bg-white rounded-2xl border p-4 shadow-sm">
                             <p className="text-xs font-medium text-slate-500">Últimos 30 días</p>
                             <p className="text-3xl font-bold text-slate-800 mt-1">{last30.length}</p>
                             <p className="text-xs text-slate-400 mt-1">casos registrados</p>
+                            {trendVsPrev !== null && (
+                                <p className={`text-[10px] font-medium mt-1 ${trendVsPrev >= 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                                    {trendVsPrev >= 0 ? "+" : ""}{trendVsPrev}% vs 30 días anteriores
+                                </p>
+                            )}
                         </div>
                         <div className="bg-white rounded-2xl border p-4 shadow-sm">
                             <p className="text-xs font-medium text-slate-500">Esta semana</p>
@@ -1155,6 +1323,51 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             </div>
                         </div>
 
+                        {/* 3b. Lugares más frecuentes — prevención y foco */}
+                        <div className="bg-white rounded-2xl border shadow-sm p-5">
+                            <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                                <MapPin className="w-4 h-4 text-rose-500" />
+                                Lugares donde ocurren más casos
+                            </h3>
+                            {byLocation.length === 0 ? (
+                                <p className="text-sm text-slate-400 py-4">Sin datos de lugar.</p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {byLocation.map((loc) => {
+                                        const pct = records.length > 0 ? Math.round((loc.count / records.length) * 100) : 0
+                                        return (
+                                            <div key={loc.name} className="flex items-center justify-between gap-2">
+                                                <span className="text-xs font-medium text-slate-700 truncate" title={loc.name}>{loc.name}</span>
+                                                <span className="text-xs text-slate-500 shrink-0">{loc.count} ({pct}%)</span>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 3c. Involucrados por caso — individual vs grupal */}
+                        <div className="bg-white rounded-2xl border shadow-sm p-5">
+                            <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
+                                <Users className="w-4 h-4 text-violet-500" />
+                                Involucrados por caso
+                            </h3>
+                            <div className="space-y-3">
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-2xl font-bold text-slate-800">{involvedStats.avg}</span>
+                                    <span className="text-xs text-slate-500">promedio de personas por caso</span>
+                                </div>
+                                <div className="flex gap-3 text-xs">
+                                    <span className="px-2 py-1 rounded-lg bg-slate-100 text-slate-600">
+                                        1 involucrado: {involvedStats.soloUno}
+                                    </span>
+                                    <span className="px-2 py-1 rounded-lg bg-indigo-100 text-indigo-700">
+                                        2 o más: {involvedStats.dosOMas}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
                         {/* 4. Top Estudiantes Reincidentes */}
                         <div className="bg-white rounded-2xl border shadow-sm p-5 md:col-span-2 lg:col-span-1">
                             <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
@@ -1251,14 +1464,12 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex flex-wrap items-center gap-2 mb-2">
                                                         <span className="font-bold text-slate-800 text-sm">{rtype?.label ?? r.type}</span>
+                                                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${(STATUS_LABELS[r.status] ?? (r.resolved ? STATUS_LABELS.cerrado : STATUS_LABELS.abierto)).class}`}>
+                                                            {(STATUS_LABELS[r.status] ?? (r.resolved ? STATUS_LABELS.cerrado : STATUS_LABELS.abierto)).label}
+                                                        </span>
                                                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${SEVERITY_COLORS[r.severity] ?? "bg-slate-100 text-slate-600"}`}>
                                                             {r.severity.toUpperCase()}
                                                         </span>
-                                                        {r.resolved && (
-                                                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 flex items-center gap-1 border border-emerald-200">
-                                                                <CheckCircle className="w-3 h-3" /> Resuelto
-                                                            </span>
-                                                        )}
                                                     </div>
 
                                                     <p className="text-sm text-slate-600 mt-2 leading-relaxed whitespace-pre-wrap">{r.description}</p>
@@ -1303,20 +1514,30 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                                         </div>
                                                     )}
 
-                                                    <div className="w-full mt-auto space-y-2">
-                                                        <div className="flex justify-end gap-2">
-                                                            <button type="button" onClick={() => handleDownloadPdf(r)}
-                                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100 text-xs font-bold transition-colors">
-                                                                <Download className="w-3.5 h-3.5" /> PDF
-                                                            </button>
-                                                            <button type="button" onClick={() => handlePrint(r)}
-                                                                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 text-xs font-bold transition-colors">
-                                                                <Printer className="w-3.5 h-3.5" /> Imprimir
-                                                            </button>
-                                                        </div>
-                                                        <button type="button" onClick={() => handleEdit(r)}
-                                                            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 text-xs font-bold transition-colors shadow-sm">
-                                                            <Edit className="w-3.5 h-3.5" /> Editar Registro
+                                                    <div className="w-full mt-auto flex justify-end gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDownloadPdf(r)}
+                                                            className="h-8 w-8 flex items-center justify-center rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100 transition-colors"
+                                                            aria-label="Descargar PDF"
+                                                        >
+                                                            <Download className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handlePrint(r)}
+                                                            className="h-8 w-8 flex items-center justify-center rounded-full bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 transition-colors"
+                                                            aria-label="Imprimir registro"
+                                                        >
+                                                            <Printer className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleEdit(r)}
+                                                            className="h-8 w-8 flex items-center justify-center rounded-full bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-sm"
+                                                            aria-label="Editar registro"
+                                                        >
+                                                            <Edit className="w-3.5 h-3.5" />
                                                         </button>
                                                     </div>
                                                 </div>

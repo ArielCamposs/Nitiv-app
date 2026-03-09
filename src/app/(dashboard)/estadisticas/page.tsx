@@ -3,7 +3,7 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { StatisticsDashboard } from "@/components/statistics/StatisticsDashboard"
 
-const ALLOWED_ROLES = ["admin", "director", "dupla", "utp"]
+const ALLOWED_ROLES = ["admin", "director", "dupla", "utp", "convivencia"]
 
 export default async function EstadisticasPage() {
     const cookieStore = await cookies()
@@ -36,6 +36,7 @@ export default async function EstadisticasPage() {
                 <StatisticsDashboard
                     institutionId={profile.institution_id}
                     institutionName={(profile as any).institution?.name ?? "Institución"}
+                    role={profile.role}
                 />
             </div>
         </main>

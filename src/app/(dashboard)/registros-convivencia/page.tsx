@@ -45,7 +45,7 @@ export default async function RegistrosConvivenciaPage() {
             .from("convivencia_records")
             .select(`
                 id, type, severity, location, description,
-                involved_count, actions_taken, resolved,
+                involved_count, actions_taken, resolved, status,
                 resolution_notes, incident_date,
                 convivencia_record_students (
                     student_id,

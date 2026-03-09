@@ -49,7 +49,7 @@ export async function getHeatmapData() {
             .order("name"),
         supabase
             .from("teacher_logs")
-            .select("course_id, energy_level, log_date, teacher_id")
+            .select("course_id, energy_level, log_date, teacher_id, block_number, session_time")
             .eq("institution_id", profile.institution_id)
             .gte("log_date", since90.toISOString().split("T")[0])
             .order("log_date", { ascending: true }),
@@ -57,7 +57,7 @@ export async function getHeatmapData() {
 
     const uniqueTeacherIds = Array.from(new Set((logs ?? []).map(l => l.teacher_id).filter(Boolean)))
 
-    let teachers: { id: string, name: string }[] = []
+    let teachers: { id: string; name: string; last_name: string }[] = []
     if (uniqueTeacherIds.length > 0) {
         const { data: usersData } = await supabase
             .from("users")
@@ -65,8 +65,12 @@ export async function getHeatmapData() {
             .in("id", uniqueTeacherIds)
 
         if (usersData) {
-            teachers = usersData.map(u => ({ id: u.id, name: `${u.name} ${u.last_name || ""}`.trim() }))
-            teachers.sort((a, b) => a.name.localeCompare(b.name))
+            teachers = usersData.map(u => ({
+                id: u.id,
+                name: (u as any).name ?? "",
+                last_name: (u as any).last_name ?? "",
+            }))
+            teachers.sort((a, b) => ((a.last_name || a.name).localeCompare(b.last_name || b.name)))
         }
     }
 

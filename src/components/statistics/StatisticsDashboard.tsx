@@ -2,20 +2,20 @@
 
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { SummaryCards } from "@/components/statistics/SummaryCards"
-import { RiskCoursesSection } from "@/components/statistics/RiskCoursesSection"
+import { Card, CardContent } from "@/components/ui/card"
+import { OverviewSection } from "@/components/statistics/OverviewSection"
 import { IncidentsSection } from "@/components/statistics/IncidentsSection"
 import { ActivitiesSection } from "@/components/statistics/ActivitiesSection"
 import { toast } from "sonner"
 import { getDashboardData, DashboardData } from "@/actions/statistics/getDashboardData"
 
 import { useRef } from "react"
-import jsPDF from "jspdf"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { generateStatisticsReport } from "@/app/(dashboard)/estadisticas/export-pdf"
+import Link from "next/link"
+import { ClipboardList, ArrowRight } from "lucide-react"
 
-type Props = { institutionId: string; institutionName: string }
+type Props = { institutionId: string; institutionName: string; role?: string }
 
 const RANGES = [
     { value: 30, label: "Últimos 30 días" },
@@ -23,7 +23,7 @@ const RANGES = [
     { value: 365, label: "Últimos 365 días" },
 ]
 
-export function StatisticsDashboard({ institutionId, institutionName }: Props) {
+export function StatisticsDashboard({ institutionId, institutionName, role }: Props) {
     const [days, setDays] = useState<number>(30)
     const [loading, setLoading] = useState(false)
     const [data, setData] = useState<DashboardData | null>(null)
@@ -32,7 +32,7 @@ export function StatisticsDashboard({ institutionId, institutionName }: Props) {
     const loadData = async (range: number) => {
         setLoading(true)
         try {
-            const result = await getDashboardData(institutionId, range)
+            const result = await getDashboardData(institutionId, range, role)
             if (result.error) {
                 toast.error(result.error)
             } else {
@@ -55,30 +55,12 @@ export function StatisticsDashboard({ institutionId, institutionName }: Props) {
             const pdf = await generateStatisticsReport({
                 institutionName,
                 days,
-                summary: {
-                    studentsAtRisk: data.courseRisks.reduce((acc, c) => acc + c.low_students.length, 0),
-                    coursesAtRisk: data.summary.low_emotion_courses,
-                    totalIncidents: data.summary.total_incidents,
-                    averageAttendance: 0,
-                    averageGrade: 0,
-                },
-                courseRisks: data.courseRisks.map(c => ({
-                    courseName: c.course_name,
-                    studentsAtRisk: c.low_students.length,
-                    averageGrade: Number(c.avg_score.toFixed(1)),
-                    averageAttendance: 0
-                })),
-                incidents: data.incidents.recent.map(i => ({
-                    type: i.type,
-                    studentName: i.student_name,
-                    createdAt: i.incident_date,
-                    status: "Abierto"
-                })),
-                activities: data.activities.recent.map(a => ({
-                    description: a.title,
-                    userName: "Sistema",
-                    timestamp: a.start_datetime
-                }))
+                summary: data.summary,
+                convivenciaSummary: data.convivenciaSummary,
+                emotionDistribution: data.emotionDistribution,
+                courseRisks: data.courseRisks,
+                incidents: data.incidents,
+                activities: data.activities,
             })
 
             const filename = `informe-estadisticas-${days}d.pdf`
@@ -96,8 +78,31 @@ export function StatisticsDashboard({ institutionId, institutionName }: Props) {
         void loadData(days)
     }, [days, institutionId])
 
+    const showConvivenciaHint = role === "dupla" || role === "convivencia"
+
     return (
         <div className="space-y-6">
+            {/* Aviso dupla/convivencia: enlace a estadísticas de registros */}
+            {showConvivenciaHint && (
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50/80 px-4 py-3 text-sm text-indigo-800">
+                    <p className="font-medium flex items-center gap-2">
+                        <ClipboardList className="w-4 h-4 shrink-0" />
+                        Estadísticas de registros de convivencia
+                    </p>
+                    <p className="mt-1 text-indigo-700/90">
+                        Para estadísticas detalladas por tipo, resolución y tendencias de casos, usa{" "}
+                        <Link
+                            href="/registros-convivencia"
+                            className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:text-indigo-800 underline underline-offset-2"
+                        >
+                            Registros de convivencia
+                            <ArrowRight className="w-3.5 h-3.5" />
+                        </Link>
+                        {" "}→ pestaña <strong>Estadísticas</strong>.
+                    </p>
+                </div>
+            )}
+
             {/* Selector de periodo + PDF */}
             <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap gap-2">
@@ -131,22 +136,27 @@ export function StatisticsDashboard({ institutionId, institutionName }: Props) {
             >
                 {data ? (
                     <Tabs defaultValue="overview" className="space-y-6">
-                        <TabsList className="bg-slate-100/50 border">
-                            <TabsTrigger value="overview" className="text-xs">Resumen</TabsTrigger>
-                            <TabsTrigger value="incidents" className="text-xs">Incidentes DEC</TabsTrigger>
-                            <TabsTrigger value="activities" className="text-xs">Actividades</TabsTrigger>
+                        <TabsList className="bg-slate-100/80 border border-slate-200 p-1 rounded-xl h-auto gap-0.5">
+                            <TabsTrigger value="overview" className="text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg px-4 py-2">
+                                Resumen
+                            </TabsTrigger>
+                            <TabsTrigger value="incidents" className="text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg px-4 py-2">
+                                Incidentes DEC
+                            </TabsTrigger>
+                            <TabsTrigger value="activities" className="text-xs data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-lg px-4 py-2">
+                                Actividades
+                            </TabsTrigger>
                         </TabsList>
 
-                        <TabsContent value="overview" className="space-y-6">
-                            <SummaryCards data={data.summary} />
-                            <RiskCoursesSection courses={data.courseRisks} />
+                        <TabsContent value="overview" className="mt-6">
+                            <OverviewSection data={data} days={days} />
                         </TabsContent>
 
-                        <TabsContent value="incidents" className="space-y-6">
+                        <TabsContent value="incidents" className="space-y-6 mt-6">
                             <IncidentsSection incidents={data.incidents} days={days} />
                         </TabsContent>
 
-                        <TabsContent value="activities" className="space-y-6">
+                        <TabsContent value="activities" className="space-y-6 mt-6">
                             <ActivitiesSection activities={data.activities} />
                         </TabsContent>
                     </Tabs>

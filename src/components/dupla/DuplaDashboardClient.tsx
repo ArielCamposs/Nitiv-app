@@ -23,6 +23,8 @@ export interface DuplaStats {
     alertsByType: { name: string; count: number; color: string }[]
     bienestarPromedio: number | null
     recentAlerts: { id: string; studentName: string; courseName: string; type: string; created_at: string }[]
+    participationRate: number
+    studentsWithoutCheckin: number
 }
 
 const EMOTION_COLORS: Record<string, string> = {
@@ -89,7 +91,7 @@ export function DuplaDashboardClient({ stats }: { stats: DuplaStats }) {
     const {
         totalStudents, activeAlerts, helpRequests, checkinsThisWeek,
         emotionDistribution, weeklyTrend, climatePorCurso, alertsByType,
-        bienestarPromedio, recentAlerts,
+        bienestarPromedio, recentAlerts, participationRate, studentsWithoutCheckin,
     } = stats
 
     const bienestarColor =
@@ -129,7 +131,7 @@ export function DuplaDashboardClient({ stats }: { stats: DuplaStats }) {
                 <KpiCard
                     label="Check-ins semana"
                     value={checkinsThisWeek}
-                    sub="Registros emocionales"
+                    sub={`${participationRate}% participación`}
                     icon={HeartPulse}
                     color="bg-emerald-500"
                 />
@@ -139,7 +141,7 @@ export function DuplaDashboardClient({ stats }: { stats: DuplaStats }) {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 {/* Bienestar promedio */}
                 <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm flex flex-col items-center justify-center text-center gap-2">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Bienestar promedio 30d</p>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Bienestar promedio 30 días</p>
                     <p className={`text-5xl font-extrabold tabular-nums ${bienestarColor}`}>
                         {bienestarPromedio !== null ? bienestarPromedio.toFixed(1) : "—"}
                     </p>
@@ -152,11 +154,25 @@ export function DuplaDashboardClient({ stats }: { stats: DuplaStats }) {
                             }
                         </div>
                     )}
+                    <div className="mt-2 w-full pt-2 border-t border-slate-100 space-y-1">
+                        <div className="flex items-center justify-between text-[10px] text-slate-500">
+                            <span>Sin registro esta semana</span>
+                            <span className={`font-bold ${studentsWithoutCheckin > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                                {studentsWithoutCheckin} alumnos
+                            </span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                            <div
+                                className="h-full rounded-full bg-emerald-400 transition-all"
+                                style={{ width: `${participationRate}%` }}
+                            />
+                        </div>
+                    </div>
                 </div>
 
                 {/* Distribución emocional (Pie) */}
                 <div className="sm:col-span-2 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Distribución emocional — últimos 7 días</p>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Distribución emocional — últimos 30 días</p>
                     {emotionDistribution.some(e => e.value > 0) ? (
                         <div className="flex items-center gap-4">
                             <ResponsiveContainer width={140} height={140}>
@@ -192,7 +208,7 @@ export function DuplaDashboardClient({ stats }: { stats: DuplaStats }) {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {/* Tendencia 7 días */}
                 <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Tendencia check-ins — últimos 7 días</p>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Tendencia check-ins — últimas 4 semanas</p>
                     <ResponsiveContainer width="100%" height={160}>
                         <LineChart data={weeklyTrend} margin={{ top: 4, right: 8, bottom: 0, left: -24 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -229,9 +245,9 @@ export function DuplaDashboardClient({ stats }: { stats: DuplaStats }) {
                 <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Clima de aula por curso — últimos 28 días</p>
                     {climatePorCurso.length > 0 ? (
-                        <ResponsiveContainer width="100%" height={160}>
+                        <ResponsiveContainer width="100%" height={Math.max(160, climatePorCurso.length * 28)}>
                             <BarChart
-                                data={climatePorCurso.slice(0, 6)}
+                                data={climatePorCurso}
                                 layout="vertical"
                                 margin={{ top: 0, right: 16, bottom: 0, left: 0 }}
                             >
@@ -239,7 +255,7 @@ export function DuplaDashboardClient({ stats }: { stats: DuplaStats }) {
                                 <YAxis type="category" dataKey="curso" tick={{ fontSize: 9, fill: "#64748b" }} width={52} />
                                 <Tooltip content={<ChartTooltip />} />
                                 <Bar dataKey="score" name="Prom. clima" radius={[0, 4, 4, 0]}>
-                                    {climatePorCurso.slice(0, 6).map((entry, i) => (
+                                    {climatePorCurso.map((entry, i) => (
                                         <Cell key={i}
                                             fill={entry.score >= 3.5 ? "#10b981"
                                                 : entry.score >= 2.5 ? "#f59e0b"

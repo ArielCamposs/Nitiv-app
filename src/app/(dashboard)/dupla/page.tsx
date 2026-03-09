@@ -26,7 +26,7 @@ export default async function DuplaPage() {
 
     const now = new Date()
     const day28Ago = new Date(now.getTime() - 28 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
-    const day7Ago = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const day30Ago = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString()
     const weekStart = new Date(now)
     weekStart.setDate(now.getDate() - now.getDay())
     weekStart.setHours(0, 0, 0, 0)
@@ -35,7 +35,7 @@ export default async function DuplaPage() {
         { data: students },
         { data: alerts },
         { data: helpRequests },
-        { data: emotionLogs7d },
+        { data: emotionLogs30d },
         { data: emotionLogsWeek },
         { data: teacherLogs },
         { data: courses },
@@ -43,7 +43,7 @@ export default async function DuplaPage() {
         supabase.from("students").select("id, name, last_name, course_id").eq("institution_id", iid).eq("active", true),
         supabase.from("alerts").select("id, student_id, type, created_at, resolved").eq("institution_id", iid).eq("resolved", false).order("created_at", { ascending: false }),
         supabase.from("help_requests").select("id, status").eq("institution_id", iid).eq("status", "pending"),
-        supabase.from("emotional_logs").select("student_id, emotion, created_at").eq("institution_id", iid).gte("created_at", day7Ago).order("created_at"),
+        supabase.from("emotional_logs").select("student_id, emotion, created_at").eq("institution_id", iid).gte("created_at", day30Ago).order("created_at"),
         supabase.from("emotional_logs").select("student_id, emotion, created_at").eq("institution_id", iid).gte("created_at", weekStart.toISOString()),
         supabase.from("teacher_logs").select("course_id, energy_level, log_date").eq("institution_id", iid).gte("log_date", day28Ago),
         supabase.from("courses").select("id, name, section").eq("institution_id", iid).eq("active", true),
@@ -55,15 +55,15 @@ export default async function DuplaPage() {
     const helpCount = helpRequests?.length ?? 0
     const checkinsThisWeek = emotionLogsWeek?.length ?? 0
 
-    // ── Bienestar promedio (últimos 7 días) ─────────────────────────────────────
-    const last30Scores = (emotionLogs7d ?? []).map(l => EMOTION_SCORE[l.emotion] ?? 3)
+    // ── Bienestar promedio (últimos 30 días) ────────────────────────────────────
+    const last30Scores = (emotionLogs30d ?? []).map(l => EMOTION_SCORE[l.emotion] ?? 3)
     const bienestarPromedio = last30Scores.length > 0
         ? Math.round((last30Scores.reduce((a, b) => a + b, 0) / last30Scores.length) * 10) / 10
         : null
 
-    // ── Distribución emocional (últimos 7 días) ─────────────────────────────────
+    // ── Distribución emocional (últimos 30 días) ────────────────────────────────
     const emotionCount: Record<string, number> = { muy_bien: 0, bien: 0, neutral: 0, mal: 0, muy_mal: 0 }
-    for (const l of (emotionLogs7d ?? [])) {
+    for (const l of (emotionLogs30d ?? [])) {
         if (emotionCount[l.emotion] !== undefined) emotionCount[l.emotion]++
     }
     const emotionColors: Record<string, string> = {
@@ -78,21 +78,28 @@ export default async function DuplaPage() {
         color: emotionColors[key],
     }))
 
-    // ── Tendencia diaria últimos 7 días ─────────────────────────────────────────
-    const dayLabels = ["Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sá"]
-    const weeklyTrend = Array.from({ length: 7 }, (_, i) => {
-        const d = new Date(now.getTime() - (6 - i) * 24 * 60 * 60 * 1000)
-        const dateStr = d.toISOString().split("T")[0]
-        const dayLogs = (emotionLogs7d ?? []).filter(l => l.created_at.startsWith(dateStr))
+    // ── Tendencia por semana — últimas 4 semanas ────────────────────────────────
+    const weeklyTrend = Array.from({ length: 4 }, (_, wi) => {
+        const weekEnd = new Date(now.getTime() - wi * 7 * 24 * 60 * 60 * 1000)
+        const weekStart2 = new Date(weekEnd.getTime() - 7 * 24 * 60 * 60 * 1000)
+        const weekLogs = (emotionLogs30d ?? []).filter(l => {
+            const d = new Date(l.created_at)
+            return d >= weekStart2 && d <= weekEnd
+        })
+        return {
+            day: `S${4 - wi}`,
+            muy_bien: weekLogs.filter(l => l.emotion === "muy_bien").length,
+            bien: weekLogs.filter(l => l.emotion === "bien").length,
+            neutral: weekLogs.filter(l => l.emotion === "neutral").length,
+            mal: weekLogs.filter(l => l.emotion === "mal").length,
+            muy_mal: weekLogs.filter(l => l.emotion === "muy_mal").length,
+        }
+    }).reverse()
 
-        const muy_bien = dayLogs.filter(l => l.emotion === "muy_bien").length
-        const bien = dayLogs.filter(l => l.emotion === "bien").length
-        const neutral = dayLogs.filter(l => l.emotion === "neutral").length
-        const mal = dayLogs.filter(l => l.emotion === "mal").length
-        const muy_mal = dayLogs.filter(l => l.emotion === "muy_mal").length
-
-        return { day: dayLabels[d.getDay()], muy_bien, bien, neutral, mal, muy_mal }
-    })
+    // ── Participación semanal ───────────────────────────────────────────────────
+    const uniqueStudentsThisWeek = new Set((emotionLogsWeek ?? []).map(l => l.student_id)).size
+    const participationRate = totalStudents > 0 ? Math.round((uniqueStudentsThisWeek / totalStudents) * 100) : 0
+    const studentsWithoutCheckin = totalStudents - uniqueStudentsThisWeek
 
     // ── Clima de aula por curso ──────────────────────────────────────────────────
     const climatePorCurso = (courses ?? []).map(c => {
@@ -146,6 +153,7 @@ export default async function DuplaPage() {
         totalStudents, activeAlerts, helpRequests: helpCount,
         checkinsThisWeek, emotionDistribution, weeklyTrend,
         climatePorCurso, alertsByType, bienestarPromedio, recentAlerts,
+        participationRate, studentsWithoutCheckin,
     }
 
     return (

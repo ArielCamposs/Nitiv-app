@@ -1,5 +1,5 @@
 import { getHeatmapData } from "@/lib/data/get-heatmap-data"
-import { ClimateHistoryChart } from "@/components/teacher/climate-history-chart"
+import { ClimateHeatmapTabs } from "@/components/heatmap/climate-heatmap-tabs"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 
@@ -19,7 +19,7 @@ export default async function DuplaHeatmapPage() {
                         </p>
                     </div>
                 </div>
-                <ClimateHistoryChart courses={courses} historyLogs={historyLogs} showFilters={true} teachers={teachers} />
+                <ClimateHeatmapTabs courses={courses} historyLogs={historyLogs} teachers={teachers} />
             </div>
         </main>
     )

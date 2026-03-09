@@ -62,7 +62,14 @@ function formatDateToSQL(date: Date) {
 export function ClimateHistoryChart({ courses, historyLogs, showFilters, teachers }: Props) {
     const [mounted, setMounted] = useState(false)
     const [currentWeekStart, setCurrentWeekStart] = useState(() => getMonday(new Date()))
-    const [selectedCourse, setSelectedCourse] = useState<string>("all")
+    const [selectedCourse, setSelectedCourse] = useState<string>(() => {
+        const firstWithLogs = courses.find(c => {
+            const id = c.id || c.course_id
+            return historyLogs.some(l => l.course_id === id)
+        })
+        const fallback = courses[0]?.id || courses[0]?.course_id || "all"
+        return firstWithLogs?.id || firstWithLogs?.course_id || fallback
+    })
 
     useEffect(() => {
         setMounted(true)
@@ -71,7 +78,12 @@ export function ClimateHistoryChart({ courses, historyLogs, showFilters, teacher
     // Robust synchronization: if courses changes (e.g. parent filtered), update selection
     useEffect(() => {
         if (courses.length > 0 && selectedCourse === "all") {
-            const firstId = courses[0].id || courses[0].course_id
+            const firstWithLogs = courses.find(c => {
+                const id = c.id || c.course_id
+                return historyLogs.some(l => l.course_id === id)
+            })
+            const firstId = firstWithLogs?.id || firstWithLogs?.course_id
+                || courses[0]?.id || courses[0]?.course_id
             if (firstId) setSelectedCourse(firstId)
         }
     }, [courses])
@@ -81,7 +93,7 @@ export function ClimateHistoryChart({ courses, historyLogs, showFilters, teacher
         if (selectedCourse === "all") return []
 
         const weekEnd = new Date(currentWeekStart)
-        weekEnd.setDate(currentWeekStart.getDate() + 6) // Inclusive of Saturday
+        weekEnd.setDate(currentWeekStart.getDate() + 4) // Inclusive of Friday only
         weekEnd.setHours(23, 59, 59, 999)
 
         return historyLogs.filter(l => {
@@ -121,6 +133,13 @@ export function ClimateHistoryChart({ courses, historyLogs, showFilters, teacher
         end.setDate(currentWeekStart.getDate() + 4)
         return `${currentWeekStart.toLocaleDateString("es-CL", { day: 'numeric', month: 'short' })} - ${end.toLocaleDateString("es-CL", { day: 'numeric', month: 'short' })}`
     }, [currentWeekStart])
+
+    const isCurrentWeek = useMemo(() => {
+        const todayWeekStart = getMonday(new Date())
+        return todayWeekStart.getTime() === currentWeekStart.getTime()
+    }, [currentWeekStart])
+
+    const goToToday = () => setCurrentWeekStart(getMonday(new Date()))
 
     // Map logs to Day and Block for easy grid rendering
     const gridData = useMemo(() => {
@@ -184,6 +203,14 @@ export function ClimateHistoryChart({ courses, historyLogs, showFilters, teacher
                         </span>
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => changeWeek(1)}>
                             <ChevronRight className="w-4 h-4" />
+                        </Button>
+                        <Button
+                            variant={isCurrentWeek ? "secondary" : "ghost"}
+                            size="sm"
+                            className="h-7 px-2 text-[11px] font-bold shrink-0"
+                            onClick={goToToday}
+                        >
+                            Hoy
                         </Button>
                     </div>
                 </div>

@@ -136,7 +136,7 @@ export async function resolveConvivenciaRecord(id: string, resolutionNotes: stri
 
     const { error } = await supabase
         .from("convivencia_records")
-        .update({ resolved: true, resolution_notes: resolutionNotes })
+        .update({ resolved: true, resolution_notes: resolutionNotes, status: "cerrado" })
         .eq("id", id)
 
     if (error) return { error: error.message }
