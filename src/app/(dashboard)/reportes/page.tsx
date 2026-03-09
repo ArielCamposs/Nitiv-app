@@ -53,28 +53,21 @@ async function getReportesData() {
         { data: teacherLogs },
         { data: reporters },
         { data: institution },
-        { data: pulseResults },
-        { data: activePulse },
     ] = await Promise.all([
         supabase.from("courses").select("id, name, section").eq("institution_id", iid).eq("active", true),
         supabase.from("students").select("id, name, last_name, course_id").eq("institution_id", iid).eq("active", true),
-        supabase.from("emotional_logs").select("student_id, emotion, intensity, reflection, created_at").eq("institution_id", iid).gte("created_at", since.toISOString()).order("created_at", { ascending: false }),
+        supabase
+            .from("emotional_logs")
+            .select("student_id, emotion, intensity, stress_level, anxiety_level, reflection, created_at")
+            .eq("institution_id", iid)
+            .gte("created_at", since.toISOString())
+            .order("created_at", { ascending: false }),
         supabase.from("incidents").select("id, student_id, reporter_id, folio, type, severity, resolved, incident_date, end_date").eq("institution_id", iid).order("incident_date", { ascending: false }),
         supabase.from("alerts").select("id, student_id, type, description, resolved, created_at").eq("institution_id", iid).order("created_at", { ascending: false }),
         supabase.from("paec").select("id, student_id, active").eq("institution_id", iid),
         supabase.from("teacher_logs").select("course_id, energy_level, log_date").eq("institution_id", iid).gte("log_date", new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]),
         supabase.from("users").select("id, name, last_name").eq("institution_id", iid),
         supabase.from("institutions").select("name").eq("id", iid).maybeSingle(),
-        supabase.from("pulse_cross_results")
-            .select("*")
-            .eq("institution_id", iid)
-            .order("week_start", { ascending: false })
-            .limit(5),
-        supabase.from("pulse_sessions")
-            .select("id, week_start, week_end")
-            .eq("institution_id", iid)
-            .eq("active", true)
-            .maybeSingle(),
     ])
 
     const studentsMap = Object.fromEntries((students ?? []).map(s => [s.id, s]))
@@ -88,8 +81,12 @@ async function getReportesData() {
         return {
             studentName: st ? `${st.name} ${st.last_name}` : "—",
             courseName: co ? `${co.name} ${co.section ?? ""}`.trim() : "—",
-            date: e.created_at, emotion: e.emotion,
-            intensity: e.intensity ?? 0, reflection: e.reflection,
+            date: e.created_at,
+            emotion: e.emotion,
+            intensity: e.intensity ?? 0,
+            stress: e.stress_level ?? null,
+            anxiety: e.anxiety_level ?? null,
+            reflection: e.reflection,
         }
     })
 
@@ -226,8 +223,6 @@ async function getReportesData() {
         incidentsByStudent: (incidents ?? []),
         alertsByStudent: (alerts ?? []),
         studentsMap,
-        pulseResults: pulseResults ?? [],
-        activePulse: activePulse ?? null,
     }
 }
 

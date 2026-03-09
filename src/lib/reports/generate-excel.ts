@@ -8,6 +8,8 @@ export function generateEmotionsExcel(data: {
         date: string
         emotion: string
         intensity: number
+        stress: number | null
+        anxiety: number | null
         reflection: string | null
     }[]
 }) {
@@ -22,6 +24,8 @@ export function generateEmotionsExcel(data: {
             "Fecha": new Date(r.date).toLocaleDateString("es-CL"),
             "Emoción": EMOTION_LABEL[r.emotion] ?? r.emotion,
             "Intensidad": `${r.intensity}/5`,
+            "Estrés": r.stress != null ? `${r.stress}/5` : "—",
+            "Ansiedad": r.anxiety != null ? `${r.anxiety}/5` : "—",
             "Reflexión": r.reflection ?? "—",
         }))
     )

@@ -2,16 +2,8 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import Link from "next/link"
 import { EmotionSlider } from "@/components/emotional/emotion-slider"
-import { PulseCheckinWrapper } from "@/components/pulse/pulse-checkin-wrapper"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-
-// ─── Tipo para pulse session ──────────────────────────────────────────────────
-type PulseSession = {
-    id: string
-    week_start: string
-    week_end: string
-} | null
 
 async function getCheckinData() {
     const cookieStore = await cookies()
@@ -92,8 +84,6 @@ async function getCheckinData() {
     return {
         student,
         alreadyLogged,
-        pulseSession: pulseSession as PulseSession,
-        pulseAlreadyDone,
         logs: logs || [],
     }
 }
@@ -116,8 +106,6 @@ export default async function EstudianteCheckinPage() {
     const {
         student,
         alreadyLogged,
-        pulseSession,
-        pulseAlreadyDone,
         logs,
     } = data
 
@@ -149,17 +137,6 @@ export default async function EstudianteCheckinPage() {
                         Check-in Emocional
                     </h1>
                 </div>
-
-                {/* ── Modo Pulso (aparece solo si está activo y no registró) ── */}
-                {pulseSession && !pulseAlreadyDone && (
-                    <PulseCheckinWrapper
-                        pulseSessionId={pulseSession.id}
-                        studentId={student.id}
-                        institutionId={student.institution_id}
-                        weekStart={pulseSession.week_start}
-                        weekEnd={pulseSession.week_end}
-                    />
-                )}
 
                 {/* ── Registro emocional diario ── */}
                 <section>

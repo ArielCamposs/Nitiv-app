@@ -18,20 +18,12 @@ const ENERGY_CONFIG = {
     explosiva: { label: "Explosiva", emoji: "🔥", bg: "bg-red-500", color: "#ef4444" },
 } as const
 
-const EMOTION_CONFIG = {
-    muy_bien: { label: "Muy bien", emoji: "🤩", color: "text-purple-600" },
-    bien: { label: "Bien", emoji: "🙂", color: "text-emerald-600" },
-    neutral: { label: "Neutral", emoji: "😐", color: "text-gray-500" },
-    mal: { label: "Mal", emoji: "😢", color: "text-orange-500" },
-    muy_mal: { label: "Muy mal", emoji: "😞", color: "text-red-600" },
-} as const
-
 export type Tendencia = "mejorando" | "empeorando" | "estable" | "sin_datos"
 
 interface Props {
     profile: { name: string; last_name: string }
     courses: Array<{ id: string; name: string }>
-    studentsEnriched: Array<{ id: string; name: string; last_name: string; course_id: string; courseName: string; lastEmotion: string | null }>
+    studentsEnriched: Array<{ id: string; name: string; last_name: string; course_id: string; courseName: string }>
     heatmapData: Array<{ week: string; weekIndex: number; day: string; dayIndex: number; energy: string | null; score: number }>
     chartData: Array<{ semana: string; promedio: number | null }>
     tendencia: Tendencia
@@ -299,46 +291,33 @@ export function TeacherDashboardClient({
                 </Card>
             )}
 
-            {/* Lista estudiantes */}
+            {/* Lista estudiantes — sin registro emocional (lo maneja la dupla) */}
             <Card className="border-0 shadow-sm">
                 <CardHeader className="pb-3">
                     <div className="flex items-center gap-2">
                         <Users className="w-4 h-4 text-slate-500" />
                         <CardTitle className="text-base">Estudiantes del curso</CardTitle>
                     </div>
-                    <CardDescription>Último estado emocional registrado</CardDescription>
+                    <CardDescription>Listado de estudiantes a cargo</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {filteredStudents.length === 0 ? (
                         <p className="text-sm text-slate-400 text-center py-6">No hay estudiantes en este curso</p>
                     ) : (
                         <div className="space-y-2">
-                            {filteredStudents.map(student => {
-                                const emoConfig = student.lastEmotion
-                                    ? EMOTION_CONFIG[student.lastEmotion as keyof typeof EMOTION_CONFIG]
-                                    : null
-                                return (
-                                    <div key={student.id}
-                                        className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold text-slate-600">
-                                                {student.name[0]}{student.last_name[0]}
-                                            </div>
-                                            <p className="font-medium text-slate-800 text-sm">
-                                                {student.name} {student.last_name}
-                                            </p>
-                                        </div>
-                                        {emoConfig ? (
-                                            <span className={`text-sm font-medium ${emoConfig.color}`}>
-                                                {emoConfig.emoji} {emoConfig.label}
-                                            </span>
-                                        ) : (
-                                            <span className="text-xs text-slate-400 italic">Sin registro</span>
-                                        )}
+                            {filteredStudents.map(student => (
+                                <div
+                                    key={student.id}
+                                    className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
+                                >
+                                    <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-semibold text-slate-600">
+                                        {student.name[0]}{student.last_name[0]}
                                     </div>
-                                )
-                            })}
+                                    <p className="font-medium text-slate-800 text-sm">
+                                        {student.name} {student.last_name}
+                                    </p>
+                                </div>
+                            ))}
                         </div>
                     )}
                 </CardContent>

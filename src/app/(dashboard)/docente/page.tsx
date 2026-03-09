@@ -70,15 +70,6 @@ async function getTeacherData() {
 
     const studentIds = (students ?? []).map(s => s.id)
 
-    const { data: latestEmotions } = studentIds.length > 0
-        ? await supabase
-            .from("emotional_logs")
-            .select("student_id, emotion, created_at")
-            .in("student_id", studentIds)
-            .eq("type", "daily")
-            .order("created_at", { ascending: false })
-        : { data: [] }
-
     const { data: alerts } = studentIds.length > 0
         ? await supabase
             .from("alerts")
@@ -89,14 +80,6 @@ async function getTeacherData() {
             .order("created_at", { ascending: false })
             .limit(5)
         : { data: [] }
-
-    // Última emoción por estudiante
-    const latestByStudent: Record<string, string> = {}
-    for (const log of (latestEmotions ?? [])) {
-        if (!latestByStudent[log.student_id]) {
-            latestByStudent[log.student_id] = log.emotion
-        }
-    }
 
     // ── Heatmap ──
     const today = new Date()
@@ -164,7 +147,6 @@ async function getTeacherData() {
 
     const studentsEnriched = (students ?? []).map(s => ({
         ...s,
-        lastEmotion: latestByStudent[s.id] ?? null,
         courseName: courses?.find(c => c.id === s.course_id)?.name ?? "Sin curso",
     }))
 

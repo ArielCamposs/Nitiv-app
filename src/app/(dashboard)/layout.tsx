@@ -19,12 +19,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
     // Detectar si es admin para usar su sidebar propio
     const { data: profile } = await supabase
         .from("users")
-        .select("role")
+        .select("role, institution_id, institutions(name)")
         .eq("id", user.id)
         .single()
 
     const isAdmin = profile?.role === "admin"
     const isStudent = profile?.role === "estudiante" || profile?.role === "centro_alumnos"
+    const institutionName =
+        (profile as any)?.institutions?.name ?? "Institución"
 
     return (
         <DecBadgeProvider>
@@ -40,7 +42,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
                     <div className="fixed left-0 top-0 z-10 flex w-full items-center border-b bg-white px-4 py-2 md:hidden justify-between">
                         <div className="flex items-center">
                             <MobileNav userId={user.id} />
-                            <span className="ml-2 font-bold text-primary">Nitiv</span>
+                            <div className="ml-2 flex flex-col">
+                                <span className="font-bold text-primary leading-tight">Nitiv</span>
+                                <span className="text-[11px] text-slate-500 leading-tight truncate max-w-[200px]">
+                                    {institutionName}
+                                </span>
+                            </div>
                         </div>
                         <NotificationBell userId={user.id} />
                     </div>

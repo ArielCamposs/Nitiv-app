@@ -41,19 +41,7 @@ interface CourseClimate {
     avgScore: number | null
     registros: number
     weeks: { semana: string; promedio: number | null; registros: number }[]
-    topStudents: { name: string; lastEmotion: string }[]
     studentsDetail: StudentDetail[]
-}
-
-interface PulseResult {
-    session_id: string
-    institution_id: string
-    week_start: string
-    week_end: string
-    total_student_entries: number
-    avg_student_perception: number | null
-    total_teacher_entries: number
-    avg_teacher_climate: number | null
 }
 
 interface StudentItem {
@@ -77,8 +65,6 @@ interface Props {
     incidentsByStudent: any[]
     alertsByStudent: any[]
     studentsMap: Record<string, any>
-    pulseResults: PulseResult[]
-    activePulse: { id: string; week_start: string; week_end: string } | null
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -381,122 +367,12 @@ function HighImpactLists({ coursesClimate }: { coursesClimate: CourseClimate[] }
     )
 }
 
-// ─── Cruce Modo Pulso ─────────────────────────────────────────────────────────
-const PERCEPTION_LABEL: Record<number, { label: string; color: string }> = {
-    5: { label: "Muy bien", color: "text-emerald-600" },
-    4: { label: "Bien", color: "text-emerald-500" },
-    3: { label: "Neutral", color: "text-slate-500" },
-    2: { label: "Mal", color: "text-rose-500" },
-    1: { label: "Muy mal", color: "text-rose-600" },
-}
-const CLIMATE_SCORE_LABEL: Record<number, { label: string; color: string }> = {
-    4: { label: "Regulada", color: "text-green-600" },
-    3: { label: "Inquieta", color: "text-yellow-600" },
-    2: { label: "Apática", color: "text-blue-500" },
-    1: { label: "Explosiva", color: "text-red-600" },
-}
-
-function PulseCrossSection({ pulseResults, activePulse }: Pick<Props, "pulseResults" | "activePulse">) {
-    if (pulseResults.length === 0) {
-        return (
-            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center text-slate-400">
-                <Zap className="w-6 h-6 mx-auto mb-2 opacity-40" />
-                <p className="text-sm font-medium">Sin datos de Modo Pulso aún</p>
-                <p className="text-xs mt-1">Activa el Modo Pulso desde el panel de administración.</p>
-            </div>
-        )
-    }
-
-    return (
-        <div className="space-y-4">
-            {activePulse && (
-                <div className="flex items-center gap-2 rounded-lg bg-indigo-50 border border-indigo-200 px-4 py-2.5">
-                    <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500" />
-                    </span>
-                    <p className="text-xs font-semibold text-indigo-700">
-                        Modo Pulso activo · {fmtDate(activePulse.week_start)} — {fmtDate(activePulse.week_end)}
-                    </p>
-                </div>
-            )}
-
-            {pulseResults.map(r => {
-                const perceptionScore = r.avg_student_perception ? Math.round(r.avg_student_perception) : null
-                const climateScore = r.avg_teacher_climate ? Math.round(r.avg_teacher_climate) : null
-                const perceptionCfg = perceptionScore ? PERCEPTION_LABEL[perceptionScore] : null
-                const climateCfg = climateScore ? CLIMATE_SCORE_LABEL[climateScore] : null
-
-                // Divergencia: diff ≥ 2 puntos (escalas distintas: percepción 1-5, clima 1-4)
-                // Normalizamos a 0-1 antes de comparar
-                const perceptionNorm = perceptionScore ? (perceptionScore - 1) / 4 : null
-                const climateNorm = climateScore ? (climateScore - 1) / 3 : null
-                const hasDivergence = perceptionNorm !== null && climateNorm !== null
-                    ? Math.abs(perceptionNorm - climateNorm) >= 0.4
-                    : false
-
-                return (
-                    <div
-                        key={r.session_id}
-                        className={cn("rounded-xl border bg-white p-4", hasDivergence ? "border-amber-200" : "border-slate-100")}
-                    >
-                        <div className="flex items-start justify-between mb-3">
-                            <p className="text-sm font-semibold text-slate-700">
-                                Semana {fmtDate(r.week_start)} — {fmtDate(r.week_end)}
-                            </p>
-                            {hasDivergence && (
-                                <span className="flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-                                    <AlertTriangle className="w-3 h-3" />
-                                    Discrepancia
-                                </span>
-                            )}
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="rounded-lg bg-slate-50 p-3">
-                                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">
-                                    Percepción estudiantes
-                                </p>
-                                <p className={cn("text-sm font-bold", perceptionCfg?.color ?? "text-slate-400")}>
-                                    {perceptionCfg?.label ?? "Sin datos"}
-                                </p>
-                                <p className="text-xs text-slate-400 mt-0.5">{r.total_student_entries} registros</p>
-                            </div>
-                            <div className="rounded-lg bg-slate-50 p-3">
-                                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide mb-1">
-                                    Clima docente
-                                </p>
-                                <p className={cn("text-sm font-bold", climateCfg?.color ?? "text-slate-400")}>
-                                    {climateCfg?.label ?? "Sin datos"}
-                                </p>
-                                <p className="text-xs text-slate-400 mt-0.5">{r.total_teacher_entries} registros</p>
-                            </div>
-                        </div>
-
-                        {hasDivergence && perceptionNorm !== null && climateNorm !== null && (
-                            <div className="mt-3 rounded-lg bg-amber-50 border border-amber-100 px-3 py-2">
-                                <p className="text-xs text-amber-800">
-                                    {perceptionNorm > climateNorm
-                                        ? "Los estudiantes perciben el ambiente mejor de lo que el docente reporta el clima del aula."
-                                        : "El docente reporta el clima más tenso de lo que los estudiantes perciben."
-                                    }
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                )
-            })}
-        </div>
-    )
-}
-
 // ─── Componente principal ─────────────────────────────────────────────────────
 export function ReportesClient({
     role, emotionRows, incidentRows, alertRows,
     mesesData, coursesClimate, institutionName,
     totalStudents, totalAlerts, totalIncidents,
     studentsList, emotionsByStudent, incidentsByStudent, alertsByStudent,
-    pulseResults, activePulse,
 }: Props) {
     const [loading, setLoading] = useState<Record<string, boolean>>({})
     const [selectedStudent, setSelectedStudent] = useState<string>("")
@@ -519,10 +395,28 @@ export function ReportesClient({
         const alerts2 = alertsByStudent.filter(a => a.student_id === st.id)
         generateStudentPDF({
             student: { name: st.name, last_name: st.last_name, courseName: st.courseName },
-            emotions: emotions2.map(e => ({ date: e.created_at, emotion: e.emotion, intensity: e.intensity, reflection: e.reflection })),
-            incidents: incidents2.map(i => ({ folio: i.folio, type: i.type, severity: i.severity, date: i.incident_date, resolved: i.resolved })),
+            emotions: emotions2.map(e => ({
+                date: e.created_at,
+                emotion: e.emotion,
+                intensity: e.intensity,
+                stress: e.stress_level ?? null,
+                anxiety: e.anxiety_level ?? null,
+                reflection: e.reflection,
+            })),
+            incidents: incidents2.map(i => ({
+                folio: i.folio,
+                type: i.type,
+                severity: i.severity,
+                date: i.incident_date,
+                resolved: i.resolved,
+            })),
             hasPaec: st.hasPaec,
-            alerts: alerts2.map(a => ({ type: a.type, description: a.description, date: a.created_at })),
+            alerts: alerts2.map(a => ({
+                type: a.type,
+                description: a.description,
+                date: a.created_at,
+                resolved: a.resolved,
+            })),
         })
     }
 
@@ -617,7 +511,7 @@ export function ReportesClient({
                 </div>
             ) : (
                 <Tabs defaultValue="bienestar" className="space-y-6">
-                    <TabsList className="grid w-full grid-cols-3 h-auto p-1">
+                    <TabsList className="grid w-full grid-cols-2 h-auto p-1">
                         <TabsTrigger value="bienestar" className="flex items-center gap-2 py-2.5 text-xs sm:text-sm">
                             <BarChart3 className="w-4 h-4 shrink-0" />
                             <span>Bienestar</span>
@@ -625,10 +519,6 @@ export function ReportesClient({
                         <TabsTrigger value="clima" className="flex items-center gap-2 py-2.5 text-xs sm:text-sm">
                             <Thermometer className="w-4 h-4 shrink-0" />
                             <span>Clima</span>
-                        </TabsTrigger>
-                        <TabsTrigger value="match" className="flex items-center gap-2 py-2.5 text-xs sm:text-sm">
-                            <GitMerge className="w-4 h-4 shrink-0" />
-                            <span>Match de datos</span>
                         </TabsTrigger>
                     </TabsList>
 
@@ -742,7 +632,17 @@ export function ReportesClient({
                                             const course = coursesClimate.find(c => c.courseId === selectedCourse)
                                             if (!course) return
                                             withLoading("climate", () =>
-                                                generateClimatePDF({ courseName: course.courseName, weeks: course.weeks, topStudents: course.topStudents })
+                                                generateClimatePDF({
+                                                    courseName: course.courseName,
+                                                    weeks: course.weeks,
+                                                    students: course.studentsDetail.map(s => ({
+                                                        name: s.name,
+                                                        hasPaec: s.hasPaec,
+                                                        alertCount: s.alertCount,
+                                                        incidentCount: s.incidentCount,
+                                                        lastEmotion: s.lastEmotion,
+                                                    })),
+                                                })
                                             )
                                         }}
                                         disabled={!selectedCourse || loading["climate"]}
@@ -756,42 +656,92 @@ export function ReportesClient({
                         </section>
                     </TabsContent>
 
-                    {/* ── Tab 3: Match de datos ─────────────────────────────────────── */}
-                    <TabsContent value="match" className="space-y-6">
-                        <section className="space-y-3">
-                            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Cruce Modo Pulso</h2>
-                            <PulseCrossSection pulseResults={pulseResults} activePulse={activePulse} />
-                        </section>
-
-                        <section className="space-y-3">
-                            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Exportar</h2>
-                            <div className="grid gap-3 md:grid-cols-2">
-                                <ReportCard
-                                    title="Casos DEC"
-                                    description="Listado completo de DEC con estado y severidad"
-                                    icon={FileSpreadsheet}
-                                    onExcel={() => withLoading("incidentsXlsx", () =>
-                                        generateIncidentsExcel({ rows: incidentRows })
-                                    )}
-                                    loadingExcel={loading["incidentsXlsx"]}
-                                />
-                                {role === "director" && (
-                                    <ReportCard
-                                        title="Reporte institucional"
-                                        description="Resumen general: estudiantes, alertas, DEC y tendencias mensuales"
-                                        icon={FileText}
-                                        onPDF={() => withLoading("institutional", () =>
-                                            generateInstitutionalPDF({
-                                                institutionName, totalStudents, totalAlerts, totalIncidents,
-                                                meses: mesesData, courses: coursesClimate,
-                                            })
-                                        )}
-                                        loadingPDF={loading["institutional"]}
-                                    />
+                    {/* Exportaciones adicionales (antes en Match de datos) */}
+                    <section className="space-y-3">
+                        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide">Exportar</h2>
+                        <div className="grid gap-3 md:grid-cols-2">
+                            <ReportCard
+                                title="Casos DEC"
+                                description="Listado completo de DEC con estado y severidad"
+                                icon={FileSpreadsheet}
+                                onExcel={() => withLoading("incidentsXlsx", () =>
+                                    generateIncidentsExcel({ rows: incidentRows })
                                 )}
-                            </div>
-                        </section>
-                    </TabsContent>
+                                loadingExcel={loading["incidentsXlsx"]}
+                            />
+                            {role === "director" && (
+                                <ReportCard
+                                    title="Reporte institucional"
+                                    description="Resumen general: estudiantes, alertas, DEC y tendencias mensuales"
+                                    icon={FileText}
+                                    onPDF={() => withLoading("institutional", () =>
+                                        generateInstitutionalPDF({
+                                            institutionName,
+                                            totalStudents,
+                                            totalAlerts,
+                                            totalIncidents,
+                                            meses: mesesData,
+                                            courses: coursesClimate,
+                                            alertsByType: (() => {
+                                                const map: Record<string, { total: number; open: number }> = {}
+                                                alertRows.forEach(a => {
+                                                    if (!map[a.alertType]) {
+                                                        map[a.alertType] = { total: 0, open: 0 }
+                                                    }
+                                                    map[a.alertType].total += 1
+                                                    if (!a.resolved) map[a.alertType].open += 1
+                                                })
+                                                return Object.entries(map).map(([type, v]) => ({
+                                                    type,
+                                                    total: v.total,
+                                                    open: v.open,
+                                                }))
+                                            })(),
+                                            decBySeverity: (() => {
+                                                const map: Record<string, { total: number; open: number }> = {}
+                                                incidentRows.forEach(i => {
+                                                    if (!map[i.severity]) {
+                                                        map[i.severity] = { total: 0, open: 0 }
+                                                    }
+                                                    map[i.severity].total += 1
+                                                    if (!i.resolved) map[i.severity].open += 1
+                                                })
+                                                return Object.entries(map).map(([severity, v]) => ({
+                                                    severity,
+                                                    total: v.total,
+                                                    open: v.open,
+                                                }))
+                                            })(),
+                                            topRiskCourses: (() => {
+                                                const map: Record<string, { alerts: number; incidents: number }> = {}
+                                                alertRows.forEach(a => {
+                                                    const key = a.courseName
+                                                    if (!map[key]) map[key] = { alerts: 0, incidents: 0 }
+                                                    if (!a.resolved) map[key].alerts += 1
+                                                })
+                                                incidentRows.forEach(i => {
+                                                const key = i.courseName
+                                                    if (!map[key]) map[key] = { alerts: 0, incidents: 0 }
+                                                    if (!i.resolved) map[key].incidents += 1
+                                                })
+                                                return coursesClimate
+                                                    .map(c => ({
+                                                        courseName: c.courseName,
+                                                        label: c.label,
+                                                        alerts: map[c.courseName]?.alerts ?? 0,
+                                                        incidents: map[c.courseName]?.incidents ?? 0,
+                                                    }))
+                                                    .filter(c => c.alerts + c.incidents > 0)
+                                                    .sort((a, b) => (b.alerts + b.incidents) - (a.alerts + a.incidents))
+                                                    .slice(0, 5)
+                                            })(),
+                                        })
+                                    )}
+                                    loadingPDF={loading["institutional"]}
+                                />
+                            )}
+                        </div>
+                    </section>
                 </Tabs>
             )}
         </div>

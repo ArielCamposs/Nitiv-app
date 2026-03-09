@@ -7,8 +7,8 @@ import {
     XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts"
 import {
-    Users, AlertTriangle, HeartPulse, TrendingUp,
-    TrendingDown, MessageSquare, BookOpen, ChevronRight,
+    Users, AlertTriangle, TrendingUp,
+    TrendingDown, MessageSquare, BookOpen,
 } from "lucide-react"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -132,7 +132,7 @@ export function DuplaDashboardClient({ stats }: { stats: DuplaStats }) {
                     label="Check-ins semana"
                     value={checkinsThisWeek}
                     sub={`${participationRate}% participación`}
-                    icon={HeartPulse}
+                    icon={Users}
                     color="bg-emerald-500"
                 />
             </div>
@@ -335,7 +335,6 @@ export function DuplaDashboardClient({ stats }: { stats: DuplaStats }) {
                     { href: "/dupla/estudiantes", label: "Estudiantes", icon: Users, color: "indigo" },
                     { href: "/dupla/heatmap", label: "Mapa de clima", icon: TrendingUp, color: "emerald" },
                     { href: "/dupla/dec", label: "Registros DEC", icon: BookOpen, color: "violet" },
-                    { href: "/dupla/pulso", label: "Modo Pulso", icon: HeartPulse, color: "amber" },
                 ].map(({ href, label, icon: Icon, color }) => (
                     <Link key={href} href={href}
                         className={`flex items-center gap-2 rounded-xl border border-${color}-100 bg-${color}-50 px-4 py-3 text-sm font-medium text-${color}-700 hover:bg-${color}-100 transition-colors`}>
