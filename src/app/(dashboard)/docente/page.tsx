@@ -43,7 +43,7 @@ async function getTeacherData() {
 
     const { data: teacherLogs } = await supabase
         .from("teacher_logs")
-        .select("id, course_id, energy_level, tags, notes, log_date")
+        .select("id, course_id, energy_level, tags, notes, log_date, session_time")
         .eq("teacher_id", user.id)
         .gte("log_date", since.toISOString().split("T")[0])
         .order("log_date", { ascending: true })
@@ -53,6 +53,13 @@ async function getTeacherData() {
     const { data: courses } = courseIds.length > 0
         ? await supabase.from("courses").select("id, name").in("id", courseIds)
         : { data: [] }
+
+    // NUEVO: Obtener TODOS los cursos de la institución
+    const { data: allInstitutionCourses } = await supabase
+        .from("courses")
+        .select("id, name")
+        .eq("institution_id", profile.institution_id)
+        .order("name")
 
     const { data: students } = courseIds.length > 0
         ? await supabase
@@ -107,6 +114,8 @@ async function getTeacherData() {
             const dateStr = date.toISOString().split("T")[0]
 
             const logsDay = (teacherLogs ?? []).filter(l => l.log_date === dateStr)
+            
+            // Si hay múltiples registros (mañana/tarde), tomamos el más crítico para el heatmap
             const worst = logsDay.sort((a, b) =>
                 (ENERGY_SCORE[a.energy_level] ?? 3) - (ENERGY_SCORE[b.energy_level] ?? 3)
             )[0]
@@ -170,6 +179,7 @@ async function getTeacherData() {
     return {
         profile,
         courses: courses ?? [],
+        allInstitutionCourses: allInstitutionCourses ?? [],
         studentsEnriched,
         heatmapData,
         chartData,
@@ -193,7 +203,11 @@ export default async function DocenteDashboardPage() {
                         Clima de tu curso — últimas 4 semanas
                     </p>
                 </div>
-                <TeacherDashboardClient {...data} />
+                <TeacherDashboardClient 
+                    {...data} 
+                    institutionId={data.profile.institution_id}
+                    teacherId={data.profile.id}
+                />
             </div>
         </main>
     )

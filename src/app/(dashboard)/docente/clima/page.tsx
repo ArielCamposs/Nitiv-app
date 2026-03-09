@@ -18,12 +18,20 @@ async function getTeacherCourses() {
     // Admin cannot access the climate page
     if (profile.role === "admin") return redirect("/")
 
-    const { data: courses } = await supabase
+    // Obtener cursos asignados al docente
+    const { data: teacherCourses } = await supabase
         .from("course_teachers")
         .select("course_id, is_head_teacher, courses(id, name, level)")
         .eq("teacher_id", user.id)
 
-    const courseIds = (courses ?? []).map((c: any) => c.course_id)
+    // NUEVO: Obtener TODOS los cursos de la institución para el selector
+    const { data: allInstitutionCourses } = await supabase
+        .from("courses")
+        .select("id, name")
+        .eq("institution_id", profile.institution_id)
+        .order("name")
+
+    const courseIds = (teacherCourses ?? []).map((c: any) => c.course_id)
 
     // 28 días para el resumen
     const since28 = new Date()
@@ -42,20 +50,30 @@ async function getTeacherCourses() {
         .order("log_date", { ascending: false })
 
     // Logs históricos (90 días, para el gráfico)
+    // Se quita el filtro por teacher_id para que el docente pueda ver los climas 
+    // registrados por otros colegas en los cursos habilitados.
     const { data: historyLogs } = await supabase
         .from("teacher_logs")
-        .select("course_id, energy_level, log_date")
-        .in("course_id", courseIds)
-        .eq("teacher_id", user.id)
+        .select("course_id, energy_level, log_date, block_number, teacher_id, session_time")
+        .eq("institution_id", profile.institution_id)
         .gte("log_date", since90.toISOString().split("T")[0])
         .order("log_date", { ascending: true })
+
+    // Obtener nombres de todos los docentes para el mapeo en el calendario
+    const { data: teachers } = await supabase
+        .from("users")
+        .select("id, name")
+        .eq("institution_id", profile.institution_id)
+        .eq("role", "docente")
 
     return {
         teacherId: profile.id,
         institutionId: profile.institution_id,
-        courses: courses ?? [],
+        courses: teacherCourses ?? [],
+        allInstitutionCourses: allInstitutionCourses ?? [],
         teacherLogs: teacherLogs ?? [],
         historyLogs: historyLogs ?? [],
+        teachers: teachers ?? [],
     }
 }
 
@@ -83,8 +101,10 @@ export default async function ClimaPage() {
                         teacherId={data.teacherId}
                         institutionId={data.institutionId}
                         courses={data.courses}
+                        allInstitutionCourses={data.allInstitutionCourses}
                         teacherLogs={data.teacherLogs}
                         historyLogs={data.historyLogs}
+                        teachers={data.teachers}
                     />
                 )}
             </div>

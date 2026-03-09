@@ -21,12 +21,14 @@ interface Props {
     teacherId: string
     institutionId: string
     courses: any[]
+    allInstitutionCourses: any[]
     teacherLogs: any[]
     historyLogs: any[]
+    teachers?: { id: string; name: string }[]
 }
 
 export function ClimaPageTabs({
-    teacherId, institutionId, courses, teacherLogs, historyLogs
+    teacherId, institutionId, courses, allInstitutionCourses, teacherLogs, historyLogs, teachers
 }: Props) {
     const [tab, setTab] = useState<"resumen" | "historial">("resumen")
     const [selectedCourseId, setSelectedCourseId] = useState<string>(
@@ -80,6 +82,8 @@ export function ClimaPageTabs({
             {/* ── TAB: RESUMEN ── */}
             {tab === "resumen" && coursesToRender.map((c: any) => {
                 const courseLogs = teacherLogs.filter(l => l.course_id === c.course_id)
+                
+                // Promedio considerando todos los registros (mañana/tarde)
                 const avg = courseLogs.length > 0
                     ? courseLogs.reduce((a, l) => a + (ENERGY_SCORE[l.energy_level] ?? 3), 0) / courseLogs.length
                     : null
@@ -96,48 +100,53 @@ export function ClimaPageTabs({
                 const cfg = dominantLevel ? ENERGY_LABEL[dominantLevel] : null
 
                 return (
-                    <div key={c.course_id} className="space-y-4">
-                        <h2 className="text-base font-semibold text-slate-700">
-                            {c.courses?.name}
-                            {c.is_head_teacher && (
-                                <span className="ml-2 text-xs font-normal text-indigo-500">
-                                    Profesor Jefe
-                                </span>
-                            )}
-                        </h2>
+                    <div key={c.course_id} className="space-y-6 pt-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-bold text-slate-800">
+                                {c.courses?.name}
+                                {c.is_head_teacher && (
+                                    <span className="ml-2 text-xs font-normal text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                                        Profesor Jefe
+                                    </span>
+                                )}
+                            </h2>
+                        </div>
+
+                        {/* REGISTRO DE CLIMA - AHORA SIEMPRE VISIBLE Y ARRIBA */}
+                        <div className="bg-white rounded-2xl border-2 border-indigo-100 shadow-sm overflow-hidden">
+                            <div className="bg-indigo-50/50 px-4 py-3 border-b border-indigo-100">
+                                <h3 className="text-sm font-bold text-indigo-700 flex items-center gap-2">
+                                    <span>🌡️</span> Registrar clima de esta clase
+                                </h3>
+                            </div>
+                            <div className="p-4">
+                                <ClimateRegisterCard
+                                    teacherId={teacherId}
+                                    courseId={c.course_id}
+                                    institutionId={institutionId}
+                                    allCourses={allInstitutionCourses}
+                                />
+                            </div>
+                        </div>
 
                         <div className="grid grid-cols-3 gap-3">
-                            <div className="rounded-xl border bg-white p-4 text-center">
+                            <div className="rounded-xl border bg-white p-4 text-center shadow-sm">
                                 <p className="text-2xl font-bold text-slate-800">{courseLogs.length}</p>
                                 <p className="text-xs text-slate-500 mt-1">Registros (28 días)</p>
                             </div>
-                            <div className="rounded-xl border bg-white p-4 text-center">
+                            <div className="rounded-xl border bg-white p-4 text-center shadow-sm">
                                 <p className={`text-lg font-bold ${cfg?.color ?? "text-slate-400"}`}>
                                     {cfg?.label ?? "Sin datos"}
                                 </p>
                                 <p className="text-xs text-slate-500 mt-1">Clima predominante</p>
                             </div>
-                            <div className="rounded-xl border bg-white p-4 text-center">
+                            <div className="rounded-xl border bg-white p-4 text-center shadow-sm">
                                 <p className="text-2xl font-bold text-slate-800">
                                     {avg !== null ? avg.toFixed(1) : "—"}
                                 </p>
                                 <p className="text-xs text-slate-500 mt-1">Promedio energía</p>
                             </div>
                         </div>
-
-                        <details className="group rounded-xl border bg-white">
-                            <summary className="flex cursor-pointer items-center justify-between px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 rounded-xl">
-                                <span>Registrar clima de esta clase</span>
-                                <span className="text-slate-400 group-open:rotate-180 transition-transform">▾</span>
-                            </summary>
-                            <div className="px-4 pb-4 pt-2 space-y-5">
-                                <ClimateRegisterCard
-                                    teacherId={teacherId}
-                                    courseId={c.course_id}
-                                    institutionId={institutionId}
-                                />
-                            </div>
-                        </details>
                     </div>
                 )
             })}
@@ -145,8 +154,9 @@ export function ClimaPageTabs({
             {/* ── TAB: HISTORIAL ── */}
             {tab === "historial" && (
                 <ClimateHistoryChart
-                    courses={coursesToRender}
+                    courses={allInstitutionCourses}
                     historyLogs={historyLogs}
+                    teachers={teachers}
                 />
             )}
         </div>

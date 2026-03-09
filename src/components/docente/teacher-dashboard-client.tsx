@@ -8,7 +8,8 @@ import {
 import {
     Card, CardContent, CardHeader, CardTitle, CardDescription
 } from "@/components/ui/card"
-import { TrendingUp, TrendingDown, Minus, AlertTriangle, Users } from "lucide-react"
+import { TrendingUp, TrendingDown, Minus, AlertTriangle, Users, Thermometer } from "lucide-react"
+import { ClimateRegisterCard } from "@/components/teacher/climate-register-card"
 
 const ENERGY_CONFIG = {
     regulada: { label: "Regulada", emoji: "😊", bg: "bg-emerald-500", color: "#10b981" },
@@ -36,16 +37,23 @@ interface Props {
     tendencia: Tendencia
     alertsEnriched: Array<{ id: string; student_id: string; type: string; description: string; created_at: string; studentName: string }>
     totalLogs: number
+    allInstitutionCourses: Array<{ id: string; name: string }>
 }
 
 const DAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie"]
 const WEEK_NAMES = ["S1", "S2", "S3", "S4"]
 
+interface TeacherDashboardClientProps extends Props {
+    institutionId: string
+    teacherId: string
+}
+
 export function TeacherDashboardClient({
     courses, studentsEnriched, heatmapData,
     chartData, tendencia, alertsEnriched,
-}: Props) {
-    const [selectedCourse, setSelectedCourse] = useState<string | null>(courses[0]?.id ?? null)
+    institutionId, teacherId, allInstitutionCourses
+}: TeacherDashboardClientProps) {
+    const [selectedCourse, setSelectedCourse] = useState<string | null>(courses[0]?.id ?? (allInstitutionCourses[0]?.id || null))
 
     const filteredStudents = selectedCourse
         ? studentsEnriched.filter(s => s.course_id === selectedCourse)
@@ -68,6 +76,29 @@ export function TeacherDashboardClient({
 
     return (
         <div className="space-y-6">
+
+            {/* REGISTRO DE CLIMA - PRIORIDAD MÁXIMA PARA DOCENTE */}
+            {selectedCourse && (
+                <div className="bg-white rounded-2xl border-2 border-indigo-100 shadow-md overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500">
+                    <div className="bg-indigo-600 px-4 py-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-white">
+                            <Thermometer className="w-5 h-5" />
+                            <h3 className="font-bold">Registrar Clima de Aula</h3>
+                        </div>
+                        <div className="text-indigo-100 text-xs font-medium bg-white/10 px-2 py-1 rounded-md">
+                            Obligatorio · Paso 1
+                        </div>
+                    </div>
+                    <div className="p-5">
+                        <ClimateRegisterCard
+                            teacherId={teacherId}
+                            courseId={selectedCourse}
+                            institutionId={institutionId}
+                            allCourses={allInstitutionCourses}
+                        />
+                    </div>
+                </div>
+            )}
 
             {/* Selector de curso */}
             {courses.length > 1 && (
