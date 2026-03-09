@@ -25,7 +25,9 @@ export default async function RecursosPage() {
     if (!profile) return redirect("/login")
     if (!ALLOWED_ROLES.includes(profile.role)) return redirect("/")
 
+    const STAFF_ROLES = ["admin", "docente", "dupla", "director", "inspector", "utp", "convivencia"]
     const isAdmin = profile.role === "admin"
+    const isStaff = STAFF_ROLES.includes(profile.role)
     const canUpload = UPLOAD_ROLES.includes(profile.role)
 
     let resources: Recurso[] = []
@@ -44,9 +46,12 @@ export default async function RecursosPage() {
             .order("created_at", { ascending: false })
 
         if (!isAdmin) {
-            query = (query as any)
-                .eq("active", true)
-                .contains("rol_destino", [profile.role])
+            query = (query as any).eq("active", true)
+            
+            // Si no es staff (ej: estudiante), filtramos por rol_destino
+            if (!isStaff) {
+                query = (query as any).contains("rol_destino", [profile.role])
+            }
         }
 
         const [resourcesRes, etiquetasRes] = await Promise.all([
