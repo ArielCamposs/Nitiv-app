@@ -235,7 +235,7 @@ export default async function AdminDashboardPage() {
                         },
                         {
                             href: "/admin/heatmap",
-                            label: "Clima emocional",
+                            label: "Clima de aula",
                             desc: "Evolución histórica por curso",
                             icon: Activity,
                             color: "text-amber-600 bg-amber-50",

@@ -89,7 +89,7 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
 
     if (hasDeepAccess) {
         gestionCasos.push({
-            title: "Clima emocional",
+            title: "Clima de aula",
             href: `/${currentRole}/heatmap`,
             icon: Activity,
         })

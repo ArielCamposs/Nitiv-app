@@ -265,7 +265,7 @@ export function ConvivenciaDashboardClient({ stats }: { stats: ConvivenciaStats 
                 {[
                     { href: "/convivencia/dec/nuevo", label: "Nuevo DEC", icon: ShieldAlert, color: "indigo" },
                     { href: "/convivencia/estudiantes", label: "Estudiantes", icon: Users, color: "cyan" },
-                    { href: "/convivencia/heatmap", label: "Clima emocional", icon: TrendingUp, color: "emerald" },
+                    { href: "/convivencia/heatmap", label: "Clima de aula", icon: TrendingUp, color: "emerald" },
                     { href: "/paec", label: "Gestión PAEC", icon: FileText, color: "violet" },
                 ].map(({ href, label, icon: Icon, color }) => (
                     <Link key={href} href={href}

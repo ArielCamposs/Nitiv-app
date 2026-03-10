@@ -14,7 +14,7 @@ export default async function ConvivenciaHeatmapPage() {
                         <ArrowLeft className="w-5 h-5" />
                     </Link>
                     <div>
-                        <h1 className="text-2xl font-semibold text-slate-900">Clima emocional por curso</h1>
+                        <h1 className="text-2xl font-semibold text-slate-900">Clima de aula por curso</h1>
                         <p className="text-slate-500 text-sm">
                             Evolución histórica interactiva de la energía del aula
                         </p>
