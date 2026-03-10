@@ -1,5 +1,6 @@
 import { getHeatmapData } from "@/lib/data/get-heatmap-data"
 import { ClimateHeatmapTabs } from "@/components/heatmap/climate-heatmap-tabs"
+import { ClimateAiAssistant } from "@/components/heatmap/climate-ai-assistant"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 
@@ -20,6 +21,7 @@ export default async function ConvivenciaHeatmapPage() {
                     </div>
                 </div>
                 <ClimateHeatmapTabs courses={courses} historyLogs={historyLogs} teachers={teachers} />
+                <ClimateAiAssistant courses={courses} />
             </div>
         </main>
     )

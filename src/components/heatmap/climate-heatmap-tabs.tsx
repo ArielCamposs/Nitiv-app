@@ -24,11 +24,6 @@ import {
     Users,
     Sparkles,
     ThermometerSun,
-    Lightbulb,
-    AlertTriangle,
-    CheckCircle2,
-    ChevronDown,
-    ChevronUp,
 } from "lucide-react"
 
 const ENERGY_SCORE: Record<string, number> = {
@@ -186,7 +181,6 @@ function getCourseRecommendation(
 
 export function ClimateHeatmapTabs({ courses, historyLogs, teachers = [] }: Props) {
     const [tab, setTab] = useState<"calendario" | "estadisticas">("calendario")
-    const [recommendationsOpen, setRecommendationsOpen] = useState(false)
 
     const stats = useMemo(() => {
         const total = historyLogs.length
@@ -585,91 +579,7 @@ export function ClimateHeatmapTabs({ courses, historyLogs, teachers = [] }: Prop
                         </div>
                     )}
 
-                    {/* Recomendaciones por curso (al final, abrir/cerrar) */}
-                    {stats.byCourse.length > 0 && (
-                        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                            <button
-                                type="button"
-                                onClick={() => setRecommendationsOpen((o) => !o)}
-                                className="w-full flex items-center justify-between gap-3 px-6 py-4 text-left hover:bg-slate-50/80 transition-colors"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <Lightbulb className="w-4 h-4 text-amber-500 shrink-0" />
-                                    <span className="text-sm font-bold text-slate-700">Recomendaciones y acciones por curso</span>
-                                </div>
-                                {recommendationsOpen ? (
-                                    <ChevronUp className="w-5 h-5 text-slate-400 shrink-0" />
-                                ) : (
-                                    <ChevronDown className="w-5 h-5 text-slate-400 shrink-0" />
-                                )}
-                            </button>
-                            {recommendationsOpen && (
-                                <div className="px-6 pb-6 pt-0 border-t border-slate-100">
-                                    <p className="text-xs text-slate-500 mb-5 mt-4">
-                                        Sugerencias según el clima predominante y el promedio del período. Priorice los cursos con clima bajo o explosivo.
-                                    </p>
-                                    <div className="space-y-4">
-                                        {stats.byCourse.map((c) => {
-                                            const { recommendation } = c
-                                            const priorityStyles: Record<RecommendationPriority, { badge: string; card: string }> = {
-                                                critical: { badge: "bg-red-100 text-red-800 border-red-200", card: "border-l-4 border-l-red-500 bg-red-50/30" },
-                                                warning: { badge: "bg-amber-100 text-amber-800 border-amber-200", card: "border-l-4 border-l-amber-500 bg-amber-50/30" },
-                                                attention: { badge: "bg-indigo-100 text-indigo-800 border-indigo-200", card: "border-l-4 border-l-indigo-500 bg-indigo-50/20" },
-                                                ok: { badge: "bg-slate-100 text-slate-700 border-slate-200", card: "border-l-4 border-l-slate-400 bg-slate-50/50" },
-                                                good: { badge: "bg-emerald-100 text-emerald-800 border-emerald-200", card: "border-l-4 border-l-emerald-500 bg-emerald-50/20" },
-                                                low_data: { badge: "bg-slate-100 text-slate-600 border-slate-200", card: "border-l-4 border-l-slate-300 bg-slate-50/50" },
-                                            }
-                                            const style = priorityStyles[recommendation.priority]
-                                            const PriorityIcon = recommendation.priority === "critical" || recommendation.priority === "warning"
-                                                ? AlertTriangle
-                                                : recommendation.priority === "good"
-                                                    ? CheckCircle2
-                                                    : Lightbulb
-                                            return (
-                                                <div
-                                                    key={c.id}
-                                                    className={`rounded-xl border border-slate-100 p-4 ${style.card}`}
-                                                >
-                                                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                                                        <span className="font-semibold text-slate-800">{c.name}</span>
-                                                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${style.badge}`}>
-                                                            {recommendation.priority === "critical" && "Urgente"}
-                                                            {recommendation.priority === "warning" && "Atención"}
-                                                            {recommendation.priority === "attention" && "Revisar"}
-                                                            {recommendation.priority === "ok" && "Estable"}
-                                                            {recommendation.priority === "good" && "Buen clima"}
-                                                            {recommendation.priority === "low_data" && "Pocos datos"}
-                                                        </span>
-                                                        <span className="text-xs text-slate-500">
-                                                            Promedio {c.avg != null ? c.avg.toFixed(1) : "—"} · {c.count} registros
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex gap-2 mb-2">
-                                                        <PriorityIcon className={`w-4 h-4 shrink-0 mt-0.5 ${
-                                                            recommendation.priority === "critical" || recommendation.priority === "warning" ? "text-amber-600" :
-                                                            recommendation.priority === "good" ? "text-emerald-600" : "text-slate-500"
-                                                        }`} />
-                                                        <div>
-                                                            <p className="text-sm font-medium text-slate-700">{recommendation.title}</p>
-                                                            <p className="text-xs text-slate-600 mt-0.5">{recommendation.summary}</p>
-                                                        </div>
-                                                    </div>
-                                                    <ul className="ml-6 space-y-1">
-                                                        {recommendation.actions.map((action, i) => (
-                                                            <li key={i} className="text-xs text-slate-600 flex items-start gap-2">
-                                                                <span className="text-slate-400 mt-0.5">•</span>
-                                                                <span>{action}</span>
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    )}
+                    {/* Bloque de recomendaciones detalladas por curso ahora se ofrece vía asistente IA flotante */}
                 </div>
             )}
         </div>
