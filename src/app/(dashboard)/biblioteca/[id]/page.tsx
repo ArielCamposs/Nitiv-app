@@ -32,6 +32,12 @@ export default async function ActivityPage({ params }: { params: Promise<{ id: s
 
     if (!institutionId) return notFound()
 
+    const { data: institution } = await supabase
+        .from("institutions")
+        .select("name")
+        .eq("id", institutionId)
+        .maybeSingle()
+
     const { data: activity } = await supabase
         .from("biblioteca_activities")
         .select("*")
@@ -113,7 +119,7 @@ export default async function ActivityPage({ params }: { params: Promise<{ id: s
                         )}
                         {/* We use the extracted client component to trigger window.print() */}
                         {activity.template !== "none" && (
-                            <PrintButton />
+                            <PrintButton institutionName={institution?.name} />
                         )}
                     </div>
                 </div>

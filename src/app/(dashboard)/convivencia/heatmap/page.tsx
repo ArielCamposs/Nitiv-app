@@ -5,7 +5,7 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 
 export default async function ConvivenciaHeatmapPage() {
-    const { courses, historyLogs, teachers } = await getHeatmapData()
+    const { courses, historyLogs, teachers, institutionName } = await getHeatmapData()
     return (
         <main className="min-h-screen bg-slate-50">
             <div className="mx-auto max-w-5xl px-4 py-8 space-y-6">
@@ -21,7 +21,7 @@ export default async function ConvivenciaHeatmapPage() {
                     </div>
                 </div>
                 <ClimateHeatmapTabs courses={courses} historyLogs={historyLogs} teachers={teachers} />
-                <ClimateAiAssistant courses={courses} />
+                <ClimateAiAssistant courses={courses} institutionName={institutionName} />
             </div>
         </main>
     )

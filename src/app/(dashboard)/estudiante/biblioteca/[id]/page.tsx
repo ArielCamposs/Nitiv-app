@@ -3,6 +3,7 @@ import Link from "next/link"
 import { ArrowLeft, BookOpen, AlertCircle, LifeBuoy, Phone } from "lucide-react"
 import { studentLibraryData } from "@/data/student-library"
 import { StudentPdfDownload } from "@/components/biblioteca/student-pdf-download"
+import { createClient } from "@/lib/supabase/server"
 
 export default async function EstudianteBibliotecaItemPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
@@ -10,6 +11,25 @@ export default async function EstudianteBibliotecaItemPage({ params }: { params:
 
     if (!item) {
         notFound()
+    }
+
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    let institutionName: string | undefined
+    if (user) {
+        const { data: profile } = await supabase
+            .from("users")
+            .select("institution_id")
+            .eq("id", user.id)
+            .maybeSingle()
+        if (profile?.institution_id) {
+            const { data: inst } = await supabase
+                .from("institutions")
+                .select("name")
+                .eq("id", profile.institution_id)
+                .maybeSingle()
+            institutionName = inst?.name
+        }
     }
 
     return (
@@ -26,7 +46,7 @@ export default async function EstudianteBibliotecaItemPage({ params }: { params:
                         Volver a la Biblioteca
                     </Link>
 
-                    <StudentPdfDownload item={item} />
+                    <StudentPdfDownload item={item} institutionName={institutionName} />
                 </div>
 
                 {/* Article Content */}

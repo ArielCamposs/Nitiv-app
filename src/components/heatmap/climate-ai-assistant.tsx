@@ -8,9 +8,10 @@ type CourseItem = { course_id: string; courses: { name: string } }
 
 interface Props {
     courses: CourseItem[]
+    institutionName?: string
 }
 
-export function ClimateAiAssistant({ courses }: Props) {
+export function ClimateAiAssistant({ courses, institutionName }: Props) {
     const [open, setOpen] = useState(false)
     const [selectedCourseId, setSelectedCourseId] = useState(
         courses[0]?.course_id ?? ""
@@ -75,6 +76,10 @@ export function ClimateAiAssistant({ courses }: Props) {
             doc.setFontSize(10)
             doc.setFont("helvetica", "normal")
             doc.setTextColor(100)
+            if (institutionName) {
+                doc.text(institutionName, marginX, y)
+                y += 5
+            }
             doc.text(`Curso: ${courseName}`, marginX, y)
             y += 5
             doc.text(`Fecha: ${today}`, marginX, y)

@@ -93,6 +93,7 @@ interface Props {
     students: Student[]
     staffUsers: StaffUser[]
     reporterName: string
+    institutionName?: string
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -285,7 +286,7 @@ function ResolveRow({ record, onResolved }: {
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, reporterName }: Props) {
+export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, reporterName, institutionName }: Props) {
     const [tab, setTab] = useState<"nuevo" | "historial" | "estadisticas">("nuevo")
     const [records, setRecords] = useState<ConvivenciaRecord[]>(initialRecords)
     const [pending, startTransition] = useTransition()
@@ -601,18 +602,19 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
     }
 
     function handlePrint(record: ConvivenciaRecord) {
-        const doc = buildConvivenciaPdf(record, reporterName)
+        const doc = buildConvivenciaPdf(record, reporterName, institutionName)
         doc.autoPrint()
         doc.output('dataurlnewwindow')
     }
 
     function handleDownloadPdf(record: ConvivenciaRecord) {
-        const doc = buildConvivenciaPdf(record, reporterName)
+        const doc = buildConvivenciaPdf(record, reporterName, institutionName)
         doc.save(`registro-convivencia-${record.type || 'caso'}.pdf`)
     }
 
     function getStatsPdfData() {
         return {
+            institutionName,
             statusCounts: { abiertos: statusCounts.abiertos, seguimiento: statusCounts.seguimiento, cerrados: statusCounts.cerrados },
             last30: last30.length,
             lastWeek: lastWeek.length,

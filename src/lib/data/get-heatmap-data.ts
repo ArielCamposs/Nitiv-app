@@ -40,7 +40,7 @@ export async function getHeatmapData() {
     const since90 = new Date()
     since90.setDate(since90.getDate() - 90)
 
-    const [{ data: courses }, { data: logs }] = await Promise.all([
+    const [{ data: courses }, { data: logs }, { data: institution }] = await Promise.all([
         supabase
             .from("courses")
             .select("id, name, section, level")
@@ -53,6 +53,7 @@ export async function getHeatmapData() {
             .eq("institution_id", profile.institution_id)
             .gte("log_date", since90.toISOString().split("T")[0])
             .order("log_date", { ascending: true }),
+        supabase.from("institutions").select("name").eq("id", profile.institution_id).maybeSingle(),
     ])
 
     const uniqueTeacherIds = Array.from(new Set((logs ?? []).map(l => l.teacher_id).filter(Boolean)))
@@ -80,5 +81,10 @@ export async function getHeatmapData() {
         courses: { name: `${c.name} ${c.section ?? ""}`.trim() }
     }))
 
-    return { courses: adaptedCourses, historyLogs: logs ?? [], teachers }
+    return {
+        courses: adaptedCourses,
+        historyLogs: logs ?? [],
+        teachers,
+        institutionName: institution?.name ?? "Institución",
+    }
 }

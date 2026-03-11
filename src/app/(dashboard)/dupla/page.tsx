@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { HelpRequestsPanel } from "@/components/help/HelpRequestsPanel"
 import { DuplaDashboardClient, DuplaStats } from "@/components/dupla/DuplaDashboardClient"
+import { RadarDashboardWidget } from "@/components/radar/RadarDashboardWidget"
 
 const EMOTION_SCORE: Record<string, number> = {
     muy_mal: 1, mal: 2, neutral: 3, bien: 4, muy_bien: 5,
@@ -168,6 +169,9 @@ export default async function DuplaPage() {
                 </div>
 
                 {/* Charts + KPI */}
+                {/* Radar activo — posición prominente */}
+                <RadarDashboardWidget institutionId={iid} role="dupla" />
+
                 <DuplaDashboardClient stats={stats} />
 
                 {/* Help requests */}

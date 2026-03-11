@@ -235,8 +235,8 @@ export function OverviewSection({ data, days }: Props) {
                     </CardContent>
                 </Card>
 
-                {/* Area: tendencia incidentes */}
-                <Card className="border-slate-200/80">
+                {/* Area: tendencia incidentes — estilo distinto (borde y fondo suave) */}
+                <Card className="border-amber-200/80 bg-gradient-to-br from-amber-50/50 to-white">
                     <CardHeader className="pb-2">
                         <CardTitle className="text-sm font-semibold">Tendencia de incidentes</CardTitle>
                         <p className="text-xs text-slate-500 font-normal">
@@ -251,11 +251,11 @@ export function OverviewSection({ data, days }: Props) {
                                 <AreaChart data={trendData} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
                                     <defs>
                                         <linearGradient id="incidentGrad" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.4} />
-                                            <stop offset="100%" stopColor="#f59e0b" stopOpacity={0} />
+                                            <stop offset="0%" stopColor="#d97706" stopOpacity={0.35} />
+                                            <stop offset="100%" stopColor="#d97706" stopOpacity={0} />
                                         </linearGradient>
                                     </defs>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#fef3c7" vertical={false} />
                                     <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
                                     <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
                                     <Tooltip />
@@ -263,7 +263,7 @@ export function OverviewSection({ data, days }: Props) {
                                         type="monotone"
                                         dataKey="incidentes"
                                         name="Incidentes"
-                                        stroke="#f59e0b"
+                                        stroke="#b45309"
                                         strokeWidth={2}
                                         fill="url(#incidentGrad)"
                                     />

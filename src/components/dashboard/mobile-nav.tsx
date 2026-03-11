@@ -9,7 +9,7 @@ import { useState, useEffect } from "react"
 import { usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 
-export function MobileNav({ userId }: { userId: string }) {
+export function MobileNav({ userId, institutionName }: { userId: string; institutionName?: string }) {
     const [mounted, setMounted] = useState(false)
     const [open, setOpen] = useState(false)
     const [isAdmin, setIsAdmin] = useState(false)
@@ -66,8 +66,8 @@ export function MobileNav({ userId }: { userId: string }) {
                 {/* Scroll interno — el padding va aquí adentro */}
                 <div className="flex flex-col h-full overflow-y-auto p-6">
                     {isAdmin
-                        ? <AdminSidebarContent userId={userId} showBell={false} />
-                        : <SidebarContent userId={userId} showBell={false} />
+                        ? <AdminSidebarContent userId={userId} showBell={false} institutionName={institutionName} />
+                        : <SidebarContent userId={userId} showBell={false} institutionName={institutionName} />
                     }
                 </div>
             </SheetContent>

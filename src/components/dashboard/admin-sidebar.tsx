@@ -75,7 +75,7 @@ const ADMIN_GROUPS: NavGroup[] = [
 ]
 
 // ─── Contenido del sidebar ────────────────────────────────────────────────────
-export function AdminSidebarContent({ userId, showBell = true }: { userId: string; showBell?: boolean }) {
+export function AdminSidebarContent({ userId, showBell = true, institutionName }: { userId: string; showBell?: boolean; institutionName?: string }) {
     const pathname = usePathname()
     const router = useRouter()
     const supabase = createClient()
@@ -90,15 +90,22 @@ export function AdminSidebarContent({ userId, showBell = true }: { userId: strin
 
     return (
         <div className="flex h-full flex-col">
-            {/* Logo + campana */}
-            <div className="mb-2 flex items-center justify-between px-1">
-                <div className="flex flex-col max-w-[75%] -ml-2">
-                    <img src="/logo.svg" alt="Nitiv Logo" className="h-24 w-auto object-contain" />
-                    <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 -mt-2 ml-2">
-                        Admin
-                    </span>
+            {/* Logo + nombre del colegio + campana */}
+            <div className="mb-1 flex flex-col gap-0.5 px-0">
+                <div className="flex items-start justify-between gap-1">
+                    <div className="flex flex-col max-w-[88%] -ml-1 min-w-0">
+                        <img src="/logo.svg" alt="Nitiv Logo" className="h-28 w-auto object-contain object-left" />
+                        <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 -mt-2 ml-1">
+                            Admin
+                        </span>
+                    </div>
+                    {showBell && <span className="shrink-0 mt-0.5"><NotificationBell userId={userId} /></span>}
                 </div>
-                {showBell && <NotificationBell userId={userId} />}
+                {institutionName && (
+                    <p className="text-sm font-medium text-slate-700 truncate border-l-2 border-slate-300 pl-2.5" title={institutionName}>
+                        {institutionName}
+                    </p>
+                )}
             </div>
 
             {/* Nav agrupado */}
@@ -152,10 +159,10 @@ export function AdminSidebarContent({ userId, showBell = true }: { userId: strin
 }
 
 // ─── Wrapper aside desktop ────────────────────────────────────────────────────
-export function AdminSidebar({ userId }: { userId: string }) {
+export function AdminSidebar({ userId, institutionName }: { userId: string; institutionName?: string }) {
     return (
         <aside className="fixed left-0 top-0 hidden h-screen w-64 border-r bg-slate-50/50 p-6 md:flex md:flex-col">
-            <AdminSidebarContent userId={userId} />
+            <AdminSidebarContent userId={userId} institutionName={institutionName} />
         </aside>
     )
 }

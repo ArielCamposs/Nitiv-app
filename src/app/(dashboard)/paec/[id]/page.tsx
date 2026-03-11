@@ -39,10 +39,32 @@ export default async function PaecDetailPage({
 
     if (!paec) notFound()
 
+    let institutionName: string | undefined
+    if (profile.institution_id) {
+        const { data: inst } = await supabase
+            .from("institutions")
+            .select("name")
+            .eq("id", profile.institution_id)
+            .maybeSingle()
+        institutionName = inst?.name
+    }
+
+    const { data: studentRow } = await supabase
+        .from("students")
+        .select("course_id, courses(name)")
+        .eq("id", paec.student_id)
+        .maybeSingle()
+    const courseName = (studentRow as any)?.courses?.name ?? null
+
     return (
-        <main className="min-h-screen bg-slate-50">
-            <div className="mx-auto max-w-3xl px-4 py-8">
-                <PaecDetail paec={paec as any} userRole={profile.role} />
+        <main className="min-h-screen bg-slate-50 print:bg-white">
+            <div id="paec-print-area" className="mx-auto max-w-3xl px-4 py-8 print:py-6 print:max-w-none">
+                <PaecDetail
+                    paec={paec as any}
+                    userRole={profile.role}
+                    institutionName={institutionName}
+                    courseName={courseName}
+                />
             </div>
         </main>
     )

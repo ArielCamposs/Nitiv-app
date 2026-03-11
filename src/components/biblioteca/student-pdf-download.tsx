@@ -7,7 +7,7 @@ import { StudentLibraryItem } from "@/data/student-library"
 import jsPDF from "jspdf"
 import { toast } from "sonner"
 
-export function StudentPdfDownload({ item }: { item: StudentLibraryItem }) {
+export function StudentPdfDownload({ item, institutionName }: { item: StudentLibraryItem; institutionName?: string }) {
     const [isDownloading, setIsDownloading] = useState(false)
 
     const handleDownload = () => {
@@ -25,6 +25,14 @@ export function StudentPdfDownload({ item }: { item: StudentLibraryItem }) {
             const pageWidth = doc.internal.pageSize.width
             const contentWidth = pageWidth - margin * 2
             let yPos = margin
+
+            if (institutionName) {
+                doc.setFont("helvetica", "normal")
+                doc.setFontSize(10)
+                doc.setTextColor(100, 116, 139)
+                doc.text(institutionName, margin, yPos)
+                yPos += 8
+            }
 
             // Funciones de ayuda para añadir texto
             const addTitle = (text: string) => {

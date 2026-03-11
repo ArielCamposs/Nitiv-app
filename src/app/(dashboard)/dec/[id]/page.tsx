@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { AcuseRecibo } from "@/components/dec/acuse-recibo"
 import { DecDeleteButton } from "@/components/dec/dec-delete-button"
+import { DecPrintPdf } from "@/components/dec/dec-print-pdf"
 
 const SEVERITY_META = {
     moderada: { label: "Etapa 2 — Moderada", color: "bg-amber-100 text-amber-700" },
@@ -94,12 +95,28 @@ async function getDecDetail(id: string) {
         (r: any) => r.recipient_id === user.id && !r.seen
     ) : null
 
-    // Detectar si el usuario actual es admin
-    const isAdmin = user
-        ? (await supabase.from("users").select("role").eq("id", user.id).single()).data?.role === "admin"
-        : false
+    // Detectar si el usuario actual es admin y nombre de institución (para PDF)
+    const profile = user
+        ? (await supabase.from("users").select("role, institution_id").eq("id", user.id).single()).data
+        : null
+    const isAdmin = profile?.role === "admin"
+    let institutionName: string | undefined
+    if (profile?.institution_id) {
+        const { data: inst } = await supabase
+            .from("institutions")
+            .select("name")
+            .eq("id", profile.institution_id)
+            .maybeSingle()
+        institutionName = inst?.name
+    }
 
-    return { incident, recipients: recipients ?? [], myRecipientId: myRecipient?.id ?? null, isAdmin }
+    return {
+        incident,
+        recipients: recipients ?? [],
+        myRecipientId: myRecipient?.id ?? null,
+        isAdmin,
+        institutionName,
+    }
 }
 
 function SectionBlock({
@@ -149,27 +166,46 @@ export default async function DecDetailPage({
 
     if (!data) return notFound()
 
-    const { incident, recipients } = data
+    const { incident, recipients, institutionName } = data
     const student = incident.students as any
     const reporter = incident.users as any
     const severity = SEVERITY_META[incident.severity as keyof typeof SEVERITY_META]
 
-    return (
-        <main className="min-h-screen bg-slate-50">
-            <div className="mx-auto max-w-3xl px-4 py-8 space-y-6">
+    const pdfData = {
+        folio: incident.folio,
+        type: incident.type,
+        severity: incident.severity,
+        location: incident.location,
+        context: incident.context,
+        conduct_types: incident.conduct_types,
+        triggers: incident.triggers,
+        actions_taken: incident.actions_taken,
+        description: incident.description,
+        guardian_contacted: incident.guardian_contacted ?? false,
+        resolved: incident.resolved ?? false,
+        incident_date: incident.incident_date,
+        end_date: incident.end_date,
+        student: student ? { name: student.name, last_name: student.last_name, rut: student.rut, guardian_name: student.guardian_name, guardian_phone: student.guardian_phone, courses: student.courses } : null,
+        reporter: reporter ? { name: reporter.name, last_name: reporter.last_name } : null,
+        recipients: recipients.map((r: any) => ({ role: r.role, users: r.users, seen: r.seen, seen_at: r.seen_at })),
+    }
 
-                {/* Encabezado */}
-                <div className="flex items-start justify-between gap-4">
-                    <div>
+    return (
+        <main className="min-h-screen bg-slate-50 print:bg-white">
+            <div id="dec-print-area" className="mx-auto max-w-3xl px-4 py-8 space-y-6 print:py-6 print:max-w-none">
+
+                {/* Encabezado con acciones Imprimir / PDF */}
+                <div className="flex flex-wrap items-start justify-between gap-4 print:flex print:block">
+                    <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                            <h1 className="text-2xl font-semibold text-slate-900">Ficha DEC</h1>
+                            <h1 className="text-2xl font-semibold text-slate-900 print:text-xl">Ficha DEC</h1>
                             {incident.folio && (
-                                <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-mono text-slate-500">
+                                <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-mono text-slate-500 print:bg-slate-100">
                                     {incident.folio}
                                 </span>
                             )}
                         </div>
-                        <p className="text-sm text-slate-500 mt-1">
+                        <p className="text-sm text-slate-500 mt-1 print:text-xs">
                             {new Date(incident.incident_date).toLocaleDateString("es-CL", {
                                 weekday: "long",
                                 day: "2-digit",
@@ -191,13 +227,14 @@ export default async function DecDetailPage({
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                        <DecPrintPdf data={pdfData} institutionName={institutionName} />
                         <Badge className={`text-xs ${severity?.color}`}>
                             {severity?.label ?? incident.severity}
                         </Badge>
 
-                        {/* Acciones admin */}
+                        {/* Acciones admin — ocultas al imprimir */}
                         {data.isAdmin && (
-                            <>
+                            <div className="print:hidden flex items-center gap-2">
                                 <Link href={`/dec/${incident.id}/editar`}>
                                     <Button size="sm" variant="outline" className="gap-1">
                                         <Pencil className="h-3.5 w-3.5" />
@@ -209,7 +246,7 @@ export default async function DecDetailPage({
                                     folio={incident.folio}
                                     redirectTo="/admin/dec"
                                 />
-                            </>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -396,7 +433,9 @@ export default async function DecDetailPage({
                 </div>
 
                 {data.myRecipientId && (
-                    <AcuseRecibo recipientId={data.myRecipientId} />
+                    <div className="print:hidden">
+                        <AcuseRecibo recipientId={data.myRecipientId} />
+                    </div>
                 )}
 
             </div>

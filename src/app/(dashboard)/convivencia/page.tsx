@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { getActiveAlerts } from "@/lib/utils/get-alerts"
 import { ConvivenciaDashboardClient, ConvivenciaStats } from "@/components/convivencia/ConvivenciaDashboardClient"
+import { RadarDashboardWidget } from "@/components/radar/RadarDashboardWidget"
 
 export default async function ConvivenciaPage() {
     const supabase = await createClient()
@@ -183,6 +184,9 @@ export default async function ConvivenciaPage() {
                         Bienvenido/a, <span className="font-medium text-slate-700">{profile.name} {profile.last_name}</span>
                     </p>
                 </div>
+
+                {/* Radar activo — posición prominente */}
+                <RadarDashboardWidget institutionId={iid} role="convivencia" />
 
                 <ConvivenciaDashboardClient stats={stats} />
             </div>

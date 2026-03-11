@@ -7,7 +7,7 @@ import { toast } from "sonner"
 import jsPDF from "jspdf"
 import html2canvas from "html2canvas-pro"
 
-export function PrintButton() {
+export function PrintButton({ institutionName }: { institutionName?: string } = {}) {
     const [isDownloading, setIsDownloading] = useState(false)
 
     const handleDownloadPDF = async () => {
@@ -55,9 +55,15 @@ export function PrintButton() {
             const pdfWidth = pdf.internal.pageSize.getWidth()
             const pdfHeight = (canvas.height * pdfWidth) / canvas.width
 
-            // If the content is longer than a page, this will scale it down to fit the width. 
+            // If the content is longer than a page, this will scale it down to fit the width.
             // In our CSS it's strictly constrained to an A4 height anyway, so it should fit perfectly.
             pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
+            if (institutionName) {
+                pdf.setFont("helvetica", "normal")
+                pdf.setFontSize(9)
+                pdf.setTextColor(100, 116, 139)
+                pdf.text(institutionName, 14, 12)
+            }
             pdf.save('plantilla-actividad.pdf')
 
             // Restore styles

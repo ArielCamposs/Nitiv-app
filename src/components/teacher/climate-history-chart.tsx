@@ -318,24 +318,24 @@ export function ClimateHistoryChart({ courses, historyLogs, showFilters, teacher
                                                             borderColor: `${ENERGY_COLORS[log.energy_level]}30`
                                                         }}
                                                     >
-                                                            <div className="flex items-center gap-1">
-                                                                <User className="w-2.5 h-2.5 text-slate-400" />
-                                                                <span className="text-[9px] font-bold leading-none text-slate-800 truncate max-w-[60px]">
-                                                                    {teacherName.split(' ')[0]} {teacherName.split(' ')[1]?.[0] + '.'}
+                                                            <div className="flex items-start gap-1 min-w-0">
+                                                                <User className="w-2.5 h-2.5 text-slate-400 shrink-0 mt-0.5" />
+                                                                <span className="text-[9px] font-bold leading-tight text-slate-800 truncate" title={teacherName}>
+                                                                    {teacherName}
                                                                 </span>
                                                                 {log.session_time && (
-                                                                    <span className="text-[7px] font-black bg-slate-100 text-slate-400 px-1 rounded-sm">
+                                                                    <span className="text-[7px] font-black bg-slate-100 text-slate-400 px-1 rounded-sm shrink-0">
                                                                         {log.session_time === 'morning' ? 'M' : 'T'}
                                                                     </span>
                                                                 )}
                                                             </div>
-                                                            <span className="text-xs">{ENERGY_DEFINITIONS[log.energy_level]?.emoji}</span>
                                                         <div 
-                                                            className="mt-2 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest w-fit"
+                                                            className="mt-1.5 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest w-fit"
                                                             style={{ 
                                                                 backgroundColor: ENERGY_COLORS[log.energy_level],
                                                                 color: 'white'
                                                             }}
+                                                            title={ENERGY_DEFINITIONS[log.energy_level]?.desc}
                                                         >
                                                             {ENERGY_DEFINITIONS[log.energy_level]?.label ?? log.energy_level}
                                                         </div>

@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server"
 import { ClimaPageTabs } from "@/components/teacher/clima-page-tabs"
 import { redirect } from "next/navigation"
 
+// Evitar caché: siempre traer datos frescos para que el calendario muestre los registros recién guardados
+export const dynamic = "force-dynamic"
+
 async function getTeacherCourses() {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -24,11 +27,12 @@ async function getTeacherCourses() {
         .select("course_id, is_head_teacher, courses(id, name, level)")
         .eq("teacher_id", user.id)
 
-    // NUEVO: Obtener TODOS los cursos de la institución para el selector
+    // Todos los cursos de la institución: cualquier docente (incl. profesor jefe) puede registrar en cualquiera
     const { data: allInstitutionCourses } = await supabase
         .from("courses")
         .select("id, name")
         .eq("institution_id", profile.institution_id)
+        .eq("active", true)
         .order("name")
 
     const courseIds = (teacherCourses ?? []).map((c: any) => c.course_id)
@@ -92,9 +96,9 @@ export default async function ClimaPage() {
                     </p>
                 </div>
 
-                {data.courses.length === 0 ? (
+                {data.allInstitutionCourses.length === 0 ? (
                     <p className="text-slate-500">
-                        Aún no tienes cursos asignados. Solicita al administrador que te asigne uno.
+                        No hay cursos activos en la institución. Contacta al administrador.
                     </p>
                 ) : (
                     <ClimaPageTabs

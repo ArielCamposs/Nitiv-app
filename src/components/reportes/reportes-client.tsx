@@ -394,6 +394,7 @@ export function ReportesClient({
         const incidents2 = incidentsByStudent.filter(i => i.student_id === st.id)
         const alerts2 = alertsByStudent.filter(a => a.student_id === st.id)
         generateStudentPDF({
+            institutionName,
             student: { name: st.name, last_name: st.last_name, courseName: st.courseName },
             emotions: emotions2.map(e => ({
                 date: e.created_at,
@@ -633,6 +634,7 @@ export function ReportesClient({
                                             if (!course) return
                                             withLoading("climate", () =>
                                                 generateClimatePDF({
+                                                    institutionName,
                                                     courseName: course.courseName,
                                                     weeks: course.weeks,
                                                     students: course.studentsDetail.map(s => ({

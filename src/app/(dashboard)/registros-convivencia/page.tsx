@@ -36,6 +36,12 @@ export default async function RegistrosConvivenciaPage() {
         redirect("/")
     }
 
+    const { data: institution } = await supabase
+        .from("institutions")
+        .select("name")
+        .eq("id", profile.institution_id)
+        .maybeSingle()
+
     // Last 90 days of records for this institution
     const since = new Date()
     since.setDate(since.getDate() - 90)
@@ -102,6 +108,7 @@ export default async function RegistrosConvivenciaPage() {
                     students={(students ?? []) as any}
                     staffUsers={(staffUsers ?? []) as any}
                     reporterName={reporterName}
+                    institutionName={institution?.name ?? "Institución"}
                 />
             </div>
         </main>

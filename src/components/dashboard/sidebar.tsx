@@ -6,7 +6,7 @@ import { useState, useEffect } from "react"
 import {
     Home, LogOut, ShoppingBag, ThermometerSun, Users, LifeBuoy,
     Shield, BarChart3, FileText, MessageSquare, Activity, UserCircle,
-    Calendar, BookOpen, Library, ClipboardList
+    Calendar, BookOpen, Library, ClipboardList, Radar, Lock
 } from "lucide-react"
 import { useChatUnread } from "@/context/chat-unread-context"
 import { DecBadge } from "@/components/dashboard/dec-badge"
@@ -60,6 +60,7 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
 
     if (isStudent) {
         centroAccion.push({ title: "Check-in", href: "/estudiante/checkin", icon: Activity })
+        centroAccion.push({ title: "Radar de Competencias", href: "/estudiante/radar", icon: Radar })
     }
 
     if (isDocente) {
@@ -94,6 +95,11 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
             icon: Activity,
         })
         gestionCasos.push({ title: "Estudiantes", href: `/${currentRole}/estudiantes`, icon: Users })
+    }
+
+    // Radar de Competencias — solo dupla y convivencia
+    if (currentRole === "dupla" || currentRole === "convivencia") {
+        gestionCasos.push({ title: "Radar de Competencias", href: `/${currentRole}/radar`, icon: Radar })
     }
 
 
@@ -169,13 +175,14 @@ function AvatarContent({ fullName, role }: { fullName: string; role: string | nu
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
-export function SidebarContent({ userId, showBell = true }: { userId: string; showBell?: boolean }) {
+export function SidebarContent({ userId, showBell = true, institutionName }: { userId: string; showBell?: boolean; institutionName?: string }) {
     const pathname = usePathname()
     const router = useRouter()
     const supabase = createClient()
     const [role, setRole] = useState<string | null>(null)
     const [fullName, setFullName] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
+    const [radarActive, setRadarActive] = useState<boolean | null>(null)
     const { totalUnread } = useChatUnread()
 
     useEffect(() => {
@@ -191,6 +198,28 @@ export function SidebarContent({ userId, showBell = true }: { userId: string; sh
                 if (profile) {
                     setRole(profile.role)
                     setFullName([profile.name, profile.last_name].filter(Boolean).join(" "))
+
+                    // Si es estudiante, verificar si tiene radar activo en su curso
+                    if (profile.role === "estudiante" || profile.role === "centro_alumnos") {
+                        const { data: student } = await supabase
+                            .from("students")
+                            .select("course_id, institution_id")
+                            .eq("user_id", user.id)
+                            .maybeSingle()
+
+                        if (student?.course_id) {
+                            const { data: sessions } = await supabase
+                                .from("radar_sessions")
+                                .select("id")
+                                .eq("institution_id", student.institution_id)
+                                .eq("course_id", student.course_id)
+                                .eq("active", true)
+                                .limit(1)
+                            setRadarActive((sessions?.length ?? 0) > 0)
+                        } else {
+                            setRadarActive(false)
+                        }
+                    }
                 }
             } catch (error) {
                 console.error("Error fetching role:", error)
@@ -223,10 +252,17 @@ export function SidebarContent({ userId, showBell = true }: { userId: string; sh
 
     return (
         <div className="flex h-full flex-col">
-            {/* Logo + campana */}
-            <div className="mb-2 flex items-center gap-2 px-1 justify-between">
-                <img src="/logo.svg" alt="Nitiv Logo" className="h-24 w-auto max-w-[75%] object-contain -ml-2" />
-                {showBell && <NotificationBell userId={userId} />}
+            {/* Logo + nombre del colegio + campana */}
+            <div className="mb-1 flex flex-col gap-0.5 px-0">
+                <div className="flex items-start justify-between gap-1">
+                    <img src="/logo.svg" alt="Nitiv Logo" className="h-28 w-auto max-w-[88%] object-contain object-left -ml-1 shrink-0" />
+                    {showBell && <span className="shrink-0 mt-0.5"><NotificationBell userId={userId} /></span>}
+                </div>
+                {institutionName && (
+                    <p className="text-sm font-medium text-slate-700 truncate px-1 border-l-2 border-slate-300 pl-2.5" title={institutionName}>
+                        {institutionName}
+                    </p>
+                )}
             </div>
 
             {/* Nav agrupado */}
@@ -240,30 +276,52 @@ export function SidebarContent({ userId, showBell = true }: { userId: string; sh
 
                         {/* Items del grupo */}
                         <div className="space-y-0.5">
-                            {group.items.map((item) => (
-                                <Link
-                                    key={item.href}
-                                    href={item.href}
-                                    className={cn(
-                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-slate-100 hover:text-slate-900",
-                                        pathname === item.href ||
-                                            (pathname.startsWith(item.href + "/") && item.href !== "/")
-                                            ? "bg-slate-100 text-slate-900"
-                                            : "text-slate-500"
-                                    )}
-                                >
-                                    <item.icon className="h-4 w-4 shrink-0" />
-                                    <span className="flex-1">{item.title}</span>
-                                    {/* @ts-ignore */}
-                                    {item.badge && <DecBadge />}
-                                    {/* @ts-ignore */}
-                                    {item.chatBadge && totalUnread > 0 && (
-                                        <span className="min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-                                            {totalUnread > 9 ? "9+" : totalUnread}
+                            {group.items.map((item) => {
+                                // Radar de Competencias: deshabilitar si el estudiante no tiene sesión activa.
+                                // Usamos !== true para que también quede bloqueado mientras carga (null),
+                                // evitando la ventana donde se podría clickear antes de recibir respuesta del servidor.
+                                const isRadarLink = item.href === "/estudiante/radar"
+                                const isRadarLocked = isRadarLink && radarActive !== true
+
+                                if (isRadarLocked) {
+                                    return (
+                                        <span
+                                            key={item.href}
+                                            title="No disponible — tu curso aún no tiene el Radar activado"
+                                            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 cursor-not-allowed select-none"
+                                        >
+                                            <item.icon className="h-4 w-4 shrink-0" />
+                                            <span className="flex-1">{item.title}</span>
+                                            <Lock className="h-3 w-3 shrink-0" />
                                         </span>
-                                    )}
-                                </Link>
-                            ))}
+                                    )
+                                }
+
+                                return (
+                                    <Link
+                                        key={item.href}
+                                        href={item.href}
+                                        className={cn(
+                                            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-slate-100 hover:text-slate-900",
+                                            pathname === item.href ||
+                                                (pathname.startsWith(item.href + "/") && item.href !== "/")
+                                                ? "bg-slate-100 text-slate-900"
+                                                : "text-slate-500"
+                                        )}
+                                    >
+                                        <item.icon className="h-4 w-4 shrink-0" />
+                                        <span className="flex-1">{item.title}</span>
+                                        {/* @ts-ignore */}
+                                        {item.badge && <DecBadge />}
+                                        {/* @ts-ignore */}
+                                        {item.chatBadge && totalUnread > 0 && (
+                                            <span className="min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                                                {totalUnread > 9 ? "9+" : totalUnread}
+                                            </span>
+                                        )}
+                                    </Link>
+                                )
+                            })}
                         </div>
                     </div>
                 ))}
@@ -309,10 +367,10 @@ export function SidebarContent({ userId, showBell = true }: { userId: string; sh
     )
 }
 
-export function Sidebar({ userId }: { userId: string }) {
+export function Sidebar({ userId, institutionName }: { userId: string; institutionName?: string }) {
     return (
         <aside className="fixed left-0 top-0 hidden h-screen w-64 border-r bg-slate-50/50 p-6 md:flex md:flex-col">
-            <SidebarContent userId={userId} />
+            <SidebarContent userId={userId} institutionName={institutionName} />
         </aside>
     )
 }

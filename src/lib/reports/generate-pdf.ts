@@ -3,6 +3,7 @@ import autoTable from "jspdf-autotable"
 
 // ── Reporte ficha individual estudiante ──
 export function generateStudentPDF(data: {
+    institutionName: string
     student: { name: string; last_name: string; rut?: string; courseName: string }
     emotions: { date: string; emotion: string; intensity: number; stress: number | null; anxiety: number | null; reflection?: string }[]
     incidents: { folio: string; type: string; severity: string; date: string; resolved: boolean }[]
@@ -20,16 +21,17 @@ export function generateStudentPDF(data: {
     doc.setFontSize(10)
     doc.setFont("helvetica", "normal")
     doc.setTextColor(120)
-    doc.text(`Generado el ${today}`, 14, 27)
+    doc.text(`${data.institutionName}`, 14, 27)
+    doc.text(`Generado el ${today}`, 14, 33)
 
     // Datos del estudiante
     doc.setTextColor(0)
     doc.setFontSize(13)
     doc.setFont("helvetica", "bold")
-    doc.text("Datos del estudiante", 14, 40)
+    doc.text("Datos del estudiante", 14, 46)
 
     autoTable(doc, {
-        startY: 44,
+        startY: 50,
         head: [["Campo", "Valor"]],
         body: [
             ["Nombre", `${data.student.name} ${data.student.last_name}`],
@@ -50,7 +52,7 @@ export function generateStudentPDF(data: {
     const totalAlerts = data.alerts.length
     const openAlerts = data.alerts.filter(a => !a.resolved).length
 
-    const yResumen = (doc as any).lastAutoTable.finalY + 10
+    const yResumen = (doc as any).lastAutoTable.finalY + 8
     doc.setFontSize(13)
     doc.setFont("helvetica", "bold")
     doc.text("Resumen de bienestar y seguimiento", 14, yResumen)
@@ -163,6 +165,7 @@ export function generateStudentPDF(data: {
 
 // ── Reporte clima del curso ──
 export function generateClimatePDF(data: {
+    institutionName: string
     courseName: string
     weeks: { semana: string; promedio: number | null; registros: number }[]
     students: { name: string; hasPaec: boolean; alertCount: number; incidentCount: number; lastEmotion: string }[]
@@ -177,19 +180,20 @@ export function generateClimatePDF(data: {
     doc.setFontSize(10)
     doc.setFont("helvetica", "normal")
     doc.setTextColor(120)
-    doc.text(`Curso: ${data.courseName} — Generado el ${today}`, 14, 27)
+    doc.text(data.institutionName, 14, 27)
+    doc.text(`Curso: ${data.courseName} — Generado el ${today}`, 14, 33)
 
     doc.setTextColor(0)
     doc.setFontSize(13)
     doc.setFont("helvetica", "bold")
-    doc.text("Tendencia de energía — últimas 4 semanas", 14, 40)
+    doc.text("Tendencia de energía — últimas 4 semanas", 14, 46)
 
     const SCORE_LABEL: Record<number, string> = {
         4: "Regulada", 3: "Inquieta", 2: "Apática", 1: "Explosiva",
     }
 
     autoTable(doc, {
-        startY: 44,
+        startY: 50,
         head: [["Semana", "Promedio", "Clima predominante", "Registros"]],
         body: data.weeks.map(w => [
             w.semana,

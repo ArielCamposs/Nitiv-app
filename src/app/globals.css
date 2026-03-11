@@ -166,3 +166,137 @@
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
+
+/* ── Estilos de impresión: informes DEC y PAEC como documento limpio ─────────── */
+@media print {
+  /* Ocultar chat flotante, botones flotantes y cualquier elemento fijo abajo (no depende del wrapper) */
+  [class*="fixed"][class*="bottom"] {
+    display: none !important;
+  }
+
+  body,
+  main {
+    background: #fff !important;
+  }
+
+  #dec-print-area,
+  #paec-print-area {
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+
+  /* Tarjetas como bloques de documento: sin sombra, borde simple */
+  #dec-print-area [class*="rounded"],
+  #paec-print-area [class*="rounded"] {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  #dec-print-area [class*="shadow"],
+  #paec-print-area [class*="shadow"] {
+    box-shadow: none !important;
+  }
+
+  #dec-print-area [class*="border"],
+  #paec-print-area [class*="border"] {
+    border-color: #e2e8f0 !important;
+  }
+
+  /* Títulos de sección: tipografía clara */
+  #dec-print-area h3,
+  #paec-print-area h3 {
+    font-size: 11pt !important;
+    font-weight: 600 !important;
+    color: #1e293b !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.02em !important;
+    margin-bottom: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+  }
+
+  /* Contenido de tarjetas (bloques con bg-card): padding uniforme para papel */
+  #dec-print-area [class*="bg-card"] > div:first-of-type,
+  #paec-print-area [class*="bg-card"] > div:first-of-type {
+    padding-bottom: 0.25rem !important;
+  }
+
+  #dec-print-area [class*="bg-card"] > div:last-of-type,
+  #paec-print-area [class*="bg-card"] > div:last-of-type {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.75rem !important;
+  }
+
+  /* Texto legible en negro/gris oscuro */
+  #dec-print-area p,
+  #paec-print-area p,
+  #dec-print-area span,
+  #paec-print-area span,
+  #dec-print-area li,
+  #paec-print-area li,
+  #dec-print-area td,
+  #paec-print-area td {
+    color: #1e293b !important;
+  }
+
+  #dec-print-area [class*="text-slate-4"],
+  #paec-print-area [class*="text-slate-4"] {
+    color: #64748b !important;
+  }
+
+  /* Título principal del informe (Ficha DEC / PAEC) */
+  #dec-print-area h1,
+  #paec-print-area h1 {
+    font-size: 14pt !important;
+    font-weight: 600 !important;
+    color: #0f172a !important;
+    margin-bottom: 0.15rem !important;
+  }
+
+  /* Etiquetas/badges como texto normal, sin fondo de color */
+  #dec-print-area [class*="Badge"],
+  #paec-print-area [class*="Badge"],
+  #dec-print-area [class*="rounded-full"][class*="bg-"],
+  #paec-print-area [class*="rounded-full"][class*="bg-"] {
+    background: transparent !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #334155 !important;
+    padding: 0.15rem 0.4rem !important;
+  }
+
+  /* Enlaces sin color para impresión */
+  #dec-print-area a,
+  #paec-print-area a {
+    color: #1e293b !important;
+    text-decoration: none !important;
+  }
+
+  /* Tablas limpias */
+  #dec-print-area table,
+  #paec-print-area table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+
+  #dec-print-area th,
+  #paec-print-area th,
+  #dec-print-area td,
+  #paec-print-area td {
+    border: 1px solid #e2e8f0 !important;
+    padding: 0.35rem 0.5rem !important;
+  }
+
+  #dec-print-area thead th,
+  #paec-print-area thead th {
+    background: #f8fafc !important;
+    font-weight: 600 !important;
+    font-size: 10pt !important;
+  }
+
+  /* Evitar cortes feos entre páginas */
+  #dec-print-area [class*="bg-card"],
+  #paec-print-area [class*="bg-card"] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

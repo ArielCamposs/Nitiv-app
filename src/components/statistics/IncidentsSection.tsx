@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
     BarChart,
     Bar,
+    LineChart,
+    Line,
     XAxis,
     YAxis,
     CartesianGrid,
@@ -14,7 +16,7 @@ import {
     Cell,
     Legend,
 } from "recharts"
-import { ShieldAlert, AlertTriangle, TrendingUp, Users, FileWarning } from "lucide-react"
+import { ShieldAlert, AlertTriangle, TrendingUp, Users, FileWarning, Calendar, ChartPie, BarChart3, ListOrdered } from "lucide-react"
 
 type CountByLabel = { label: string; count: number }
 type IncidentByMonth = { month: string; count: number }
@@ -153,12 +155,19 @@ export function IncidentsSection({ incidents, days }: Props) {
                 </Card>
             </div>
 
-            {/* Evolucion por mes + Severidad */}
+            {/* Evolución por mes (línea) + Severidad (dona compacta) */}
             <div className="grid lg:grid-cols-3 gap-4">
-                <Card className="lg:col-span-2">
-                    <CardHeader>
-                        <CardTitle className="text-sm">Evolucion por mes</CardTitle>
-                        <p className="text-xs text-slate-500 font-normal">Ultimos {days} dias</p>
+                <Card className="lg:col-span-2 border-l-4 border-l-slate-400 bg-slate-50/30">
+                    <CardHeader className="pb-2">
+                        <div className="flex items-center gap-2">
+                            <div className="rounded-lg bg-slate-200/80 p-1.5">
+                                <Calendar className="h-4 w-4 text-slate-600" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-sm">Evolución por mes</CardTitle>
+                                <p className="text-xs text-slate-500 font-normal">Últimos {days} días</p>
+                            </div>
+                        </div>
                     </CardHeader>
                     <CardContent className="h-64">
                         {byMonthData.length === 0 ? (
@@ -167,22 +176,37 @@ export function IncidentsSection({ incidents, days }: Props) {
                             </p>
                         ) : (
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={byMonthData} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                                <LineChart data={byMonthData} margin={{ top: 10, right: 10, bottom: 0, left: -20 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                                     <XAxis dataKey="label" tick={{ fontSize: 11 }} />
                                     <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
                                     <Tooltip />
-                                    <Bar dataKey="count" name="Incidentes" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                                </BarChart>
+                                    <Line
+                                        type="monotone"
+                                        dataKey="count"
+                                        name="Incidentes"
+                                        stroke="#475569"
+                                        strokeWidth={2}
+                                        dot={{ fill: "#475569", r: 4 }}
+                                        activeDot={{ r: 6, fill: "#64748b" }}
+                                    />
+                                </LineChart>
                             </ResponsiveContainer>
                         )}
                     </CardContent>
                 </Card>
 
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-sm">Por severidad</CardTitle>
-                        <p className="text-xs text-slate-500 font-normal">Moderada vs Severa</p>
+                <Card className="border-l-4 border-l-amber-500 bg-amber-50/20">
+                    <CardHeader className="pb-2">
+                        <div className="flex items-center gap-2">
+                            <div className="rounded-lg bg-amber-100 p-1.5">
+                                <ChartPie className="h-4 w-4 text-amber-700" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-sm">Por severidad</CardTitle>
+                                <p className="text-xs text-slate-500 font-normal">Moderada vs Severa</p>
+                            </div>
+                        </div>
                     </CardHeader>
                     <CardContent className="h-64">
                         {severityPieData.length === 0 ? (
@@ -195,20 +219,19 @@ export function IncidentsSection({ incidents, days }: Props) {
                                     <Pie
                                         data={severityPieData}
                                         cx="50%"
-                                        cy="50%"
-                                        innerRadius={40}
-                                        outerRadius={65}
-                                        paddingAngle={2}
+                                        cy="45%"
+                                        innerRadius={42}
+                                        outerRadius={58}
+                                        paddingAngle={4}
                                         dataKey="value"
                                         nameKey="name"
-                                        label={({ name, value }) => `${name}: ${value}`}
                                     >
                                         {severityPieData.map((_, i) => (
-                                            <Cell key={i} fill={severityPieData[i].fill} />
+                                            <Cell key={i} fill={severityPieData[i].fill} stroke="#fff" strokeWidth={2} />
                                         ))}
                                     </Pie>
-                                    <Tooltip formatter={(value: number) => [value, "Incidentes"]} />
-                                    <Legend />
+                                    <Tooltip formatter={(value: number, name: string) => [value, name]} />
+                                    <Legend layout="horizontal" verticalAlign="bottom" wrapperStyle={{ fontSize: 11 }} />
                                 </PieChart>
                             </ResponsiveContainer>
                         )}
@@ -216,12 +239,19 @@ export function IncidentsSection({ incidents, days }: Props) {
                 </Card>
             </div>
 
-            {/* Por tipo (horizontal bars, ordenado) + Por curso */}
+            {/* Por tipo (barras horizontales) + Por curso (ranking con barras de progreso) */}
             <div className="grid lg:grid-cols-2 gap-4">
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-sm">Distribucion por tipo</CardTitle>
-                        <p className="text-xs text-slate-500 font-normal">Tipos de incidente en el periodo</p>
+                <Card className="border-l-4 border-l-indigo-500 bg-indigo-50/20">
+                    <CardHeader className="pb-2">
+                        <div className="flex items-center gap-2">
+                            <div className="rounded-lg bg-indigo-100 p-1.5">
+                                <BarChart3 className="h-4 w-4 text-indigo-700" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-sm">Distribución por tipo</CardTitle>
+                                <p className="text-xs text-slate-500 font-normal">Tipos de incidente en el periodo</p>
+                            </div>
+                        </div>
                     </CardHeader>
                     <CardContent className="h-72">
                         {byTypeData.length === 0 ? (
@@ -234,13 +264,14 @@ export function IncidentsSection({ incidents, days }: Props) {
                                     data={byTypeData}
                                     layout="vertical"
                                     margin={{ top: 4, right: 10, left: 4, bottom: 4 }}
-                                    barCategoryGap="14%"
+                                    barCategoryGap="18%"
+                                    barSize={20}
                                 >
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e7ff" horizontal={false} />
                                     <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
-                                    <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={90} />
+                                    <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={92} />
                                     <Tooltip />
-                                    <Bar dataKey="count" name="Cantidad" radius={[0, 4, 4, 0]}>
+                                    <Bar dataKey="count" name="Cantidad" radius={[0, 6, 6, 0]}>
                                         {byTypeData.map((entry, i) => (
                                             <Cell key={i} fill={entry.fill} />
                                         ))}
@@ -252,34 +283,58 @@ export function IncidentsSection({ incidents, days }: Props) {
                 </Card>
 
                 {hasByCourse && (
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-sm">Incidentes por curso</CardTitle>
-                            <p className="text-xs text-slate-500 font-normal">Cursos con mas casos</p>
+                    <Card className="border-l-4 border-l-rose-400 bg-rose-50/20">
+                        <CardHeader className="pb-2">
+                            <div className="flex items-center gap-2">
+                                <div className="rounded-lg bg-rose-100 p-1.5">
+                                    <ListOrdered className="h-4 w-4 text-rose-700" />
+                                </div>
+                                <div>
+                                    <CardTitle className="text-sm">Incidentes por curso</CardTitle>
+                                    <p className="text-xs text-slate-500 font-normal">Cursos con más casos</p>
+                                </div>
+                            </div>
                         </CardHeader>
                         <CardContent>
-                            <ul className="space-y-2 max-h-72 overflow-y-auto">
-                                {byCourseList.slice(0, 10).map((c) => (
-                                    <li key={c.label} className="flex items-center justify-between gap-2 text-sm">
-                                        <span className="truncate text-slate-700">{c.label}</span>
-                                        <span className="font-semibold text-rose-600 shrink-0">{c.count}</span>
-                                    </li>
-                                ))}
+                            <ul className="space-y-3 max-h-72 overflow-y-auto">
+                                {byCourseList.slice(0, 10).map((c, i) => {
+                                    const maxCount = byCourseList[0]?.count ?? 1
+                                    const pct = Math.round((c.count / maxCount) * 100)
+                                    return (
+                                        <li key={c.label} className="flex flex-col gap-1">
+                                            <div className="flex items-center justify-between gap-2 text-sm">
+                                                <span className="font-medium text-slate-500 w-5 tabular-nums">{i + 1}.</span>
+                                                <span className="truncate text-slate-800 flex-1">{c.label}</span>
+                                                <span className="font-semibold text-rose-600 shrink-0 tabular-nums">{c.count}</span>
+                                            </div>
+                                            <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                                                <div
+                                                    className="h-full rounded-full bg-rose-400 transition-all"
+                                                    style={{ width: `${Math.max(pct, 8)}%` }}
+                                                />
+                                            </div>
+                                        </li>
+                                    )
+                                })}
                             </ul>
                         </CardContent>
                     </Card>
                 )}
             </div>
 
-            {/* Ultimos incidentes */}
+            {/* Últimos incidentes */}
             {hasRecent && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="text-sm flex items-center gap-2">
-                            <FileWarning className="h-4 w-4 text-slate-500" />
-                            Ultimos incidentes registrados
-                        </CardTitle>
-                        <p className="text-xs text-slate-500 font-normal">Ordenados por fecha</p>
+                <Card className="border-l-4 border-l-slate-500 bg-slate-50/30">
+                    <CardHeader className="pb-2">
+                        <div className="flex items-center gap-2">
+                            <div className="rounded-lg bg-slate-200/80 p-1.5">
+                                <FileWarning className="h-4 w-4 text-slate-600" />
+                            </div>
+                            <div>
+                                <CardTitle className="text-sm">Últimos incidentes registrados</CardTitle>
+                                <p className="text-xs text-slate-500 font-normal">Ordenados por fecha</p>
+                            </div>
+                        </div>
                     </CardHeader>
                     <CardContent>
                         <div className="overflow-x-auto">

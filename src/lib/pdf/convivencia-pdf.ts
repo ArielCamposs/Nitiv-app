@@ -1,6 +1,6 @@
 import jsPDF from "jspdf"
 
-export function buildConvivenciaPdf(record: any, reporterName: string) {
+export function buildConvivenciaPdf(record: any, reporterName: string, institutionName?: string) {
     const doc = new jsPDF({
         orientation: "portrait",
         unit: "mm",
@@ -11,6 +11,14 @@ export function buildConvivenciaPdf(record: any, reporterName: string) {
     const pageWidth = doc.internal.pageSize.width
     const contentWidth = pageWidth - margin * 2
     let yPos = margin
+
+    if (institutionName) {
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(10)
+        doc.setTextColor(100, 116, 139)
+        doc.text(institutionName, margin, yPos)
+        yPos += 8
+    }
 
     // Helpers
     const addCategory = (text: string) => {
@@ -146,6 +154,7 @@ export function buildConvivenciaPdf(record: any, reporterName: string) {
 
 // Informe de estadisticas de registros de convivencia
 export interface ConvivenciaStatsPdfData {
+    institutionName?: string
     statusCounts: { abiertos: number; seguimiento: number; cerrados: number }
     last30: number
     lastWeek: number
@@ -181,6 +190,14 @@ export function buildConvivenciaStatsPdf(data: ConvivenciaStatsPdfData): jsPDF {
     const pageWidth = doc.internal.pageSize.width
     const contentWidth = pageWidth - margin * 2
     let y = margin
+
+    if (data.institutionName) {
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(10)
+        doc.setTextColor(100, 116, 139)
+        doc.text(data.institutionName, margin, y)
+        y += 8
+    }
 
     const title = (text: string, fontSize: number = 14) => {
         y = newPageIfNeeded(doc, y, margin, 25)
