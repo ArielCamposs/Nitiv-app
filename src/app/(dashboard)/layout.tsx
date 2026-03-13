@@ -61,7 +61,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
                     {/* Chat flotante — oculto al imprimir */}
                     {!isStudent && <div className="print:hidden"><FloatingChat userId={user.id} /></div>}
-                    <div className="print:hidden"><FloatingHelpAgent /></div>
+                    {!isStudent && <div className="print:hidden"><FloatingHelpAgent /></div>}
                 </div>
             </ChatUnreadProvider>
         </DecBadgeProvider>
