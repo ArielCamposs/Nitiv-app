@@ -70,7 +70,8 @@ export function FloatingHelpAgent() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.details ?? `Status ${res.status}`);
+        const msg = err.details ?? err.error ?? `Error ${res.status}`;
+        throw new Error(msg);
       }
 
       // Handle streaming response
@@ -124,12 +125,13 @@ export function FloatingHelpAgent() {
       }
     } catch (error) {
       console.error("Help Agent error:", error);
+      const message = error instanceof Error ? error.message : "Lo siento, hubo un error al procesar tu consulta. Por favor intenta nuevamente.";
       setMessages((prev) => [
         ...prev,
         {
           id: `e-${Date.now()}`,
           role: "assistant",
-          content: "Lo siento, hubo un error al procesar tu consulta. Por favor intenta nuevamente.",
+          content: message,
         },
       ]);
     } finally {
