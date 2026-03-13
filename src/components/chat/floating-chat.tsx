@@ -8,6 +8,7 @@ import { MessageSquare, X, ArrowLeft, Send, Search } from "lucide-react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { formatTimeAgo } from "@/lib/time-utils"
 
 const BLOCKED_ROLES = ["estudiante", "centro_alumnos"]
 
@@ -18,6 +19,7 @@ interface Contact {
     role: string
     conversationId?: string
     availability?: string | null
+    updated_at?: string | null
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -216,6 +218,92 @@ function ChatWindow({
     )
 }
 
+// ── Componente de Lista para tener contador de tiempo ──
+function ContactListFloating({
+    contacts,
+    openConversation,
+    unreadMap
+}: {
+    contacts: Contact[]
+    openConversation: (c: Contact) => void
+    unreadMap: Record<string, number>
+}) {
+    const [, setTick] = useState(0)
+    useEffect(() => {
+        const interval = setInterval(() => setTick(t => t + 1), 60000)
+        return () => clearInterval(interval)
+    }, [])
+
+    return (
+        <div className="p-2 space-y-0.5">
+            {contacts.map((contact) => {
+                const convId = contact.conversationId
+                const unread = convId ? unreadMap[convId] ?? 0 : 0
+                const hasUnread = unread > 0
+                const dotColor = contact.availability === "disponible" ? "bg-green-500" :
+                    contact.availability === "en_clase" ? "bg-blue-500" :
+                        contact.availability === "en_reunion" ? "bg-yellow-500" :
+                            contact.availability === "ausente" ? "bg-slate-400" : "bg-green-500"
+
+                return (
+                    <button
+                        key={contact.id}
+                        onClick={() => openConversation(contact)}
+                        className={cn(
+                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-left",
+                            hasUnread
+                                ? "bg-primary/5 hover:bg-primary/10"
+                                : "hover:bg-slate-50"
+                        )}
+                    >
+                        {/* Avatar */}
+                        <div className="relative shrink-0">
+                            <div className={cn(
+                                "h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold",
+                                hasUnread ? "bg-primary text-white" : "bg-primary/10 text-primary"
+                            )}>
+                                <span className="text-xs font-bold">
+                                    {contact.name[0]}
+                                    {contact.last_name?.[0] ?? ""}
+                                </span>
+                            </div>
+                            <span className={cn(
+                                "absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-white transition-colors",
+                                dotColor
+                            )} />
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                            <p className={cn(
+                                "text-sm truncate",
+                                hasUnread ? "font-semibold text-slate-900" : "font-medium text-slate-800"
+                            )}>
+                                {contact.name} {contact.last_name ?? ""}
+                            </p>
+                            <div className="text-[10px] text-slate-400 flex items-center gap-1 truncate mt-0.5">
+                                <span>{ROLE_LABEL[contact.role] ?? contact.role}</span>
+                                {contact.updated_at && (
+                                    <>
+                                        <span>•</span>
+                                        <span>{formatTimeAgo(contact.updated_at)}</span>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Badge de no leídos */}
+                        {hasUnread && (
+                            <span className="ml-1 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                                {unread > 9 ? "9+" : unread}
+                            </span>
+                        )}
+                    </button>
+                )
+            })}
+        </div>
+    )
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 export function FloatingChat({ userId }: { userId: string }) {
     const supabase = createClient()
@@ -252,7 +340,7 @@ export function FloatingChat({ userId }: { userId: string }) {
 
             const { data: users } = await supabase
                 .from("users")
-                .select("id, name, last_name, role")
+                .select("id, name, last_name, role, created_at")
                 .not("role", "in", `(${BLOCKED_ROLES.join(",")})`)
                 .eq("institution_id", profile.institution_id)
                 .neq("id", userId)
@@ -263,6 +351,14 @@ export function FloatingChat({ userId }: { userId: string }) {
                 .select("id, user_a, user_b")
                 .or(`user_a.eq.${userId},user_b.eq.${userId}`)
 
+            const userIds = (users ?? []).map(u => u.id)
+            const { data: avail } = userIds.length > 0
+                ? await supabase.from("user_availability").select("user_id, status, updated_at").in("user_id", userIds)
+                : { data: [] }
+
+            const availMap: Record<string, { status: string; updated_at: string | null }> = {}
+            avail?.forEach(a => { availMap[a.user_id] = { status: a.status, updated_at: a.updated_at } })
+
             setContacts(
                 (users ?? []).map((u) => {
                     const conv = convs?.find(
@@ -270,7 +366,8 @@ export function FloatingChat({ userId }: { userId: string }) {
                             (c.user_a === userId && c.user_b === u.id) ||
                             (c.user_b === userId && c.user_a === u.id)
                     )
-                    return { ...u, conversationId: conv?.id }
+                    const a = availMap[u.id]
+                    return { ...u, conversationId: conv?.id, availability: a?.status ?? null, updated_at: a?.updated_at || u.created_at }
                 })
             )
             setLoading(false)
@@ -288,10 +385,10 @@ export function FloatingChat({ userId }: { userId: string }) {
                 "postgres_changes",
                 { event: "*", schema: "public", table: "user_availability" },
                 (payload) => {
-                    const d = payload.new as { user_id: string; status: string } | null
+                    const d = payload.new as { user_id: string; status: string; updated_at: string | null } | null
                     if (!d?.user_id) return
                     setContacts(prev =>
-                        prev.map(c => c.id === d.user_id ? { ...c, availability: d.status } : c)
+                        prev.map(c => c.id === d.user_id ? { ...c, availability: d.status, updated_at: d.updated_at } : c)
                     )
                 }
             )
@@ -413,56 +510,7 @@ export function FloatingChat({ userId }: { userId: string }) {
                                         <p className="text-xs">Sin contactos</p>
                                     </div>
                                 ) : (
-                                    <div className="p-2 space-y-0.5">
-                                        {sortedContacts.map((contact) => {
-                                            const convId = contact.conversationId
-                                            const unread = convId ? unreadMap[convId] ?? 0 : 0
-                                            const hasUnread = unread > 0
-
-                                            return (
-                                                <button
-                                                    key={contact.id}
-                                                    onClick={() => openConversation(contact)}
-                                                    className={cn(
-                                                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-left",
-                                                        hasUnread
-                                                            ? "bg-primary/5 hover:bg-primary/10"
-                                                            : "hover:bg-slate-50"
-                                                    )}
-                                                >
-                                                    {/* Avatar */}
-                                                    <div className={cn(
-                                                        "h-8 w-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold",
-                                                        hasUnread ? "bg-primary text-white" : "bg-primary/10 text-primary"
-                                                    )}>
-                                                        <span className="text-xs font-bold">
-                                                            {contact.name[0]}
-                                                            {contact.last_name?.[0] ?? ""}
-                                                        </span>
-                                                    </div>
-
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className={cn(
-                                                            "text-sm truncate",
-                                                            hasUnread ? "font-semibold text-slate-900" : "font-medium text-slate-800"
-                                                        )}>
-                                                            {contact.name} {contact.last_name ?? ""}
-                                                        </p>
-                                                        <p className="text-[10px] text-slate-400">
-                                                            {ROLE_LABEL[contact.role] ?? contact.role}
-                                                        </p>
-                                                    </div>
-
-                                                    {/* Badge de no leídos */}
-                                                    {hasUnread && (
-                                                        <span className="ml-1 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-                                                            {unread > 9 ? "9+" : unread}
-                                                        </span>
-                                                    )}
-                                                </button>
-                                            )
-                                        })}
-                                    </div>
+                                    <ContactListFloating contacts={sortedContacts} openConversation={openConversation} unreadMap={unreadMap} />
                                 )}
                             </div>
                         </>

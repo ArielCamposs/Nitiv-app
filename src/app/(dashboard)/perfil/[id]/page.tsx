@@ -43,28 +43,12 @@ export default async function ProfilePage({
         .maybeSingle()
 
     if (studentCheck) {
-        // Redirigir a la vista de estudiante apropiada según el rol actual
-        if (["estudiante", "apoderado", "admin"].includes(currentRole)) {
-            // Handle these cases if needed, otherwise fallback to admin or similar
-            if (currentRole === "admin") return redirect(`/admin/estudiantes/${targetId}`)
+        // La única ruta de perfil de estudiante existente es /docente/estudiantes/[id],
+        // y esa página ya permite ver el perfil a todo el staff (docente, convivencia, dupla, director, etc.)
+        if (["docente", "dupla", "convivencia", "director", "utp", "inspector", "admin"].includes(currentRole)) {
+            return redirect(`/docente/estudiantes/${targetId}`)
         }
-
-        switch (currentRole) {
-            case "docente":
-                return redirect(`/docente/estudiantes/${targetId}`)
-            case "dupla":
-                return redirect(`/dupla/estudiantes/${targetId}`)
-            case "convivencia":
-                return redirect(`/convivencia/estudiantes/${targetId}`)
-            case "director":
-                return redirect(`/director/estudiantes/${targetId}`)
-            case "utp":
-                return redirect(`/utp/estudiantes/${targetId}`)
-            case "inspector":
-                return redirect(`/inspector/estudiantes/${targetId}`)
-            default:
-                return notFound() // or redirect to a default layout if implemented
-        }
+        return notFound()
     }
 
     // 3. Otherwise, target ID should be a staff member (user)

@@ -8,6 +8,7 @@ import { ChatWindow } from "@/components/chat/ChatWindow"
 import { ArrowLeft, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { formatTimeAgo } from "@/lib/time-utils"
 
 const AVAILABILITY_DOT: Record<string, string> = {
     disponible: "bg-green-500", en_clase: "bg-blue-500",
@@ -26,7 +27,7 @@ export default function ConversationPage() {
 
     const [currentUserId, setCurrentUserId] = useState("")
     const [otherUser, setOtherUser] = useState<{ id: string; name: string; last_name: string | null; role: string } | null>(null)
-    const [availability, setAvailability] = useState<string | null>(null)
+    const [availability, setAvailability] = useState<{ status: string; updated_at: string | null } | null>(null)
     const [text, setText] = useState("")
     const inputRef = useRef<HTMLInputElement>(null)
     const { messages, loading, sendMessage } = useChat(conversationId)
@@ -45,12 +46,16 @@ export default function ConversationPage() {
             const otherId = conv.user_a === user.id ? conv.user_b : conv.user_a
 
             const { data: other } = await supabase
-                .from("users").select("id, name, last_name, role").eq("id", otherId).single()
+                .from("users").select("id, name, last_name, role, created_at").eq("id", otherId).single()
             setOtherUser(other)
 
             const { data: avail } = await supabase
-                .from("user_availability").select("status").eq("user_id", otherId).maybeSingle()
-            if (avail) setAvailability(avail.status)
+                .from("user_availability").select("status, updated_at").eq("user_id", otherId).maybeSingle()
+            if (avail) {
+                setAvailability({ status: avail.status, updated_at: avail.updated_at || (other?.created_at ?? null) })
+            } else {
+                setAvailability({ status: "disponible", updated_at: other?.created_at ?? null })
+            }
 
             markAsRead(conversationId)
         }
@@ -71,7 +76,10 @@ export default function ConversationPage() {
             .on("postgres_changes", {
                 event: "*", schema: "public", table: "user_availability",
                 filter: `user_id=eq.${otherUser.id}`,
-            }, payload => { setAvailability((payload.new as any)?.status ?? null) })
+            }, payload => {
+                const newData = payload.new as any
+                setAvailability(newData ? { status: newData.status, updated_at: newData.updated_at } : null)
+            })
             .subscribe()
         return () => { supabase.removeChannel(channel) }
     }, [otherUser?.id])
@@ -90,7 +98,14 @@ export default function ConversationPage() {
     const otherName = otherUser
         ? otherUser.last_name ? `${otherUser.name} ${otherUser.last_name}` : otherUser.name
         : "Chat"
-    const dotColor = availability ? AVAILABILITY_DOT[availability] : null
+    const dotColor = availability ? AVAILABILITY_DOT[availability.status] : null
+
+    // For relative time updates
+    const [, setTick] = useState(0)
+    useEffect(() => {
+        const interval = setInterval(() => setTick(t => t + 1), 60000)
+        return () => clearInterval(interval)
+    }, [])
 
     return (
         <div className="flex flex-col h-[calc(100vh-0px)] md:h-screen max-w-2xl mx-auto">
@@ -110,7 +125,15 @@ export default function ConversationPage() {
                 <div>
                     <p className="font-semibold text-slate-800 text-sm leading-tight">{otherName}</p>
                     {otherUser && (
-                        <p className="text-xs text-slate-400">{ROLE_LABEL[otherUser.role] ?? otherUser.role}</p>
+                        <div className="text-xs text-slate-400 flex items-center gap-1">
+                            <span>{ROLE_LABEL[otherUser.role] ?? otherUser.role}</span>
+                            {availability?.updated_at && (
+                                <>
+                                    <span>•</span>
+                                    <span>{formatTimeAgo(availability.updated_at)}</span>
+                                </>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>

@@ -1,8 +1,9 @@
 "use client"
 import { UnreadBadge } from "@/components/chat/UnreadBadge"
 import { cn } from "@/lib/utils"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { ChevronDown } from "lucide-react"
+import { formatTimeAgo } from "@/lib/time-utils"
 
 interface Contact {
     id: string
@@ -11,6 +12,7 @@ interface Contact {
     role: string
     conversationId?: string
     availability?: string | null
+    updated_at?: string | null
 }
 
 const ROLE_GROUPS: { role: string; label: string; emoji: string }[] = [
@@ -43,6 +45,7 @@ interface ContactListProps {
     onOpenChat: (contactId: string) => void
     unreadMap: Record<string, number>
     isOnline: (id: string) => boolean
+    onOpenMailboxThreadModal?: (role: string, roleLabel: string) => void
 }
 
 function ContactItem({ contact, onOpenChat, unread, isOnline }: {
@@ -57,6 +60,13 @@ function ContactItem({ contact, onOpenChat, unread, isOnline }: {
     const dotColor = isOnline
         ? (contact.availability ? AVAILABILITY_DOT[contact.availability] : "bg-green-500")
         : "bg-slate-300"
+
+    // Use state to force re-render every minute for relative times
+    const [, setTick] = useState(0)
+    useEffect(() => {
+        const interval = setInterval(() => setTick(t => t + 1), 60000)
+        return () => clearInterval(interval)
+    }, [])
 
     return (
         <button
@@ -75,14 +85,22 @@ function ContactItem({ contact, onOpenChat, unread, isOnline }: {
 
             <div className="flex-1 min-w-0">
                 <p className="font-medium text-slate-800 text-sm truncate">{fullName}</p>
-                <p className="text-xs text-slate-400">
-                    {isOnline
-                        ? (contact.availability
-                            ? AVAILABILITY_LABEL[contact.availability]
-                            : "En línea")
-                        : "Desconectado"
-                    }
-                </p>
+                <div className="text-xs text-slate-400 flex items-center gap-1 truncate">
+                    <span>
+                        {isOnline
+                            ? (contact.availability
+                                ? AVAILABILITY_LABEL[contact.availability]
+                                : "En línea")
+                            : "Desconectado"
+                        }
+                    </span>
+                    {contact.updated_at && (
+                        <>
+                            <span className="text-[10px]">•</span>
+                            <span className="text-[10px]">{formatTimeAgo(contact.updated_at)}</span>
+                        </>
+                    )}
+                </div>
             </div>
 
             {unread > 0 && <UnreadBadge count={unread} />}
@@ -90,13 +108,14 @@ function ContactItem({ contact, onOpenChat, unread, isOnline }: {
     )
 }
 
-function RoleGroup({ group, contacts, onOpenChat, unreadMap, isOnline, defaultOpen = false }: {
+function RoleGroup({ group, contacts, onOpenChat, unreadMap, isOnline, defaultOpen = false, onOpenMailboxThreadModal }: {
     group: typeof ROLE_GROUPS[0]
     contacts: Contact[]
     onOpenChat: (id: string) => void
     unreadMap: Record<string, number>
     isOnline: (id: string) => boolean
     defaultOpen?: boolean
+    onOpenMailboxThreadModal?: (role: string, roleLabel: string) => void
 }) {
     const [open, setOpen] = useState(defaultOpen)
 
@@ -106,9 +125,10 @@ function RoleGroup({ group, contacts, onOpenChat, unreadMap, isOnline, defaultOp
 
     return (
         <div className="border-b border-slate-100 last:border-b-0">
+            <div className="relative">
             <button
                 onClick={() => setOpen(p => !p)}
-                className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 transition-colors"
+                className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 transition-colors pr-16"
             >
                 <span className="text-base leading-none">{group.emoji}</span>
                 <span className="flex-1 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
@@ -125,6 +145,19 @@ function RoleGroup({ group, contacts, onOpenChat, unreadMap, isOnline, defaultOp
                     open ? "rotate-180" : ""
                 )} />
             </button>
+            
+            {onOpenMailboxThreadModal && (
+                <button
+                    onClick={() => onOpenMailboxThreadModal(group.role, group.label)}
+                    className="absolute right-10 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                    title={`Crear requerimiento a ${group.label}`}
+                >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                </button>
+            )}
+            </div>
 
             {open && (
                 <div className="pb-1 px-1">
@@ -143,7 +176,7 @@ function RoleGroup({ group, contacts, onOpenChat, unreadMap, isOnline, defaultOp
     )
 }
 
-export function ContactList({ contacts, currentUserId, onOpenChat, unreadMap, isOnline }: ContactListProps) {
+export function ContactList({ contacts, currentUserId, onOpenChat, unreadMap, isOnline, onOpenMailboxThreadModal }: ContactListProps) {
     if (contacts.length === 0) {
         return (
             <div className="py-12 text-center text-slate-400">
@@ -175,6 +208,7 @@ export function ContactList({ contacts, currentUserId, onOpenChat, unreadMap, is
                     onOpenChat={onOpenChat}
                     unreadMap={unreadMap}
                     isOnline={isOnline}
+                    onOpenMailboxThreadModal={onOpenMailboxThreadModal}
                     defaultOpen={
                         firstWithUnread?.group.role === group.role ||
                         grouped.length === 1

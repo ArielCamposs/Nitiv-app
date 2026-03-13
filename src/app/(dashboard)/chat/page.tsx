@@ -8,7 +8,7 @@ import { ContactList } from "@/components/chat/ContactList"
 import { AvailabilitySelector } from "@/components/chat/AvailabilitySelector"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
-import { MessageSquare, Inbox, Plus } from "lucide-react"
+import { MessageSquare, Inbox, Plus, Send } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const BLOCKED_ROLES = ["estudiante", "centro_alumnos"]
@@ -26,9 +26,13 @@ const STATUS_LABEL: Record<string, string> = {
 interface UserProfile {
     id: string; name: string; last_name: string | null
     role: string; conversationId?: string; availability?: string | null
+    updated_at?: string | null
 }
 
-interface MailboxThread { id: string; subject: string; status: string; created_at: string }
+interface MailboxThread { 
+    id: string; subject: string; status: string; created_at: string; created_by: string;
+    creator?: { name: string; last_name: string | null; role: string };
+}
 interface Mailbox { id: string; name: string; target_role: string; threads: MailboxThread[] }
 
 export default function ChatPage() {
@@ -53,7 +57,13 @@ export default function ChatPage() {
     const [newThreadSubject, setNewThreadSubject] = useState("")
     const [newThreadContent, setNewThreadContent] = useState("")
 
-    const { unreadMap, totalUnread, markAsRead } = useChatUnread()
+    // -- Modal de creación rápida manual
+    const [threadModalRole, setThreadModalRole] = useState<{ role: string; label: string } | null>(null)
+    const [threadModalSubject, setThreadModalSubject] = useState("")
+    const [threadModalContent, setThreadModalContent] = useState("")
+    const [isCreatingThread, setIsCreatingThread] = useState(false)
+
+    const { unreadMap, totalUnread, markAsRead, mailboxUnreadMap, totalMailboxUnread } = useChatUnread()
     const { isOnline } = usePresence(currentUser?.id ?? "", institutionId)
 
     useEffect(() => {
@@ -71,7 +81,7 @@ export default function ChatPage() {
 
             // ── Contactos ──
             const { data: users } = await supabase
-                .from("users").select("id, name, last_name, role")
+                .from("users").select("id, name, last_name, role, created_at")
                 .not("role", "in", `(${BLOCKED_ROLES.join(",")})`)
                 .eq("institution_id", profile.institution_id)
                 .neq("id", user.id)
@@ -83,18 +93,19 @@ export default function ChatPage() {
 
             const userIds = (users ?? []).map(u => u.id)
             const { data: avail } = userIds.length > 0
-                ? await supabase.from("user_availability").select("user_id, status").in("user_id", userIds)
+                ? await supabase.from("user_availability").select("user_id, status, updated_at").in("user_id", userIds)
                 : { data: [] }
 
-            const availMap: Record<string, string> = {}
-            avail?.forEach(a => { availMap[a.user_id] = a.status })
+            const availMap: Record<string, { status: string; updated_at: string | null }> = {}
+            avail?.forEach(a => { availMap[a.user_id] = { status: a.status, updated_at: a.updated_at } })
 
             setContacts((users ?? []).map(u => {
                 const conv = convs?.find(c =>
                     (c.user_a === user.id && c.user_b === u.id) ||
                     (c.user_b === user.id && c.user_a === u.id)
                 )
-                return { ...u, conversationId: conv?.id, availability: availMap[u.id] ?? null }
+                const a = availMap[u.id]
+                return { ...u, conversationId: conv?.id, availability: a?.status ?? null, updated_at: a?.updated_at || u.created_at }
             }))
 
 
@@ -106,14 +117,23 @@ export default function ChatPage() {
 
             if (mboxes && mboxes.length > 0) {
                 const mboxIds = mboxes.map(m => m.id)
-                const { data: threads } = await supabase
-                    .from("mailbox_threads")
-                    .select("id, mailbox_id, subject, status, created_at")
+                    const { data: threads } = await supabase
+                        .from("mailbox_threads")
+                        .select(`
+                            id, mailbox_id, subject, status, created_at, created_by,
+                            creator:users!mailbox_threads_created_by_fkey(name, last_name, role)
+                        `)
                     .in("mailbox_id", mboxIds)
                     .order("created_at", { ascending: false })
                 setMailboxes(mboxes.map(m => ({
                     ...m,
-                    threads: (threads ?? []).filter(t => t.mailbox_id === m.id),
+                    threads: (threads ?? [])
+                        .filter(t => t.mailbox_id === m.id)
+                        .filter(t => t.created_by === user.id || m.target_role === profile.role || profile.role === "admin")
+                        .map(t => ({
+                            ...t,
+                            creator: Array.isArray(t.creator) ? t.creator[0] : t.creator
+                        })) as MailboxThread[],
                 })))
             }
 
@@ -130,11 +150,11 @@ export default function ChatPage() {
                 "postgres_changes",
                 { event: "*", schema: "public", table: "user_availability" },
                 (payload) => {
-                    const d = payload.new as { user_id: string; status: string } | null
+                    const d = payload.new as { user_id: string; status: string; updated_at: string | null } | null
                     if (!d?.user_id) return
                     setContacts(prev =>
                         prev.map(c =>
-                            c.id === d.user_id ? { ...c, availability: d.status } : c
+                            c.id === d.user_id ? { ...c, availability: d.status, updated_at: d.updated_at } : c
                         )
                     )
                 }
@@ -142,6 +162,48 @@ export default function ChatPage() {
             .subscribe()
         return () => { supabase.removeChannel(channel) }
     }, [])
+
+    // ── Realtime: actualizar hilos de buzones en vivo ────────────────────────
+    useEffect(() => {
+        if (!currentUser) return // Dependemos de currentUser para saber el rol y ID
+        const threadChannel = supabase
+            .channel("chat-page-threads")
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "mailbox_threads" },
+                (payload) => {
+                    const d = payload.new as MailboxThread & { mailbox_id: string }
+                    const old = payload.old as { id: string }
+                    
+                    setMailboxes(prev => prev.map(m => {
+                        // Solo nos importa si el evento es para este buzón
+                        // Ojo: en DELETE no tenemos new, usamos payload.old
+                        if (payload.eventType !== "DELETE" && d.mailbox_id !== m.id) return m
+                        
+                        // Si es INSERT o UPDATE, verificar accesos
+                        if (payload.eventType !== "DELETE") {
+                            const hasAccess = d.created_by === currentUser.id || m.target_role === currentUser.role || currentUser.role === "admin"
+                            if (!hasAccess) return m
+                        }
+
+                        let newThreads = [...m.threads]
+                        if (payload.eventType === "INSERT") {
+                            if (!newThreads.find(t => t.id === d.id)) newThreads = [d, ...newThreads]
+                        } else if (payload.eventType === "UPDATE") {
+                            newThreads = newThreads.map(t => t.id === d.id ? { ...t, ...d } : t)
+                        } else if (payload.eventType === "DELETE") {
+                            newThreads = newThreads.filter(t => t.id !== old.id)
+                        }
+
+                        newThreads.sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                        return { ...m, threads: newThreads }
+                    }))
+                }
+            )
+            .subscribe()
+
+        return () => { supabase.removeChannel(threadChannel) }
+    }, [currentUser, supabase])
 
     const openChat = async (contactId: string) => {
         if (!currentUser) return
@@ -171,6 +233,59 @@ export default function ChatPage() {
         router.push(`/chat/buzones/${thread.id}`)
     }
 
+    const handleCreateThreadFromRole = async () => {
+        if (!threadModalRole || !threadModalSubject.trim() || !threadModalContent.trim() || !currentUser) return
+        
+        setIsCreatingThread(true)
+        
+        try {
+            // 1. Buscar si ya existe el buzón para ese rol en la institución
+            let { data: mailbox } = await supabase
+                .from("service_mailboxes")
+                .select("id")
+                .eq("institution_id", institutionId)
+                .eq("target_role", threadModalRole.role)
+                .maybeSingle()
+                
+            // 2. Si no existe, crearlo al vuelo
+            if (!mailbox) {
+                const { data: newMb, error } = await supabase.from("service_mailboxes").insert({
+                    institution_id: institutionId,
+                    name: `Buzón de ${threadModalRole.label}`,
+                    target_role: threadModalRole.role
+                }).select("id").single()
+                
+                if (error) throw error
+                mailbox = newMb
+            }
+            
+            if (!mailbox) throw new Error("No se pudo obtener o crear el buzón")
+
+            // 3. Crear el hilo
+            const { data: thread, error: threadErr } = await supabase
+                .from("mailbox_threads")
+                .insert({ mailbox_id: mailbox.id, created_by: currentUser.id, subject: threadModalSubject.trim() })
+                .select("id").single()
+                
+            if (threadErr || !thread) throw threadErr
+
+            // 4. Insertar el mensaje inicial
+            await supabase.from("mailbox_messages").insert({
+                thread_id: thread.id, sender_id: currentUser.id, content: threadModalContent.trim(),
+            })
+
+            // 5. Redirigir al hilo cerrado modal
+            setThreadModalRole(null); setThreadModalSubject(""); setThreadModalContent("")
+            router.push(`/chat/buzones/${thread.id}`)
+            
+        } catch (error) {
+            console.error("Error creating thread:", error)
+            alert("No se pudo crear el requerimiento. Por favor intenta de nuevo.")
+        } finally {
+            setIsCreatingThread(false)
+        }
+    }
+
     return (
         <div className="max-w-lg mx-auto px-4 py-6">
             <div className="flex items-center justify-between mb-5">
@@ -198,8 +313,14 @@ export default function ChatPage() {
                     <TabsTrigger value="mensajes" className="text-xs gap-1.5">
                         <MessageSquare className="w-3.5 h-3.5" /> Mensajes
                     </TabsTrigger>
-                    <TabsTrigger value="buzones" className="text-xs gap-1.5">
+                    <TabsTrigger value="buzones" className="text-xs gap-1.5 relative">
                         <Inbox className="w-3.5 h-3.5" /> Buzones
+                        {totalMailboxUnread > 0 && (
+                            <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                            </span>
+                        )}
                     </TabsTrigger>
                 </TabsList>
 
@@ -231,6 +352,11 @@ export default function ChatPage() {
                                 onOpenChat={openChat}
                                 unreadMap={unreadMap}
                                 isOnline={isOnline}
+                                onOpenMailboxThreadModal={(role, label) => {
+                                    setThreadModalRole({ role, label });
+                                    setThreadModalSubject("");
+                                    setThreadModalContent("");
+                                }}
                             />
                         </div>
                     )}
@@ -282,22 +408,45 @@ export default function ChatPage() {
                                     <p className="text-xs text-slate-400 py-2 px-1">Sin hilos activos.</p>
                                 ) : (
                                     <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
-                                        {mailbox.threads.map(t => (
-                                            <button key={t.id} onClick={() => router.push(`/chat/buzones/${t.id}`)}
-                                                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors border-b last:border-b-0 text-left">
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-medium text-slate-800 truncate">{t.subject}</p>
-                                                    <p className="text-xs text-slate-400 mt-0.5">
-                                                        {new Date(t.created_at).toLocaleDateString("es-CL")}
-                                                    </p>
-                                                </div>
-                                                <span className={cn(
-                                                    "text-[10px] font-semibold px-2 py-0.5 rounded-full border",
-                                                    STATUS_BADGE[t.status] ?? STATUS_BADGE.cerrado
-                                                )}>
-                                                    {STATUS_LABEL[t.status] ?? t.status}
+                                        {mailbox.threads.map(thread => (
+                                            <button key={thread.id} onClick={() => router.push(`/chat/buzones/${thread.id}`)}
+                                            className="block group p-4 border-b border-slate-100 last:border-b-0 hover:bg-slate-50 transition-colors"
+                                        >
+                                            <div className="flex justify-between items-start mb-1.5">
+                                                <span className="text-sm font-semibold text-slate-800 line-clamp-1 group-hover:text-primary transition-colors pr-2">
+                                                    {thread.subject}
                                                 </span>
-                                            </button>
+                                                <div className="flex items-center gap-2">
+                                                    {mailboxUnreadMap[thread.id] > 0 && (
+                                                        <div className="w-2 h-2 rounded-full bg-red-500" />
+                                                    )}
+                                                    <span className={cn(
+                                                        "text-[10px] px-2 py-0.5 rounded-full font-medium border whitespace-nowrap",
+                                                        STATUS_BADGE[thread.status]
+                                                    )}>
+                                                        {STATUS_LABEL[thread.status]}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="flex items-center justify-between mt-2">
+                                                {thread.creator ? (
+                                                    <p className="text-xs text-slate-500">
+                                                        De: <span className="font-medium text-slate-700">{thread.creator.name} {thread.creator.last_name || ""}</span> 
+                                                        <span className="hidden sm:inline"> ({thread.creator.role})</span>
+                                                    </p>
+                                                ) : (
+                                                    <p className="text-xs text-slate-500 line-clamp-1">
+                                                        Creado el {new Date(thread.created_at).toLocaleDateString()} a las {new Date(thread.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </p>
+                                                )}
+                                                {thread.creator && (
+                                                    <p className="text-[10px] text-slate-400">
+                                                        {new Date(thread.created_at).toLocaleDateString()}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </button>
                                         ))}
                                     </div>
                                 )}
@@ -306,6 +455,75 @@ export default function ChatPage() {
                     )}
                 </TabsContent>
             </Tabs>
+
+            {/* Modal de Nuevo Hilo por Rol */}
+            {threadModalRole && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                            <div>
+                                <h3 className="text-sm font-semibold text-slate-800">
+                                    Requerimiento para {threadModalRole.label}
+                                </h3>
+                                <p className="text-xs text-slate-400 mt-0.5">La respuesta llegará a su buzón</p>
+                            </div>
+                            <button
+                                onClick={() => setThreadModalRole(null)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-600 transition-colors"
+                            >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div className="p-4 space-y-4">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-slate-600">Asunto</label>
+                                <input
+                                    type="text"
+                                    value={threadModalSubject}
+                                    onChange={e => setThreadModalSubject(e.target.value)}
+                                    placeholder="Ej. Estudiante con dificultades conductuales"
+                                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                                    maxLength={100}
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-slate-600">Mensaje detallado</label>
+                                <textarea
+                                    value={threadModalContent}
+                                    onChange={e => setThreadModalContent(e.target.value)}
+                                    placeholder="Describe la situación..."
+                                    rows={4}
+                                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-none"
+                                />
+                            </div>
+                            <div className="pt-2 flex justify-end gap-2">
+                                <Button
+                                    variant="ghost"
+                                    className="text-sm rounded-xl"
+                                    onClick={() => setThreadModalRole(null)}
+                                    disabled={isCreatingThread}
+                                >
+                                    Cancelar
+                                </Button>
+                                <Button
+                                    className="text-sm shadow-sm rounded-xl gap-2 px-5"
+                                    onClick={handleCreateThreadFromRole}
+                                    disabled={!threadModalSubject.trim() || !threadModalContent.trim() || isCreatingThread}
+                                >
+                                    {isCreatingThread ? (
+                                        <span className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                                    ) : (
+                                        <Send className="w-4 h-4" />
+                                    )}
+                                    {isCreatingThread ? "Enviando..." : "Enviar requerimiento"}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

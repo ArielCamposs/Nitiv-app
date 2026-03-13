@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { useChatUnread } from "@/context/chat-unread-context"
 import { ArrowLeft, Send, Inbox } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -24,9 +25,10 @@ export default function ThreadPage() {
     const threadId = params.threadId as string
     const router = useRouter()
     const supabase = createClient()
+    const { markMailboxAsRead } = useChatUnread()
 
     const [currentUser, setCurrentUser] = useState<{ id: string; role: string } | null>(null)
-    const [thread, setThread] = useState<{ subject: string; status: string } | null>(null)
+    const [thread, setThread] = useState<{ subject: string; status: string; creator?: { name: string; last_name: string | null; role: string } } | null>(null)
     const [messages, setMessages] = useState<MailboxMsg[]>([])
     const [text, setText] = useState("")
     const [loading, setLoading] = useState(true)
@@ -51,9 +53,31 @@ export default function ThreadPage() {
             setCurrentUser(profile)
 
             const { data: th } = await supabase
-                .from("mailbox_threads").select("subject, status").eq("id", threadId).single()
+                .from("mailbox_threads")
+                .select(`
+                    subject, status, created_by, mailbox_id,
+                    creator:users!mailbox_threads_created_by_fkey(name, last_name, role)
+                `)
+                .eq("id", threadId).single()
             if (!th) return router.push("/chat")
-            setThread(th)
+
+            // Verificar permisos
+            const { data: mailbox } = await supabase
+                .from("service_mailboxes").select("target_role").eq("id", th.mailbox_id).single()
+
+            if (th.created_by !== user.id && mailbox?.target_role !== profile?.role && profile?.role !== "admin") {
+                toast.error("No tienes permisos para ver este hilo")
+                return router.push("/chat")
+            }
+
+            // Marcar como leído
+            await markMailboxAsRead(threadId)
+
+            setThread({
+                subject: th.subject,
+                status: th.status,
+                creator: Array.isArray(th.creator) ? th.creator[0] : th.creator
+            })
 
             await loadMessages()
             setLoading(false)
@@ -122,11 +146,18 @@ export default function ThreadPage() {
                     <p className="font-semibold text-slate-800 text-sm leading-tight truncate">
                         {thread?.subject ?? "Hilo"}
                     </p>
-                    {statusCfg && (
-                        <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full border", statusCfg.badge)}>
-                            {statusCfg.label}
-                        </span>
-                    )}
+                    <div className="flex items-center gap-2 mt-0.5">
+                        {statusCfg && (
+                            <span className={cn("text-[10px] font-semibold px-2 py-0.5 rounded-full border", statusCfg.badge)}>
+                                {statusCfg.label}
+                            </span>
+                        )}
+                        {thread?.creator && (
+                            <span className="text-xs text-slate-500 truncate">
+                                Creador: <span className="font-medium text-slate-700">{thread.creator.name} {thread.creator.last_name || ""}</span> ({thread.creator.role})
+                            </span>
+                        )}
+                    </div>
                 </div>
 
                 {isStaff && thread && thread.status !== "cerrado" && (

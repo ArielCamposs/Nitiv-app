@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useTransition, useMemo } from "react"
+import Link from "next/link"
 import { createConvivenciaRecord, updateConvivenciaRecord, resolveConvivenciaRecord } from "@/app/(dashboard)/registros-convivencia/actions"
 import { buildConvivenciaPdf, buildConvivenciaStatsPdf } from "@/lib/pdf/convivencia-pdf"
 import { toast } from "sonner"
@@ -379,12 +380,12 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
 
     const topReincidentStudents = useMemo(() => {
         if (records.length === 0) return []
-        const counts: { [id: string]: { name: string, last_name: string, count: number } } = {}
+        const counts: { [id: string]: { id: string; name: string; last_name: string; count: number } } = {}
         for (const r of records) {
             for (const inv of r.convivencia_record_students || []) {
                 const s = inv.students
                 if (!s) continue
-                if (!counts[s.id]) counts[s.id] = { name: s.name, last_name: s.last_name, count: 0 }
+                if (!counts[s.id]) counts[s.id] = { id: s.id, name: s.name, last_name: s.last_name, count: 0 }
                 counts[s.id].count++
             }
         }
@@ -1381,7 +1382,11 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             ) : (
                                 <div className="space-y-3">
                                     {topReincidentStudents.map((st, i) => (
-                                        <div key={st.name + st.last_name + i} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                                        <Link
+                                            key={st.id}
+                                            href={`/perfil/${st.id}`}
+                                            className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 hover:bg-slate-100 hover:border-slate-200 transition-colors"
+                                        >
                                             <div className="flex items-center gap-3">
                                                 <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i === 0 ? "bg-red-100 text-red-600" :
                                                     i === 1 ? "bg-orange-100 text-orange-600" :
@@ -1394,7 +1399,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                             <span className="text-xs font-bold text-slate-500 px-2.5 py-1 rounded-full bg-white border border-slate-200 shadow-sm">
                                                 {st.count} casos
                                             </span>
-                                        </div>
+                                        </Link>
                                     ))}
                                 </div>
                             )}

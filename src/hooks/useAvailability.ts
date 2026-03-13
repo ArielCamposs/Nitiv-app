@@ -14,7 +14,8 @@ export const AVAILABILITY_CONFIG: Record<AvailabilityStatus, { label: string; do
 export function useAvailability(userId: string) {
     const supabase = createClient()
     const [status, setStatus] = useState<AvailabilityStatus>("disponible")
-    const [availabilityMap, setAvailabilityMap] = useState<Record<string, AvailabilityStatus>>({})
+    const [updatedAt, setUpdatedAt] = useState<string | null>(null)
+    const [availabilityMap, setAvailabilityMap] = useState<Record<string, { status: AvailabilityStatus; updated_at: string | null }>>({})
 
     useEffect(() => {
         if (!userId) return
@@ -22,10 +23,13 @@ export function useAvailability(userId: string) {
         const load = async () => {
             const { data } = await supabase
                 .from("user_availability")
-                .select("status")
+                .select("status, updated_at")
                 .eq("user_id", userId)
                 .maybeSingle()
-            if (data) setStatus(data.status as AvailabilityStatus)
+            if (data) {
+                setStatus(data.status as AvailabilityStatus)
+                setUpdatedAt(data.updated_at)
+            }
         }
         load()
 
@@ -34,8 +38,11 @@ export function useAvailability(userId: string) {
             .on("postgres_changes", { event: "*", schema: "public", table: "user_availability" }, payload => {
                 const d = payload.new as any
                 if (!d?.user_id) return
-                if (d.user_id === userId) setStatus(d.status)
-                setAvailabilityMap(prev => ({ ...prev, [d.user_id]: d.status }))
+                if (d.user_id === userId) {
+                    setStatus(d.status)
+                    setUpdatedAt(d.updated_at)
+                }
+                setAvailabilityMap(prev => ({ ...prev, [d.user_id]: { status: d.status, updated_at: d.updated_at } }))
             })
             .subscribe()
 
@@ -44,11 +51,13 @@ export function useAvailability(userId: string) {
 
     const updateStatus = useCallback(async (newStatus: AvailabilityStatus) => {
         if (!userId) return
+        const now = new Date().toISOString()
         setStatus(newStatus)
+        setUpdatedAt(now)
         await supabase
             .from("user_availability")
-            .upsert({ user_id: userId, status: newStatus, updated_at: new Date().toISOString() })
+            .upsert({ user_id: userId, status: newStatus, updated_at: now })
     }, [userId, supabase])
 
-    return { status, availabilityMap, updateStatus }
+    return { status, updatedAt, availabilityMap, updateStatus }
 }

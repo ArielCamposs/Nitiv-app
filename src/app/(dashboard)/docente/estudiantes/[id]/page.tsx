@@ -9,6 +9,7 @@ import {
     CardContent,
 } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { BackButton } from "@/components/ui/back-button"
 import { PerceptionForm } from "@/components/teacher/perception-form"
 import { StudentEmotionChart } from "@/components/student/student-emotion-chart"
 
@@ -170,6 +171,8 @@ export default async function StudentProfilePage({
     return (
         <main className="min-h-screen bg-slate-50">
             <div className="mx-auto max-w-3xl px-4 py-8 space-y-6">
+
+                <BackButton className="text-slate-600 hover:text-slate-900 -ml-1 mb-2" />
 
                 {/* Encabezado del estudiante */}
                 <div className="flex items-start justify-between">
