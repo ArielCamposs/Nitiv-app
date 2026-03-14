@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { Pencil } from "lucide-react"
+import { Pencil, ArrowLeft } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
     Card,
@@ -101,13 +101,15 @@ async function getDecDetail(id: string) {
         : null
     const isAdmin = profile?.role === "admin"
     let institutionName: string | undefined
+    let institutionLogoUrl: string | undefined
     if (profile?.institution_id) {
         const { data: inst } = await supabase
             .from("institutions")
-            .select("name")
+            .select("name, logo_url")
             .eq("id", profile.institution_id)
             .maybeSingle()
         institutionName = inst?.name
+        institutionLogoUrl = inst?.logo_url ?? undefined
     }
 
     return {
@@ -116,7 +118,28 @@ async function getDecDetail(id: string) {
         myRecipientId: myRecipient?.id ?? null,
         isAdmin,
         institutionName,
+        institutionLogoUrl,
+        userRole: profile?.role as string | undefined,
     }
+}
+
+/** Parsea el campo context del DEC en líneas etiqueta/valor (solo las que vienen del formulario). */
+function parseDecContext(context: string | null): { label: string; value: string }[] {
+    if (!context?.trim()) return []
+    const segments = context.split(". ").map((s) => s.trim()).filter(Boolean)
+    const result: { label: string; value: string }[] = []
+    for (const seg of segments) {
+        if (seg.includes(" | ")) {
+            for (const part of seg.split(" | ")) {
+                const idx = part.indexOf(": ")
+                if (idx !== -1) result.push({ label: part.slice(0, idx + 1), value: part.slice(idx + 2) })
+            }
+        } else {
+            const idx = seg.indexOf(": ")
+            if (idx !== -1) result.push({ label: seg.slice(0, idx + 1), value: seg.slice(idx + 2) })
+        }
+    }
+    return result
 }
 
 function SectionBlock({
@@ -166,7 +189,7 @@ export default async function DecDetailPage({
 
     if (!data) return notFound()
 
-    const { incident, recipients, institutionName } = data
+    const { incident, recipients, institutionName, institutionLogoUrl } = data
     const student = incident.students as any
     const reporter = incident.users as any
     const severity = SEVERITY_META[incident.severity as keyof typeof SEVERITY_META]
@@ -190,9 +213,22 @@ export default async function DecDetailPage({
         recipients: recipients.map((r: any) => ({ role: r.role, users: r.users, seen: r.seen, seen_at: r.seen_at })),
     }
 
+    const backHref = data.userRole === "convivencia" ? "/convivencia/dec" : data.userRole === "dupla" ? "/dupla/dec" : "/dec"
+
     return (
         <main className="min-h-screen bg-slate-50 print:bg-white">
             <div id="dec-print-area" className="mx-auto max-w-3xl px-4 py-8 space-y-6 print:py-6 print:max-w-none">
+
+                {/* Botón Atrás — volver al historial (oculto al imprimir) */}
+                <div className="print:hidden">
+                    <Link
+                        href={backHref}
+                        className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+                    >
+                        <ArrowLeft className="h-4 w-4" />
+                        Volver al historial
+                    </Link>
+                </div>
 
                 {/* Encabezado con acciones Imprimir / PDF */}
                 <div className="flex flex-wrap items-start justify-between gap-4 print:flex print:block">
@@ -227,7 +263,7 @@ export default async function DecDetailPage({
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                        <DecPrintPdf data={pdfData} institutionName={institutionName} />
+                        <DecPrintPdf data={pdfData} institutionName={institutionName} institutionLogoUrl={institutionLogoUrl} />
                         <Badge className={`text-xs ${severity?.color}`}>
                             {severity?.label ?? incident.severity}
                         </Badge>
@@ -322,10 +358,6 @@ export default async function DecDetailPage({
                             <p className="text-slate-700">{incident.location ?? "No registrado"}</p>
                         </div>
                         <div>
-                            <p className="text-xs text-slate-400">Actividad en curso</p>
-                            <p className="text-slate-700">{incident.context ?? "No registrada"}</p>
-                        </div>
-                        <div>
                             <p className="text-xs text-slate-400">Tipo de incidente</p>
                             <p className="text-slate-700">
                                 {TYPE_LABELS[incident.type] ?? incident.type}
@@ -342,6 +374,38 @@ export default async function DecDetailPage({
                             </p>
                         </div>
                     </div>
+                    {(() => {
+                        const contextLines = parseDecContext(incident.context)
+                        if (contextLines.length === 0 && incident.context) {
+                            return (
+                                <div className="mt-3 pt-3 border-t border-slate-100">
+                                    <p className="text-xs text-slate-400">Contexto adicional</p>
+                                    <p className="text-sm text-slate-700 whitespace-pre-wrap mt-0.5">{incident.context}</p>
+                                </div>
+                            )
+                        }
+                        if (contextLines.length > 0) {
+                            return (
+                                <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
+                                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Detalles del contexto</p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-6 text-sm">
+                                        {contextLines.map((line, i) => {
+                                            const lbl = line.label.trim().replace(/:$/, "")
+                                            const displayLabel =
+                                                lbl === "personas" || lbl === "Nº aprox. personas" ? "N° de personas" : line.label
+                                            return (
+                                                <div key={i}>
+                                                    <p className="text-xs text-slate-400">{displayLabel}</p>
+                                                    <p className="text-slate-700">{line.value}</p>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+                            )
+                        }
+                        return null
+                    })()}
                 </SectionBlock>
 
                 {/* Sección 3: Tipificación */}

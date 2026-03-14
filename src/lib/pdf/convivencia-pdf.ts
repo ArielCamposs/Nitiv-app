@@ -1,6 +1,180 @@
 import jsPDF from "jspdf"
+import { addPdfLogoHeader } from "./pdf-logos"
 
-export function buildConvivenciaPdf(record: any, reporterName: string, institutionName?: string) {
+const BOX_PAD = 4
+const TITLE_BAR_H = 9
+const LINE_H = 5
+const BOX_GAP = 6
+
+/** Colores de la barra del cuadro según estado del registro (abierta verde, seguimiento naranja, cerrado gris). */
+function getStatusBarColor(resolved: boolean, status?: string): [number, number, number] {
+    const s = (status ?? "").toLowerCase()
+    if (resolved || s === "cerrado") return [226, 232, 240]   // slate-200 gris
+    if (s === "seguimiento") return [254, 215, 170]           // orange-200 naranja
+    // Abierta / abierto: verde claro bien visible (poco azul para que no se vea azulado)
+    return [180, 240, 185]   // verde claro (R y B bajos, G alto)
+}
+
+/** Dibuja una línea con etiqueta en negrita y valor en normal (si tiene "Etiqueta: valor"). */
+function drawLabelValueLine(
+    doc: jsPDF,
+    line: string,
+    x: number,
+    y: number,
+    innerW: number,
+    lineH: number
+): number {
+    const colonIdx = line.indexOf(": ")
+    if (colonIdx === -1) {
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(10)
+        doc.setTextColor(51, 65, 85)
+        const wrapped = doc.splitTextToSize(line, innerW)
+        doc.text(wrapped, x, y)
+        return y + wrapped.length * lineH
+    }
+    const label = line.slice(0, colonIdx + 2)
+    const value = line.slice(colonIdx + 2)
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(10)
+    doc.setTextColor(30, 41, 59)
+    doc.text(label, x, y)
+    const labelW = doc.getTextWidth(label)
+    const valueW = innerW - labelW
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(10)
+    doc.setTextColor(51, 65, 85)
+    const valueLines = value ? doc.splitTextToSize(value, valueW) : []
+    if (valueLines.length === 0) return y + lineH
+    doc.text(valueLines[0], x + labelW, y)
+    let currentY = y
+    for (let i = 1; i < valueLines.length; i++) {
+        currentY += lineH
+        doc.text(valueLines[i], x, currentY)
+    }
+    return currentY + lineH
+}
+
+/** Cuadro con título en barra y contenido en líneas "Etiqueta: valor". titleBarColor: RGB opcional para la barra. */
+function addBoxedSection(
+    doc: jsPDF,
+    y: number,
+    margin: number,
+    pageHeight: number,
+    pageWidth: number,
+    title: string,
+    content: string[],
+    titleBarColor?: [number, number, number]
+): number {
+    const innerW = pageWidth - margin * 2 - BOX_PAD * 2
+    const x = margin + BOX_PAD
+    doc.setFontSize(10)
+    let totalContentH = 0
+    for (const line of content) {
+        if (line.includes(": ")) {
+            const value = line.slice(line.indexOf(": ") + 2)
+            doc.setFont("helvetica", "normal")
+            const valueW = innerW - doc.getTextWidth(line.slice(0, line.indexOf(": ") + 2))
+            const valueLines = value ? doc.splitTextToSize(value, valueW) : []
+            totalContentH += Math.max(1, valueLines.length) * LINE_H
+        } else {
+            const wrapped = doc.splitTextToSize(line, innerW)
+            totalContentH += wrapped.length * LINE_H
+        }
+    }
+    const boxH = BOX_PAD + TITLE_BAR_H + BOX_PAD + totalContentH + BOX_PAD
+
+    if (y + boxH > pageHeight - margin) {
+        doc.addPage()
+        y = margin
+    }
+
+    const boxLeft = margin
+    const boxW = pageWidth - margin * 2
+
+    doc.setDrawColor(203, 213, 225)
+    doc.setLineWidth(0.3)
+    doc.rect(boxLeft, y, boxW, boxH)
+
+    doc.setFillColor(...(titleBarColor ?? [241, 245, 249]))
+    doc.rect(boxLeft, y, boxW, TITLE_BAR_H, "F")
+    doc.setDrawColor(226, 232, 240)
+    doc.line(boxLeft, y + TITLE_BAR_H, boxLeft + boxW, y + TITLE_BAR_H)
+
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(10)
+    doc.setTextColor(30, 41, 59)
+    doc.text(title, boxLeft + BOX_PAD, y + 6)
+
+    let textY = y + BOX_PAD + TITLE_BAR_H + BOX_PAD
+    for (const line of content) {
+        textY = drawLabelValueLine(doc, line, x, textY, innerW, LINE_H)
+    }
+
+    return y + boxH + BOX_GAP
+}
+
+/** Cuadro con título en barra y un párrafo de texto (sin etiquetas). titleBarColor: RGB opcional. */
+function addBoxedParagraph(
+    doc: jsPDF,
+    y: number,
+    margin: number,
+    pageHeight: number,
+    pageWidth: number,
+    title: string,
+    paragraph: string,
+    titleBarColor?: [number, number, number]
+): number {
+    const innerW = pageWidth - margin * 2 - BOX_PAD * 2
+    const x = margin + BOX_PAD
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(10)
+    doc.setTextColor(51, 65, 85)
+    const lines = doc.splitTextToSize(paragraph || "Sin contenido", innerW)
+    const contentH = lines.length * LINE_H
+    const boxH = BOX_PAD + TITLE_BAR_H + BOX_PAD + contentH + BOX_PAD
+
+    if (y + boxH > pageHeight - margin) {
+        doc.addPage()
+        y = margin
+    }
+
+    const boxLeft = margin
+    const boxW = pageWidth - margin * 2
+
+    doc.setDrawColor(203, 213, 225)
+    doc.setLineWidth(0.3)
+    doc.rect(boxLeft, y, boxW, boxH)
+
+    doc.setFillColor(...(titleBarColor ?? [241, 245, 249]))
+    doc.rect(boxLeft, y, boxW, TITLE_BAR_H, "F")
+    doc.setDrawColor(226, 232, 240)
+    doc.line(boxLeft, y + TITLE_BAR_H, boxLeft + boxW, y + TITLE_BAR_H)
+
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(10)
+    doc.setTextColor(30, 41, 59)
+    doc.text(title, boxLeft + BOX_PAD, y + 6)
+
+    let textY = y + BOX_PAD + TITLE_BAR_H + BOX_PAD
+    for (const line of lines) {
+        doc.setFont("helvetica", "normal")
+        doc.setFontSize(10)
+        doc.setTextColor(51, 65, 85)
+        doc.text(line, x, textY)
+        textY += LINE_H
+    }
+
+    return y + boxH + BOX_GAP
+}
+
+export function buildConvivenciaPdf(
+    record: any,
+    reporterName: string,
+    institutionName?: string,
+    institutionLogoBase64?: string | null,
+    nitivLogoBase64?: string | null
+) {
     const doc = new jsPDF({
         orientation: "portrait",
         unit: "mm",
@@ -9,135 +183,61 @@ export function buildConvivenciaPdf(record: any, reporterName: string, instituti
 
     const margin = 20
     const pageWidth = doc.internal.pageSize.width
-    const contentWidth = pageWidth - margin * 2
+    const pageHeight = doc.internal.pageSize.height
     let yPos = margin
 
-    if (institutionName) {
-        doc.setFont("helvetica", "normal")
-        doc.setFontSize(10)
-        doc.setTextColor(100, 116, 139)
-        doc.text(institutionName, margin, yPos)
-        yPos += 8
-    }
+    yPos = addPdfLogoHeader(doc, margin, pageWidth, institutionLogoBase64 ?? null, nitivLogoBase64 ?? null)
 
-    // Helpers
-    const addCategory = (text: string) => {
-        doc.setFont("helvetica", "bold")
-        doc.setFontSize(10)
-        doc.setTextColor(79, 70, 229) // indigo-600
-        doc.text(text.toUpperCase(), margin, yPos)
-        yPos += 8
-    }
-
-    const addTitle = (text: string) => {
-        doc.setFont("helvetica", "bold")
-        doc.setFontSize(18)
-        doc.setTextColor(30, 41, 59) // slate-800
-        const lines = doc.splitTextToSize(text, contentWidth)
-        doc.text(lines, margin, yPos)
-        yPos += (lines.length * 8) + 5
-
-        doc.setDrawColor(226, 232, 240) // slate-200
-        doc.line(margin, yPos - 3, pageWidth - margin, yPos - 3)
-        yPos += 5
-    }
-
-    const addSectionHeader = (text: string) => {
-        if (yPos + 15 > doc.internal.pageSize.height - margin) {
-            doc.addPage()
-            yPos = margin
-        }
-        yPos += 4
-        doc.setFont("helvetica", "bold")
-        doc.setFontSize(12)
-        doc.setTextColor(15, 23, 42) // slate-900
-        doc.text(text, margin, yPos)
-        yPos += 6
-    }
-
-    const addField = (label: string, value: string) => {
-        doc.setFont("helvetica", "bold")
-        doc.setFontSize(10)
-        doc.setTextColor(71, 85, 105) // slate-600
-        doc.text(`${label}:`, margin, yPos)
-
-        doc.setFont("helvetica", "normal")
-        doc.setTextColor(15, 23, 42) // slate-900
-        const textX = margin + 35
-        const lines = doc.splitTextToSize(value, contentWidth - 35)
-
-        if (yPos + (lines.length * 5) > doc.internal.pageSize.height - margin) {
-            doc.addPage()
-            yPos = margin
-            doc.setFont("helvetica", "bold")
-            doc.setTextColor(71, 85, 105)
-            doc.text(`${label} (cont):`, margin, yPos)
-            doc.setFont("helvetica", "normal")
-            doc.setTextColor(15, 23, 42)
-        }
-
-        doc.text(lines, textX, yPos)
-        yPos += (lines.length * 5) + 2
-    }
-
-    const addParagraph = (text: string) => {
-        doc.setFont("helvetica", "normal")
-        doc.setFontSize(10)
-        doc.setTextColor(71, 85, 105) // slate-600
-
-        const lines = doc.splitTextToSize(text, contentWidth)
-        if (yPos + (lines.length * 5) > doc.internal.pageSize.height - margin) {
-            doc.addPage()
-            yPos = margin
-        }
-        doc.text(lines, margin, yPos)
-        yPos += (lines.length * 5) + 4
-    }
-
-    // --- Build Document ---
-    addCategory("Registro de Convivencia Escolar")
-    addTitle(`Caso: ${record.type || 'Sin clasificar'}`)
+    const statusBarColor = getStatusBarColor(!!record.resolved, record.status)
 
     const incidentDate = record.incident_date
         ? new Date(record.incident_date).toLocaleString("es-CL", { dateStyle: "long", timeStyle: "short" })
         : "No registrada"
 
-    addField("Fecha/Hora", incidentDate)
-    addField("Gravedad", record.severity?.toUpperCase() || "N/A")
-    addField("Lugar", record.location || "No especificado")
-    addField("Estado", record.resolved ? "Resuelto" : record.status || "Abierto")
-
-    // Involved students
     let studentsText = "Ninguno"
     const involvedList = record.convivencia_record_students?.map((s: any) => s.students).filter(Boolean)
     if (involvedList && involvedList.length > 0) {
-        studentsText = involvedList.map((s: any) => `${s.last_name}, ${s.name} ${s.rut ? `(${s.rut})` : ''}`).join(" | ")
+        studentsText = involvedList.map((s: any) => {
+            const courseData = s.courses ?? s.course
+            const course = courseData ? ` — ${courseData.name}${courseData.section ? " " + courseData.section : ""}` : ""
+            const rut = s.rut ? ` (${s.rut})` : ""
+            return `${s.last_name}, ${s.name}${course}${rut}`
+        }).join(" | ")
     }
-    addField("Involucrados", studentsText)
 
-    yPos += 4
-    addSectionHeader("Descripcion del Evento")
-    addParagraph(record.description || "Sin descripcion")
+    // Cuadro 1: Datos del registro
+    const headerContent: string[] = []
+    if (institutionName) headerContent.push(`Establecimiento: ${institutionName}`)
+    headerContent.push(
+        `Caso: ${record.type || "Sin clasificar"}`,
+        `Fecha y hora: ${incidentDate}`,
+        `Gravedad: ${record.severity?.toUpperCase() || "N/A"}`,
+        `Lugar: ${record.location || "No especificado"}`,
+        `Estado: ${record.resolved ? "Resuelto" : record.status || "Abierto"}`,
+        `Involucrados: ${studentsText}`,
+        `Registrado por: ${reporterName}`
+    )
+    yPos = addBoxedSection(doc, yPos, margin, pageHeight, pageWidth, "1. Datos del registro", headerContent, statusBarColor)
 
+    // Cuadro 2: Descripción del evento
+    yPos = addBoxedParagraph(doc, yPos, margin, pageHeight, pageWidth, "2. Descripción del evento", record.description || "Sin descripción", statusBarColor)
+
+    // Cuadro 3: Acciones inmediatas (si hay)
     if (record.actions_taken && record.actions_taken.length > 0) {
-        addSectionHeader("Acciones Inmediatas Tomadas")
-        record.actions_taken.forEach((action: string) => {
-            addParagraph(`- ${action}`)
-        })
+        const actionsText = record.actions_taken.map((a: string) => `• ${a}`).join("\n")
+        yPos = addBoxedParagraph(doc, yPos, margin, pageHeight, pageWidth, "3. Acciones inmediatas tomadas", actionsText, statusBarColor)
     }
 
-    if (record.agreements) {
-        addSectionHeader("Acuerdos / Resolucion")
-        addParagraph(record.agreements)
+    // Cuadro: Acuerdos / Resolución (si hay)
+    if (record.agreements?.trim()) {
+        const sectionTitle = record.actions_taken?.length ? "4. Acuerdos / Resolución" : "3. Acuerdos / Resolución"
+        yPos = addBoxedParagraph(doc, yPos, margin, pageHeight, pageWidth, sectionTitle, record.agreements.trim(), statusBarColor)
     }
 
-    if (record.resolution_notes) {
-        addSectionHeader("Notas de Resolucion de Caso")
-        addParagraph(record.resolution_notes)
+    // Cuadro: Notas de resolución (si hay)
+    if (record.resolution_notes?.trim()) {
+        yPos = addBoxedParagraph(doc, yPos, margin, pageHeight, pageWidth, "Notas de resolución de caso", record.resolution_notes.trim(), statusBarColor)
     }
-
-    yPos += 10
-    addField("Registrado por", reporterName)
 
     // Footer
     const pageCount = (doc.internal as any).getNumberOfPages()
@@ -184,12 +284,18 @@ function newPageIfNeeded(doc: jsPDF, yPos: number, margin: number, needSpace: nu
     return yPos
 }
 
-export function buildConvivenciaStatsPdf(data: ConvivenciaStatsPdfData): jsPDF {
+export function buildConvivenciaStatsPdf(
+    data: ConvivenciaStatsPdfData,
+    institutionLogoBase64?: string | null,
+    nitivLogoBase64?: string | null
+): jsPDF {
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
     const margin = 18
     const pageWidth = doc.internal.pageSize.width
     const contentWidth = pageWidth - margin * 2
     let y = margin
+
+    y = addPdfLogoHeader(doc, margin, pageWidth, institutionLogoBase64 ?? null, nitivLogoBase64 ?? null)
 
     if (data.institutionName) {
         doc.setFont("helvetica", "normal")

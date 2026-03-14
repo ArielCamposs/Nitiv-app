@@ -1,8 +1,9 @@
 import { createClient } from "@/lib/supabase/server"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { DecListDupla } from "@/components/dec/dec-list-dupla"
 import { MarkDecSeen } from "@/components/dec/mark-dec-seen"
+import { DecPageTabs } from "@/components/dec/dec-page-tabs"
+import { getDecStats } from "@/lib/dec-stats"
 
 async function getDecCasesForConvivencia() {
     const supabase = await createClient()
@@ -17,9 +18,10 @@ async function getDecCasesForConvivencia() {
 
     if (profile?.role !== "convivencia") return null
 
-    const { data: cases } = await supabase
-        .from("incidents")
-        .select(`
+    const [casesRes, decStats] = await Promise.all([
+        supabase
+            .from("incidents")
+            .select(`
       id,
       folio,
       type,
@@ -47,10 +49,17 @@ async function getDecCasesForConvivencia() {
         role
       )
     `)
-        .eq("institution_id", profile.institution_id)
-        .order("incident_date", { ascending: false })
+            .eq("institution_id", profile.institution_id)
+            .order("incident_date", { ascending: false }),
+        getDecStats(profile.institution_id),
+    ])
 
-    return { cases: cases ?? [], role: "convivencia", userId: user.id }
+    return {
+        cases: casesRes.data ?? [],
+        role: "convivencia",
+        userId: user.id,
+        decStats,
+    }
 }
 
 export default async function ConvivenciaDecPage() {
@@ -84,7 +93,7 @@ export default async function ConvivenciaDecPage() {
                     </Link>
                 </div>
 
-                <DecListDupla cases={data.cases as any} currentUserId={data.userId} userRole={data.role} />
+                <DecPageTabs cases={data.cases as any} currentUserId={data.userId} userRole={data.role} decStats={data.decStats} />
             </div>
         </main>
     )

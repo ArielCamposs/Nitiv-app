@@ -1,8 +1,13 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import { getActiveAlerts } from "@/lib/utils/get-alerts"
+import { getHeatmapData } from "@/lib/data/get-heatmap-data"
 import { ConvivenciaDashboardClient, ConvivenciaStats } from "@/components/convivencia/ConvivenciaDashboardClient"
 import { RadarDashboardWidget } from "@/components/radar/RadarDashboardWidget"
+
+const ENERGY_SCORE: Record<string, number> = {
+    explosiva: 1, apatica: 2, inquieta: 3, regulada: 4,
+}
 
 export default async function ConvivenciaPage() {
     const supabase = await createClient()
@@ -23,156 +28,71 @@ export default async function ConvivenciaPage() {
     monthsAgo12.setMonth(now.getMonth() - 11)
     monthsAgo12.setDate(1)
     monthsAgo12.setHours(0, 0, 0, 0)
-
-    // Parallel fetch
+    // Parallel fetch (incidents solo para contar DECs abiertos; estadísticas DEC están en /convivencia/dec → Estadísticas)
     const [
-        { data: students },
         alerts,
         { data: incidents },
-        { data: paecs },
-        { data: courses },
+        { data: convivenciaRecords },
     ] = await Promise.all([
-        supabase.from("students").select("id, name, last_name, course_id").eq("institution_id", iid).eq("active", true),
         getActiveAlerts(),
-        supabase.from("incidents").select("id, folio, student_id, type, severity, incident_date, resolved, end_date").eq("institution_id", iid).gte("incident_date", monthsAgo12.toISOString().split("T")[0]),
-        supabase.from("paec").select("id").eq("institution_id", iid).eq("active", true),
-        supabase.from("courses").select("id, name, section").eq("institution_id", iid).eq("active", true),
+        supabase.from("incidents").select("id, resolved").eq("institution_id", iid).gte("incident_date", monthsAgo12.toISOString().split("T")[0]),
+        supabase.from("convivencia_records").select("id, resolved").eq("institution_id", iid).gte("incident_date", monthsAgo12.toISOString().split("T")[0]),
     ])
 
     const convivenciaTypes = ["dec_repetido", "registros_negativos"]
     const filteredAlerts = alerts.filter((a: any) => convivenciaTypes.includes(a.type))
 
-    const activePAECs = paecs?.length ?? 0
-    const totalStudents = students?.length ?? 0
+    const allConvivenciaRecords = convivenciaRecords ?? []
+    const activeConvivenciaRecords = allConvivenciaRecords.filter((r: { resolved: boolean }) => !r.resolved).length
+    const totalConvivencia12m = allConvivenciaRecords.length
+    const closedConvivencia12m = totalConvivencia12m - activeConvivenciaRecords
+
     const activeAlerts = filteredAlerts.length
 
     const allIncidents = incidents ?? []
-    const openDecs = allIncidents.filter(i => !i.resolved)
+    const openDecsCount = allIncidents.filter((i: { resolved: boolean }) => !i.resolved).length
+    const totalDecs12m = allIncidents.length
+    const resolvedDecs12m = allIncidents.filter((i: { resolved: boolean }) => i.resolved).length
 
-    // ── DECs por tipo (solo no resueltos o todos? Asumamos todos los de los ultimes 6 meses para estadistica o los abiertos? Mejor SOLO ABIERTOS para la torta/barras)
-    const typeCount: Record<string, number> = {}
-    const severityCount: Record<string, number> = {}
-
-    for (const d of allIncidents) {
-        typeCount[d.type] = (typeCount[d.type] ?? 0) + 1
-        severityCount[d.severity] = (severityCount[d.severity] ?? 0) + 1
-    }
-
-    // ── Tasa de resolución ───────────────────────────────────────────────────────
-    const totalPeriodDecs = allIncidents.length
-    const resolvedDecs = allIncidents.filter(d => d.resolved).length
-    const resolutionRate = totalPeriodDecs > 0 ? Math.round((resolvedDecs / totalPeriodDecs) * 100) : 0
-
-    const LABEL_TYPE: Record<string, string> = {
-        pelea: "Pelea/Agresión Física",
-        bullying: "Acoso escolar (Bullying)",
-        ciberacoso: "Ciberacoso (Cyberbullying)",
-        drogas: "Posesión/uso de drogas",
-        alcohol: "Posesión/uso de alcohol",
-        armas: "Porte de armas",
-        robo: "Robo o hurto",
-        insultos: "Agresión verbal a pares",
-        falta_respeto: "Falta de respeto a docentes",
-        danio_propiedad: "Daño a propiedad del colegio",
-        acoso_sexual: "Acoso sexual",
-        fuga: "Fuga del establecimiento",
-        incumplimiento: "Incumplimiento reiterado de normas",
-        redes_sociales: "Mal uso de redes sociales institucional",
-        otro: "Otro",
-    }
-    const COLORS_TYPE: string[] = ["#ef4444", "#f97316", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4"]
-
-    const decsByType = Object.entries(typeCount)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([type, count], i) => ({
-            name: LABEL_TYPE[type] ?? type,
-            count,
-            color: COLORS_TYPE[i % COLORS_TYPE.length],
-        }))
-
-    const SEVERITY_COLOR: Record<string, string> = { leve: "#3b82f6", grave: "#f97316", muy_grave: "#ef4444" }
-    const SEVERITY_LABEL: Record<string, string> = { leve: "Leve", grave: "Grave", muy_grave: "Muy grave" }
-
-    const decsBySeverity = Object.entries(severityCount).map(([sev, count]) => ({
-        name: SEVERITY_LABEL[sev] ?? sev,
-        count,
-        color: SEVERITY_COLOR[sev] ?? "#94a3b8"
-    }))
-
-    // ── Tendencia 12 meses ──
-    const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
-    const monthlyTrendMap: Record<string, { decs: number; cierres: number; label: string }> = {}
-
-    for (let i = 11; i >= 0; i--) {
-        const d = new Date(now)
-        d.setMonth(now.getMonth() - i)
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-        monthlyTrendMap[key] = { decs: 0, cierres: 0, label: monthNames[d.getMonth()] }
-    }
-
-    for (const d of allIncidents) {
-        const dDate = new Date(d.incident_date)
-        const dKey = `${dDate.getFullYear()}-${String(dDate.getMonth() + 1).padStart(2, '0')}`
-        if (monthlyTrendMap[dKey]) monthlyTrendMap[dKey].decs++
-
-        if (d.resolved && d.end_date) {
-            const eDate = new Date(d.end_date)
-            const eKey = `${eDate.getFullYear()}-${String(eDate.getMonth() + 1).padStart(2, '0')}`
-            if (monthlyTrendMap[eKey]) monthlyTrendMap[eKey].cierres++
+    // ── Curso con clima de aula más bajo + cursos con registro (getHeatmapData) ──
+    let lowestClimateCourse: { courseName: string; score: number; label: string } | null = null
+    let coursesWithClimateCount = 0
+    try {
+        const { courses: heatmapCourses, historyLogs } = await getHeatmapData()
+        const scoreByCourseId: Record<string, { sum: number; count: number }> = {}
+        const courseIdsWithData = new Set<string>()
+        for (const log of historyLogs) {
+            const cid = log.course_id
+            if (!cid) continue
+            courseIdsWithData.add(cid)
+            if (!scoreByCourseId[cid]) scoreByCourseId[cid] = { sum: 0, count: 0 }
+            scoreByCourseId[cid].sum += ENERGY_SCORE[(log as any).energy_level] ?? 3
+            scoreByCourseId[cid].count += 1
         }
+        coursesWithClimateCount = courseIdsWithData.size
+        const climatePorCurso = heatmapCourses
+            .map((c: { course_id: string; courses: { name: string } }) => {
+                const { sum, count } = scoreByCourseId[c.course_id] ?? { sum: 0, count: 0 }
+                const score = count > 0 ? Math.round((sum / count) * 10) / 10 : 0
+                const courseName = c.courses?.name?.trim() ?? c.course_id ?? "Curso"
+                const label = score === 0 ? "Sin datos" : score >= 3.5 ? "Regulada" : score >= 2.5 ? "Inquieta" : "Apática/Explosiva"
+                return { courseName, score, label, count }
+            })
+            .filter((x: { score: number; count: number }) => x.score > 0 && x.count > 0)
+            .sort((a: { score: number }, b: { score: number }) => a.score - b.score)
+        lowestClimateCourse = climatePorCurso.length > 0 ? { courseName: climatePorCurso[0].courseName, score: climatePorCurso[0].score, label: climatePorCurso[0].label } : null
+    } catch {
+        lowestClimateCourse = null
     }
-    const monthlyTrend = Object.values(monthlyTrendMap).map(v => ({ mes: v.label, decs: v.decs, cierres: v.cierres }))
-
-    // ── DECs recientes ──
-    const studentsMap = Object.fromEntries((students ?? []).map(s => [s.id, s]))
-    const coursesMap = Object.fromEntries((courses ?? []).map(c => [c.id, c]))
-
-    // ── Cursos con más incidentes (top 3) ────────────────────────────────────────
-    const courseIncidentCount: Record<string, number> = {}
-    for (const d of allIncidents) {
-        const st = studentsMap[d.student_id] as any
-        if (st?.course_id) {
-            courseIncidentCount[st.course_id] = (courseIncidentCount[st.course_id] ?? 0) + 1
-        }
-    }
-    const topCourses = Object.entries(courseIncidentCount)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
-        .map(([courseId, count]) => {
-            const c = coursesMap[courseId] as any
-            return { courseName: c ? `${c.name}${c.section ? " " + c.section : ""}` : "Sin curso", count }
-        })
-
-    const recentDecs = openDecs
-        .sort((a, b) => new Date(b.incident_date).getTime() - new Date(a.incident_date).getTime())
-        .slice(0, 5)
-        .map(d => {
-            const st = studentsMap[d.student_id] as any
-            const co = st ? coursesMap[st.course_id ?? ""] as any : null
-            return {
-                id: d.id,
-                folio: d.folio,
-                studentName: st ? `${st.name} ${st.last_name}` : "Estudiante",
-                courseName: co ? `${co.name}${co.section ? " " + co.section : ""}` : "Sin curso",
-                severity: d.severity,
-                type: LABEL_TYPE[d.type] ?? d.type,
-                incident_date: d.incident_date,
-            }
-        })
 
     const stats: ConvivenciaStats = {
-        openDecs: openDecs.length,
+        openDecs: openDecsCount,
         activeAlerts,
-        activePaecs: activePAECs,
-        totalStudents,
-        decsByType,
-        decsBySeverity,
-        monthlyTrend,
-        recentDecs,
-        resolutionRate,
-        topCourses,
-        totalPeriodDecs,
+        activeConvivenciaRecords,
+        lowestClimateCourse,
+        decSummary: { total: totalDecs12m, resolved: resolvedDecs12m },
+        convivenciaSummary: { total: totalConvivencia12m, closed: closedConvivencia12m },
+        climateSummary: { coursesWithData: coursesWithClimateCount },
     }
 
     return (

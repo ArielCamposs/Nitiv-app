@@ -102,7 +102,7 @@ export default async function AdminDashboardPage() {
                     <img
                         src={institution.logo_url}
                         alt="Logo"
-                        className="w-12 h-12 rounded-xl object-contain border border-slate-100"
+                        className="w-10 h-10 rounded-xl object-contain border border-slate-100"
                     />
                 )}
                 <div>

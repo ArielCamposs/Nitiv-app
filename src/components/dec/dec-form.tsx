@@ -23,18 +23,19 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 
-// Datos del formulario
+// Datos del formulario (orden y opciones según protocolo DEC)
 const LOCATIONS = ["Sala de clases", "Patio", "Comedor", "Baño", "Pasillo", "Entrada", "Otro"]
+const ACTIVITY_TYPES = ["Conocida", "Desconocida", "Programada", "Improvisada"]
+const ENVIRONMENT_TYPES = ["Tranquilo", "Ruidoso"]
+const GUARDIAN_INFO_OPTIONS = ["Llamada", "WhatsApp", "Correo", "Otro"]
 const CONDUCT_TYPES = [
-    "Agresión verbal",
-    "Agresión física hacia objetos",
-    "Agresión física hacia personas",
     "Autoagresión",
-    "Conducta disruptiva",
-    "Llanto intenso",
-    "Aislamiento",
-    "Huida / Escape",
-    "Rigidez corporal",
+    "Agresión a otros/as estudiantes",
+    "Agresión hacia docentes",
+    "Agresión hacia asistentes de la educación",
+    "Destrucción de objetos/ropa",
+    "Gritos/agresión verbal",
+    "Fuga",
     "Otro",
 ]
 const TRIGGERS = [
@@ -65,45 +66,89 @@ const ACTIONS = [
 
 // ... constants
 
+function calcAge(birthdate: string | null | undefined): number | null {
+    if (!birthdate) return null
+    const birth = new Date(birthdate)
+    if (isNaN(birth.getTime())) return null
+    const today = new Date()
+    let age = today.getFullYear() - birth.getFullYear()
+    const m = today.getMonth() - birth.getMonth()
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--
+    return age
+}
+
+type StudentOption = {
+    id: string
+    name: string
+    last_name: string
+    birthdate?: string | null
+    guardian_name?: string | null
+    guardian_phone?: string | null
+    course_id?: string | null
+    courses?: { id: string; name: string; section?: string } | null
+}
+type ProfessionalOption = { id: string; name: string; last_name: string; role: string }
 type Props = {
-    students: { id: string; name: string; last_name: string; courses: any }[]
+    students: StudentOption[]
+    headTeacherByCourse?: Record<string, string>
+    professionals: ProfessionalOption[]
     notifiables: { id: string; name: string; last_name: string; role: string }[]
     teacherId: string
     institutionId: string
 }
 
-export function DecForm({ students, notifiables = [], teacherId, institutionId }: Props) {
+const TOTAL_STEPS = 7
+
+export function DecForm({ students, headTeacherByCourse = {}, professionals = [], notifiables = [], teacherId, institutionId }: Props) {
     const router = useRouter()
     const supabase = createClient()
 
     const [step, setStep] = useState(1)
     const [loading, setLoading] = useState(false)
 
-    // Sección 1: Identificación
-    const [studentId, setStudentId] = useState("")
-    const [location, setLocation] = useState("")
-    const [incidentDate, setIncidentDate] = useState(
-        new Date().toISOString().slice(0, 16)
-    )
+    // 1. Contexto inmediato
+    const [incidentDate, setIncidentDate] = useState(new Date().toISOString().slice(0, 16))
     const [incidentEndDate, setIncidentEndDate] = useState("")
-    const [activity, setActivity] = useState("")
-    const [guardianContacted, setGuardianContacted] = useState(false)
+    const [location, setLocation] = useState("")
+    const [locationOther, setLocationOther] = useState("")
+    const [activityTypes, setActivityTypes] = useState<string[]>([])
+    const [environment, setEnvironment] = useState("")
+    const [approxPeople, setApproxPeople] = useState("")
 
-    // Sección 2: Tipificación
+    // 2. Identificación estudiante + 3. Profesionales
+    const [studentId, setStudentId] = useState("")
+    const [professionalEncargadoId, setProfessionalEncargadoId] = useState("")
+    const [professionalAcompananteIntId, setProfessionalAcompananteIntId] = useState("")
+    const [professionalAcompananteExtId, setProfessionalAcompananteExtId] = useState("")
+
+    // 4. Apoderado (auto desde estudiante)
+    const [guardianContacted, setGuardianContacted] = useState(false)
+    const [guardianInfoMethod, setGuardianInfoMethod] = useState("")
+    const [guardianInfoOther, setGuardianInfoOther] = useState("")
+
+    // 5. Tipo incidente + 6. Nivel intensidad
     const [conductTypes, setConductTypes] = useState<string[]>([])
+    const [conductOther, setConductOther] = useState("")
     const [severity, setSeverity] = useState<"moderada" | "severa" | "">("")
 
-    // Sección 3: Análisis funcional
+    // 7. Situaciones desencadenantes
     const [triggers, setTriggers] = useState<string[]>([])
 
-    // Sección 4: Cierre
+    // 8-9. Acciones y observaciones
     const [actions, setActions] = useState<string[]>([])
     const [description, setDescription] = useState("")
     const [isListening, setIsListening] = useState(false)
     const recognitionRef = useRef<any>(null)
 
-    // Sección 5: Destinatarios
+    // Notificaciones
     const [recipients, setRecipients] = useState<string[]>([])
+
+    const selectedStudent = students.find((s) => s.id === studentId) ?? null
+    const age = selectedStudent ? calcAge(selectedStudent.birthdate) : null
+    const courseLabel = selectedStudent?.courses
+        ? `${selectedStudent.courses.name}${selectedStudent.courses.section ? " " + selectedStudent.courses.section : ""}`
+        : "—"
+    const headTeacherName = (selectedStudent?.course_id && headTeacherByCourse[selectedStudent.course_id]) ?? "—"
 
     // (El usuario elige libremente a quién notificar sin pre-marcar por severidad)
 
@@ -188,6 +233,27 @@ export function DecForm({ students, notifiables = [], teacherId, institutionId }
             setLoading(true)
 
             // 1) Crear el incidente
+            const contextParts: string[] = []
+            if (activityTypes.length) contextParts.push(`Actividad: ${activityTypes.join(", ")}`)
+            if (environment) contextParts.push(`Ambiente: ${environment}`)
+            if (approxPeople.trim()) contextParts.push(`N° de personas: ${approxPeople.trim()}`)
+            const encargado = professionalEncargadoId ? professionals.find((p) => p.id === professionalEncargadoId) : null
+            const acompInt = professionalAcompananteIntId ? professionals.find((p) => p.id === professionalAcompananteIntId) : null
+            const acompExt = professionalAcompananteExtId ? professionals.find((p) => p.id === professionalAcompananteExtId) : null
+            if (encargado || acompInt || acompExt) {
+                const profs = [
+                    encargado && `Encargado: ${encargado.name} ${encargado.last_name}`.trim(),
+                    acompInt && `Acompañante interno: ${acompInt.name} ${acompInt.last_name}`.trim(),
+                    acompExt && `Acompañante externo: ${acompExt.name} ${acompExt.last_name}`.trim(),
+                ].filter(Boolean)
+                if (profs.length) contextParts.push(profs.join(" | "))
+            }
+            if (guardianInfoMethod) {
+                const infoText = guardianInfoMethod === "Otro" && guardianInfoOther.trim() ? `Otro: ${guardianInfoOther.trim()}` : guardianInfoMethod
+                contextParts.push(`Forma en que se informó a apoderado: ${infoText}`)
+            }
+            const contextString = contextParts.join(". ") || null
+
             const { data: incident, error } = await supabase
                 .from("incidents")
                 .insert({
@@ -196,9 +262,9 @@ export function DecForm({ students, notifiables = [], teacherId, institutionId }
                     reporter_id: teacherId,
                     type: "DEC",
                     severity,
-                    location,
-                    context: activity,
-                    conduct_types: conductTypes,
+                    location: location === "Otro" && locationOther.trim() ? `Otro: ${locationOther.trim()}` : location,
+                    context: contextString,
+                    conduct_types: conductOther.trim() ? [...conductTypes.filter((c) => c !== "Otro"), `Otro: ${conductOther.trim()}`] : conductTypes,
                     triggers,
                     actions_taken: actions,
                     description: description.trim() || null,
@@ -274,49 +340,27 @@ export function DecForm({ students, notifiables = [], teacherId, institutionId }
 
             {/* Indicador de pasos */}
             <div className="flex gap-2">
-                {[1, 2, 3, 4, 5].map((s) => (
+                {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((s) => (
                     <div
                         key={s}
-                        className={`h-1.5 flex-1 rounded-full transition-all ${s <= step ? "bg-indigo-500" : "bg-slate-200"
-                            }`}
+                        className={`h-1.5 flex-1 rounded-full transition-all ${s <= step ? "bg-indigo-500" : "bg-slate-200"}`}
                     />
                 ))}
             </div>
 
-            {/* SECCIÓN 1: Identificación y contexto */}
+            {/* SECCIÓN 1: Contexto inmediato */}
             {step === 1 && (
                 <Card>
                     <CardHeader>
-                        <CardTitle>Sección 1 — Identificación y contexto</CardTitle>
+                        <CardTitle>1. Contexto inmediato</CardTitle>
                         <CardDescription>
-                            ¿Quién, cuándo y dónde ocurrió?
+                            Fecha, duración, dónde estaba el/la estudiante y características del ambiente.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-900">
-                                Estudiante <span className="text-red-500">*</span>
-                            </label>
-                            <Select onValueChange={setStudentId} value={studentId}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Buscar estudiante..." />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {students.map((s) => (
-                                        <SelectItem key={s.id} value={s.id}>
-                                            {s.last_name}, {s.name}{" "}
-                                            {s.courses?.name ? `— ${s.courses.name}` : ""}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-slate-900">
-                                    Hora de inicio <span className="text-red-500">*</span>
-                                </label>
+                                <label className="text-sm font-medium text-slate-900">Fecha y hora de inicio <span className="text-red-500">*</span></label>
                                 <input
                                     type="datetime-local"
                                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
@@ -325,9 +369,7 @@ export function DecForm({ students, notifiables = [], teacherId, institutionId }
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-slate-900">
-                                    Hora de término <span className="text-slate-400 font-normal">(opcional)</span>
-                                </label>
+                                <label className="text-sm font-medium text-slate-900">Hora de fin <span className="text-slate-400 font-normal">(opcional)</span></label>
                                 <input
                                     type="datetime-local"
                                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
@@ -336,12 +378,9 @@ export function DecForm({ students, notifiables = [], teacherId, institutionId }
                                 />
                             </div>
                         </div>
-
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-900">
-                                Lugar <span className="text-red-500">*</span>
-                            </label>
-                            <Select onValueChange={setLocation} value={location}>
+                            <label className="text-sm font-medium text-slate-900">Dónde estaba el/la estudiante cuando se produce la DEC <span className="text-red-500">*</span></label>
+                            <Select onValueChange={(v) => { setLocation(v); if (v !== "Otro") setLocationOther("") }} value={location}>
                                 <SelectTrigger>
                                     <SelectValue placeholder="Selecciona el lugar" />
                                 </SelectTrigger>
@@ -351,105 +390,254 @@ export function DecForm({ students, notifiables = [], teacherId, institutionId }
                                     ))}
                                 </SelectContent>
                             </Select>
+                            {location === "Otro" && (
+                                <input
+                                    type="text"
+                                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm mt-1"
+                                    placeholder="Especifique el lugar..."
+                                    value={locationOther}
+                                    onChange={(e) => setLocationOther(e.target.value)}
+                                />
+                            )}
                         </div>
-
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-900">
-                                Actividad en curso
-                            </label>
+                            <label className="text-sm font-medium text-slate-900">La actividad que estaba realizando el/la estudiante fue:</label>
+                            <div className="flex flex-wrap gap-2">
+                                {ACTIVITY_TYPES.map((a) => (
+                                    <button
+                                        key={a}
+                                        type="button"
+                                        onClick={() => toggleItem(activityTypes, setActivityTypes, a)}
+                                        className={`rounded-full border px-3 py-1 text-xs transition-all ${activityTypes.includes(a) ? "border-indigo-500 bg-indigo-100 text-indigo-700" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
+                                    >
+                                        {a}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-slate-900">El ambiente era:</label>
+                            <div className="flex flex-wrap gap-2">
+                                {ENVIRONMENT_TYPES.map((e) => (
+                                    <button
+                                        key={e}
+                                        type="button"
+                                        onClick={() => setEnvironment((prev) => (prev === e ? "" : e))}
+                                        className={`rounded-full border px-3 py-1 text-xs transition-all ${environment === e ? "border-indigo-500 bg-indigo-100 text-indigo-700" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
+                                    >
+                                        {e}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-slate-900">N° de personas en el lugar</label>
                             <input
                                 type="text"
                                 className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                                placeholder="Ej: Clases, recreo, almuerzo..."
-                                value={activity}
-                                onChange={(e) => setActivity(e.target.value)}
+                                placeholder="Ej: 25"
+                                value={approxPeople}
+                                onChange={(e) => setApproxPeople(e.target.value)}
                             />
-                        </div>
-
-                        {/* Use simple HTML input for checkbox for now to avoid styling complexity */}
-                        <div className="flex items-center gap-2 mt-4">
-                            <input
-                                type="checkbox"
-                                id="guardian"
-                                checked={guardianContacted}
-                                onChange={(e) => setGuardianContacted(e.target.checked)}
-                                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                            />
-                            <label htmlFor="guardian" className="text-sm text-slate-700">
-                                Apoderado contactado
-                            </label>
                         </div>
                     </CardContent>
                 </Card>
             )}
 
-            {/* SECCIÓN 2: Tipificación */}
+            {/* SECCIÓN 2 y 3: Identificación estudiante + Profesionales intervención */}
             {step === 2 && (
                 <Card>
                     <CardHeader>
-                        <CardTitle>Sección 2 — Tipificación del incidente</CardTitle>
+                        <CardTitle>2. Identificación del niño/a, adolescente o joven</CardTitle>
                         <CardDescription>
-                            ¿Qué conductas se observaron y cuál fue la intensidad?
+                            Selecciona al estudiante; se completarán automáticamente edad, curso y profesor jefe.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-slate-900">Nombre <span className="text-red-500">*</span></label>
+                            <Select onValueChange={setStudentId} value={studentId}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Buscar estudiante..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {students.map((s) => (
+                                        <SelectItem key={s.id} value={s.id}>
+                                            {s.last_name}, {s.name}{s.courses ? ` — ${s.courses.name}${s.courses.section ? " " + s.courses.section : ""}` : ""}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        {selectedStudent && (
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 rounded-lg border border-slate-100 bg-slate-50/50 p-3">
+                                <div>
+                                    <p className="text-[10px] uppercase text-slate-500">Edad</p>
+                                    <p className="text-sm font-medium text-slate-800">{age != null ? `${age} años` : "—"}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] uppercase text-slate-500">Curso</p>
+                                    <p className="text-sm font-medium text-slate-800">{courseLabel}</p>
+                                </div>
+                                <div className="col-span-2">
+                                    <p className="text-[10px] uppercase text-slate-500">Prof. jefe</p>
+                                    <p className="text-sm font-medium text-slate-800">{headTeacherName}</p>
+                                </div>
+                            </div>
+                        )}
+                        <div className="pt-2 border-t border-slate-100">
+                            <p className="text-sm font-medium text-slate-900 mb-2">3. Profesionales del establecimiento designados para intervención</p>
+                            <div className="space-y-2">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                    <span className="text-xs text-slate-500 w-36 shrink-0">Encargado</span>
+                                    <Select value={professionalEncargadoId || "_none"} onValueChange={(v) => setProfessionalEncargadoId(v === "_none" ? "" : v)}>
+                                        <SelectTrigger className="flex-1">
+                                            <SelectValue placeholder="Seleccionar profesional..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="_none">Ninguno</SelectItem>
+                                            {professionals.map((p) => (
+                                                <SelectItem key={p.id} value={p.id}>
+                                                    {p.last_name}, {p.name} {p.role ? `— ${p.role}` : ""}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                    <span className="text-xs text-slate-500 w-36 shrink-0">Acompañante interno</span>
+                                    <Select value={professionalAcompananteIntId || "_none"} onValueChange={(v) => setProfessionalAcompananteIntId(v === "_none" ? "" : v)}>
+                                        <SelectTrigger className="flex-1">
+                                            <SelectValue placeholder="Seleccionar profesional..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="_none">Ninguno</SelectItem>
+                                            {professionals.map((p) => (
+                                                <SelectItem key={p.id} value={p.id}>
+                                                    {p.last_name}, {p.name} {p.role ? `— ${p.role}` : ""}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                    <span className="text-xs text-slate-500 w-36 shrink-0">Acompañante externo</span>
+                                    <Select value={professionalAcompananteExtId || "_none"} onValueChange={(v) => setProfessionalAcompananteExtId(v === "_none" ? "" : v)}>
+                                        <SelectTrigger className="flex-1">
+                                            <SelectValue placeholder="Seleccionar profesional..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="_none">Ninguno</SelectItem>
+                                            {professionals.map((p) => (
+                                                <SelectItem key={p.id} value={p.id}>
+                                                    {p.last_name}, {p.name} {p.role ? `— ${p.role}` : ""}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* SECCIÓN 4: Apoderado (auto desde perfil estudiante) */}
+            {step === 3 && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>4. Identificación apoderado y forma de contacto</CardTitle>
+                        <CardDescription>
+                            Datos del apoderado del estudiante seleccionado (desde su perfil).
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {selectedStudent ? (
+                            <>
+                                <div className="rounded-lg border border-slate-100 bg-slate-50/50 p-4 space-y-3">
+                                    <div>
+                                        <p className="text-[10px] uppercase text-slate-500">Nombre</p>
+                                        <p className="text-sm font-medium text-slate-800">{selectedStudent.guardian_name || "—"}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] uppercase text-slate-500">Celular</p>
+                                        <p className="text-sm font-medium text-slate-800">{selectedStudent.guardian_phone || "—"}</p>
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-slate-900">Forma en que se informó oportunamente a apoderados (opcional)</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {GUARDIAN_INFO_OPTIONS.map((opt) => (
+                                            <button
+                                                key={opt}
+                                                type="button"
+                                                onClick={() => { setGuardianInfoMethod((prev) => (prev === opt ? "" : opt)); if (opt !== "Otro") setGuardianInfoOther("") }}
+                                                className={`rounded-full border px-3 py-1.5 text-xs transition-all ${guardianInfoMethod === opt ? "border-indigo-500 bg-indigo-100 text-indigo-700" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
+                                            >
+                                                {opt}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {guardianInfoMethod === "Otro" && (
+                                        <input
+                                            type="text"
+                                            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm mt-2"
+                                            placeholder="Especifique..."
+                                            value={guardianInfoOther}
+                                            onChange={(e) => setGuardianInfoOther(e.target.value)}
+                                        />
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <input type="checkbox" id="guardian" checked={guardianContacted} onChange={(e) => setGuardianContacted(e.target.checked)} className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                                    <label htmlFor="guardian" className="text-sm text-slate-700">Apoderado contactado</label>
+                                </div>
+                            </>
+                        ) : (
+                            <p className="text-sm text-slate-500">Selecciona primero un estudiante en el paso 2.</p>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* SECCIÓN 5 y 6: Tipo incidente + Nivel intensidad */}
+            {step === 4 && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>5. Tipo de incidente y 6. Nivel de intensidad</CardTitle>
+                        <CardDescription>
+                            Marque con X lo que corresponda. Nivel de intensidad observado.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-5">
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-900">
-                                Tipos de conducta observada{" "}
-                                <span className="text-slate-400 font-normal">(selecciona todos los que apliquen)</span>
-                            </label>
+                            <label className="text-sm font-medium text-slate-900">Tipo de incidente de desregulación observado (selecciona todos los que apliquen)</label>
                             <div className="flex flex-wrap gap-2">
                                 {CONDUCT_TYPES.map((c) => (
                                     <button
                                         key={c}
                                         type="button"
                                         onClick={() => toggleItem(conductTypes, setConductTypes, c)}
-                                        className={`rounded-full border px-3 py-1 text-xs transition-all ${conductTypes.includes(c)
-                                            ? "border-indigo-500 bg-indigo-100 text-indigo-700"
-                                            : "border-slate-200 text-slate-600 hover:border-slate-300"
-                                            }`}
+                                        className={`rounded-full border px-3 py-1 text-xs transition-all ${conductTypes.includes(c) ? "border-indigo-500 bg-indigo-100 text-indigo-700" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
                                     >
                                         {c}
                                     </button>
                                 ))}
                             </div>
+                            {conductTypes.includes("Otro") && (
+                                <input type="text" className="mt-2 w-full rounded-md border border-slate-200 px-3 py-2 text-sm" placeholder="Especifique otro..." value={conductOther} onChange={(e) => setConductOther(e.target.value)} />
+                            )}
                         </div>
-
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-900">
-                                Nivel de intensidad <span className="text-red-500">*</span>
-                            </label>
+                            <label className="text-sm font-medium text-slate-900">Nivel de intensidad observado <span className="text-red-500">*</span></label>
                             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setSeverity("moderada")}
-                                    className={`rounded-lg border p-4 text-left transition-all ${severity === "moderada"
-                                        ? "border-amber-500 bg-amber-50 ring-1 ring-amber-500"
-                                        : "border-slate-200 hover:border-slate-300"
-                                        }`}
-                                >
-                                    <p className="text-sm font-semibold text-amber-700">
-                                        🟡 Etapa 2 — Moderada
-                                    </p>
-                                    <p className="mt-1 text-xs text-slate-500">
-                                        Conducta disruptiva que requiere intervención pero no representa riesgo inmediato.
-                                    </p>
+                                <button type="button" onClick={() => setSeverity("moderada")} className={`rounded-lg border p-4 text-left transition-all ${severity === "moderada" ? "border-amber-500 bg-amber-50 ring-1 ring-amber-500" : "border-slate-200 hover:border-slate-300"}`}>
+                                    <p className="text-sm font-semibold text-amber-700">Etapa 2 — Moderada</p>
+                                    <p className="mt-1 text-xs text-slate-500">Aumento de la DEC, ausencia de autocontroles inhibitorios cognitivos y riesgo para sí mismo/a o terceros.</p>
                                 </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setSeverity("severa")}
-                                    className={`rounded-lg border p-4 text-left transition-all ${severity === "severa"
-                                        ? "border-rose-500 bg-rose-50 ring-1 ring-rose-500"
-                                        : "border-slate-200 hover:border-slate-300"
-                                        }`}
-                                >
-                                    <p className="text-sm font-semibold text-rose-700">
-                                        🔴 Etapa 3 — Severa
-                                    </p>
-                                    <p className="mt-1 text-xs text-slate-500">
-                                        Riesgo para sí mismo o para otros. Requiere intervención inmediata.
-                                    </p>
+                                <button type="button" onClick={() => setSeverity("severa")} className={`rounded-lg border p-4 text-left transition-all ${severity === "severa" ? "border-rose-500 bg-rose-50 ring-1 ring-rose-500" : "border-slate-200 hover:border-slate-300"}`}>
+                                    <p className="text-sm font-semibold text-rose-700">Etapa 3 — Severa</p>
+                                    <p className="mt-1 text-xs text-slate-500">Descontrol y riesgos que implican la necesidad de contener físicamente.</p>
                                 </button>
                             </div>
                         </div>
@@ -457,11 +645,11 @@ export function DecForm({ students, notifiables = [], teacherId, institutionId }
                 </Card>
             )}
 
-            {/* SECCIÓN 3: Análisis funcional — desencadenantes */}
-            {step === 3 && (
+            {/* SECCIÓN 7: Situaciones desencadenantes */}
+            {step === 5 && (
                 <Card>
                     <CardHeader>
-                        <CardTitle>Sección 3 — Análisis funcional</CardTitle>
+                        <CardTitle>7. Descripción situaciones desencadenantes</CardTitle>
                         <CardDescription>
                             ¿Qué situaciones pudieron desencadenar la desregulación?
                         </CardDescription>
@@ -473,10 +661,7 @@ export function DecForm({ students, notifiables = [], teacherId, institutionId }
                                     key={t}
                                     type="button"
                                     onClick={() => toggleItem(triggers, setTriggers, t)}
-                                    className={`rounded-full border px-3 py-1 text-xs transition-all ${triggers.includes(t)
-                                        ? "border-indigo-500 bg-indigo-100 text-indigo-700"
-                                        : "border-slate-200 text-slate-600 hover:border-slate-300"
-                                        }`}
+                                    className={`rounded-full border px-3 py-1 text-xs transition-all ${triggers.includes(t) ? "border-indigo-500 bg-indigo-100 text-indigo-700" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
                                 >
                                     {t}
                                 </button>
@@ -486,72 +671,46 @@ export function DecForm({ students, notifiables = [], teacherId, institutionId }
                 </Card>
             )}
 
-            {/* SECCIÓN 4: Gestión y cierre */}
-            {step === 4 && (
+            {/* Acciones de intervención y observaciones */}
+            {step === 6 && (
                 <Card>
                     <CardHeader>
-                        <CardTitle>Sección 4 — Gestión y cierre</CardTitle>
+                        <CardTitle>Acciones de intervención y observaciones</CardTitle>
                         <CardDescription>
-                            ¿Qué acciones se tomaron durante y después del incidente?
+                            Acciones desplegadas y observaciones adicionales.
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-5">
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-slate-900">
-                                Acciones realizadas
-                            </label>
+                            <label className="text-sm font-medium text-slate-900">Acciones realizadas</label>
                             <div className="flex flex-wrap gap-2">
                                 {ACTIONS.map((a) => (
-                                    <button
-                                        key={a}
-                                        type="button"
-                                        onClick={() => toggleItem(actions, setActions, a)}
-                                        className={`rounded-full border px-3 py-1 text-xs transition-all ${actions.includes(a)
-                                            ? "border-indigo-500 bg-indigo-100 text-indigo-700"
-                                            : "border-slate-200 text-slate-600 hover:border-slate-300"
-                                            }`}
-                                    >
+                                    <button key={a} type="button" onClick={() => toggleItem(actions, setActions, a)} className={`rounded-full border px-3 py-1 text-xs transition-all ${actions.includes(a) ? "border-indigo-500 bg-indigo-100 text-indigo-700" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}>
                                         {a}
                                     </button>
                                 ))}
                             </div>
                         </div>
-
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
-                                <label className="text-sm font-medium text-slate-900">
-                                    Observaciones adicionales{" "}
-                                    <span className="text-slate-400 font-normal">(opcional)</span>
-                                </label>
-                                <button
-                                    type="button"
-                                    onClick={toggleDictation}
-                                    className={`p-1.5 rounded-full transition-colors flex items-center justify-center ${isListening
-                                        ? "bg-rose-100 text-rose-600 animate-pulse ring-2 ring-rose-300 ring-offset-1"
-                                        : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                                        }`}
-                                    title={isListening ? "Detener dictado" : "Iniciar dictado por voz"}
-                                >
+                                <label className="text-sm font-medium text-slate-900">Observaciones adicionales <span className="text-slate-400 font-normal">(opcional)</span></label>
+                                <button type="button" onClick={toggleDictation} className={`p-1.5 rounded-full transition-colors flex items-center justify-center ${isListening ? "bg-rose-100 text-rose-600 animate-pulse ring-2 ring-rose-300 ring-offset-1" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`} title={isListening ? "Detener dictado" : "Iniciar dictado por voz"}>
                                     {isListening ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
                                 </button>
                             </div>
-                            <Textarea
-                                rows={4}
-                                placeholder="Describe en detalle lo que ocurrió, contexto adicional..."
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                            />
+                            <Textarea rows={4} placeholder="Describe en detalle lo que ocurrió, contexto adicional..." value={description} onChange={(e) => setDescription(e.target.value)} />
                         </div>
                     </CardContent>
                 </Card>
             )}
 
-            {/* SECCIÓN 5: Destinatarios */}
-            {step === 5 && (
+            {/* Notificaciones (Dupla, Convivencia — sin Director) */}
+            {step === 7 && (
                 <Card>
                     <CardHeader>
-                        <CardTitle>Sección 5 — Notificaciones</CardTitle>
+                        <CardTitle>Notificaciones</CardTitle>
                         <CardDescription>
+                            Selecciona a quién notificar (Dupla, Convivencia u otros roles disponibles).
                         </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
@@ -604,15 +763,12 @@ export function DecForm({ students, notifiables = [], teacherId, institutionId }
             {/* Navegación entre pasos */}
             <div className="flex justify-between gap-3">
                 {step > 1 && (
-                    <Button
-                        variant="outline"
-                        onClick={() => setStep((s) => s - 1)}
-                    >
+                    <Button variant="outline" onClick={() => setStep((s) => s - 1)}>
                         ← Anterior
                     </Button>
                 )}
                 <div className="flex-1" />
-                {step < 5 ? (
+                {step < TOTAL_STEPS ? (
                     <Button onClick={() => setStep((s) => s + 1)}>
                         Siguiente →
                     </Button>

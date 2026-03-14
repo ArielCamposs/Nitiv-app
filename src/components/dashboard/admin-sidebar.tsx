@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useChatUnread } from "@/context/chat-unread-context"
@@ -14,6 +15,7 @@ import {
     ClipboardList, BarChart3,
     FileText, Calendar, BookOpen, MessageSquare,
     Building2, LogOut,
+    ChevronDown,
 } from "lucide-react"
 
 type NavItem = {
@@ -75,11 +77,26 @@ const ADMIN_GROUPS: NavGroup[] = [
 ]
 
 // ─── Contenido del sidebar ────────────────────────────────────────────────────
-export function AdminSidebarContent({ userId, showBell = true, institutionName }: { userId: string; showBell?: boolean; institutionName?: string }) {
+export function AdminSidebarContent({ userId, showBell = true, institutionName, institutionLogoUrl, isMobileMenuOpen }: { userId: string; showBell?: boolean; institutionName?: string; institutionLogoUrl?: string; isMobileMenuOpen?: boolean }) {
     const pathname = usePathname()
     const router = useRouter()
     const supabase = createClient()
     const { totalUnread } = useChatUnread()
+    const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+
+    const toggleGroup = (label: string) => {
+        setOpenGroups(prev => ({ ...prev, [label]: !(prev[label] ?? false) }))
+    }
+
+    // Al cambiar ruta o al abrir el menú móvil: dejar abierta solo la sección que contiene la página actual
+    useEffect(() => {
+        const next: Record<string, boolean> = {}
+        for (const g of ADMIN_GROUPS) {
+            const hasActive = g.items.some(item => pathname === item.href || (pathname.startsWith(item.href + "/") && item.href !== "/"))
+            next[g.label] = hasActive
+        }
+        setOpenGroups(next)
+    }, [pathname, isMobileMenuOpen])
 
     const handleLogout = async () => {
         const { error } = await supabase.auth.signOut()
@@ -102,45 +119,77 @@ export function AdminSidebarContent({ userId, showBell = true, institutionName }
                     {showBell && <span className="shrink-0 mt-0.5"><NotificationBell userId={userId} /></span>}
                 </div>
                 {institutionName && (
-                    <p className="text-sm font-medium text-slate-700 truncate border-l-2 border-slate-300 pl-2.5" title={institutionName}>
-                        {institutionName}
-                    </p>
+                    <div className="flex items-center gap-2 border-l-2 border-slate-300 pl-2.5 min-w-0">
+                        {institutionLogoUrl && (
+                            <img src={institutionLogoUrl} alt="" className="h-6 w-6 shrink-0 rounded object-contain bg-white border border-slate-100" />
+                        )}
+                        <p className="text-sm font-medium text-slate-700 truncate min-w-0" title={institutionName}>
+                            {institutionName}
+                        </p>
+                    </div>
                 )}
             </div>
 
-            {/* Nav agrupado */}
-            <nav className="flex-1 space-y-5 overflow-y-auto pr-1">
-                {ADMIN_GROUPS.map((group) => (
-                    <div key={group.label}>
-                        <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                            {group.label}
-                        </p>
-                        <div className="space-y-0.5">
-                            {group.items.map((item) => (
-                                <Link
-                                    key={item.href}
-                                    href={item.href}
+            {/* Nav agrupado — secciones desplegables */}
+            <nav className="flex-1 space-y-1 overflow-y-auto pr-1">
+                {ADMIN_GROUPS.map((group) => {
+                    const isOpen = openGroups[group.label] ?? false
+                    return (
+                        <div key={group.label} className="border-b border-slate-200/60 last:border-b-0 pb-2 last:pb-0">
+                            <button
+                                type="button"
+                                onClick={() => toggleGroup(group.label)}
+                                className={cn(
+                                    "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-[10px] font-semibold uppercase tracking-widest transition-colors",
+                                    isOpen
+                                        ? "bg-indigo-200/80 text-indigo-800 hover:bg-indigo-300/80"
+                                        : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                                )}
+                            >
+                                <span>{group.label}</span>
+                                <ChevronDown
                                     className={cn(
-                                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-slate-100 hover:text-slate-900",
-                                        pathname === item.href ||
-                                            (pathname.startsWith(item.href + "/") && item.href !== "/")
-                                            ? "bg-slate-100 text-slate-900"
-                                            : "text-slate-500"
+                                        "h-3.5 w-3.5 shrink-0 transition-transform duration-300 ease-out",
+                                        isOpen ? "rotate-0" : "-rotate-90"
                                     )}
-                                >
-                                    <item.icon className="h-4 w-4 shrink-0" />
-                                    <span className="flex-1">{item.title}</span>
-                                    {item.badge && <DecBadge />}
-                                    {item.chatBadge && totalUnread > 0 && (
-                                        <span className="min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
-                                            {totalUnread > 9 ? "9+" : totalUnread}
-                                        </span>
-                                    )}
-                                </Link>
-                            ))}
+                                />
+                            </button>
+                            <div
+                                className={cn(
+                                    "grid transition-[grid-template-rows] duration-300 ease-out",
+                                    isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                                )}
+                            >
+                                <div className="min-h-0 overflow-hidden">
+                                    <div className="mt-0.5 space-y-0.5">
+                                        {group.items.map((item) => (
+                                        <Link
+                                            key={item.href}
+                                            href={item.href}
+                                            className={cn(
+                                                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                                                pathname === item.href ||
+                                                    (pathname.startsWith(item.href + "/") && item.href !== "/")
+                                                    ? "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                                                    : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                                            )}
+                                        >
+                                                <item.icon className="h-4 w-4 shrink-0" />
+                                                <span className="flex-1">{item.title}</span>
+                                                {item.badge && <DecBadge />}
+                                                {item.chatBadge && totalUnread > 0 && (
+                                                    <span className="min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                                                        {totalUnread > 9 ? "9+" : totalUnread}
+                                                    </span>
+                                                )}
+                                            </Link>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                ))}
+                    )
+                })}
             </nav>
 
             {/* Logout */}
@@ -159,10 +208,10 @@ export function AdminSidebarContent({ userId, showBell = true, institutionName }
 }
 
 // ─── Wrapper aside desktop ────────────────────────────────────────────────────
-export function AdminSidebar({ userId, institutionName }: { userId: string; institutionName?: string }) {
+export function AdminSidebar({ userId, institutionName, institutionLogoUrl }: { userId: string; institutionName?: string; institutionLogoUrl?: string }) {
     return (
         <aside className="fixed left-0 top-0 hidden h-screen w-64 border-r bg-slate-50/50 p-6 md:flex md:flex-col">
-            <AdminSidebarContent userId={userId} institutionName={institutionName} />
+            <AdminSidebarContent userId={userId} institutionName={institutionName} institutionLogoUrl={institutionLogoUrl} />
         </aside>
     )
 }

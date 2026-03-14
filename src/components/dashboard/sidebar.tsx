@@ -6,7 +6,8 @@ import { useState, useEffect } from "react"
 import {
     Home, LogOut, ShoppingBag, ThermometerSun, Users, LifeBuoy,
     Shield, BarChart3, FileText, MessageSquare, Activity, UserCircle,
-    Calendar, BookOpen, Library, ClipboardList, Radar, Lock
+    Calendar, BookOpen, Library, ClipboardList, Radar, Lock,
+    ChevronDown
 } from "lucide-react"
 import { useChatUnread } from "@/context/chat-unread-context"
 import { DecBadge } from "@/components/dashboard/dec-badge"
@@ -175,7 +176,7 @@ function AvatarContent({ fullName, role }: { fullName: string; role: string | nu
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
-export function SidebarContent({ userId, showBell = true, institutionName }: { userId: string; showBell?: boolean; institutionName?: string }) {
+export function SidebarContent({ userId, showBell = true, institutionName, institutionLogoUrl, isMobileMenuOpen }: { userId: string; showBell?: boolean; institutionName?: string; institutionLogoUrl?: string; isMobileMenuOpen?: boolean }) {
     const pathname = usePathname()
     const router = useRouter()
     const supabase = createClient()
@@ -183,7 +184,28 @@ export function SidebarContent({ userId, showBell = true, institutionName }: { u
     const [fullName, setFullName] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
     const [radarActive, setRadarActive] = useState<boolean | null>(null)
+    const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
     const { totalUnread } = useChatUnread()
+
+    const toggleGroup = (label: string) => {
+        setOpenGroups(prev => ({ ...prev, [label]: !(prev[label] ?? false) }))
+    }
+
+    const sidebarGroups = getSidebarGroups(role)
+    const isStudent = role === "estudiante" || role === "centro_alumnos"
+
+    // Al cambiar ruta o al abrir el menú móvil: dejar abierta solo la sección que contiene la página actual
+    useEffect(() => {
+        if (!role || role === "estudiante" || role === "centro_alumnos") return
+        const groups = getSidebarGroups(role)
+        if (groups.length === 0) return
+        const next: Record<string, boolean> = {}
+        for (const g of groups) {
+            const hasActive = g.items.some(item => pathname === item.href || (pathname.startsWith(item.href + "/") && item.href !== "/"))
+            next[g.label] = hasActive
+        }
+        setOpenGroups(next)
+    }, [pathname, role, isMobileMenuOpen])
 
     useEffect(() => {
         const getRole = async () => {
@@ -230,9 +252,6 @@ export function SidebarContent({ userId, showBell = true, institutionName }: { u
         getRole()
     }, [])
 
-    const sidebarGroups = getSidebarGroups(role)
-    const isStudent = role === "estudiante" || role === "centro_alumnos"
-
     const handleLogout = async () => {
         const { error } = await supabase.auth.signOut()
         if (error) { toast.error("Error al cerrar sesión"); return }
@@ -259,27 +278,25 @@ export function SidebarContent({ userId, showBell = true, institutionName }: { u
                     {showBell && <span className="shrink-0 mt-0.5"><NotificationBell userId={userId} /></span>}
                 </div>
                 {institutionName && (
-                    <p className="text-sm font-medium text-slate-700 truncate px-1 border-l-2 border-slate-300 pl-2.5" title={institutionName}>
-                        {institutionName}
-                    </p>
+                    <div className="flex items-center gap-2 px-1 border-l-2 border-slate-300 pl-2.5 min-w-0">
+                        {institutionLogoUrl && (
+                            <img src={institutionLogoUrl} alt="" className="h-6 w-6 shrink-0 rounded object-contain bg-white border border-slate-100" />
+                        )}
+                        <p className="text-sm font-medium text-slate-700 truncate min-w-0" title={institutionName}>
+                            {institutionName}
+                        </p>
+                    </div>
                 )}
             </div>
 
-            {/* Nav agrupado */}
-            <nav className="flex-1 space-y-5 overflow-y-auto pr-1">
-                {sidebarGroups.map((group) => (
-                    <div key={group.label}>
-                        {/* Etiqueta del grupo */}
-                        <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                            {group.label}
-                        </p>
+            {/* Nav agrupado: desplegable para no estudiantes, fijo para estudiantes */}
+            <nav className="flex-1 space-y-1 overflow-y-auto pr-1">
+                {sidebarGroups.map((group) => {
+                    const isOpen = isStudent ? true : (openGroups[group.label] ?? false)
 
-                        {/* Items del grupo */}
+                    const renderItems = () => (
                         <div className="space-y-0.5">
                             {group.items.map((item) => {
-                                // Radar de Competencias: deshabilitar si el estudiante no tiene sesión activa.
-                                // Usamos !== true para que también quede bloqueado mientras carga (null),
-                                // evitando la ventana donde se podría clickear antes de recibir respuesta del servidor.
                                 const isRadarLink = item.href === "/estudiante/radar"
                                 const isRadarLocked = isRadarLink && radarActive !== true
 
@@ -297,16 +314,17 @@ export function SidebarContent({ userId, showBell = true, institutionName }: { u
                                     )
                                 }
 
+                                const isActive = pathname === item.href ||
+                                    (pathname.startsWith(item.href + "/") && item.href !== "/")
                                 return (
                                     <Link
                                         key={item.href}
                                         href={item.href}
                                         className={cn(
-                                            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-slate-100 hover:text-slate-900",
-                                            pathname === item.href ||
-                                                (pathname.startsWith(item.href + "/") && item.href !== "/")
-                                                ? "bg-slate-100 text-slate-900"
-                                                : "text-slate-500"
+                                            "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                                            isActive
+                                                ? "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
+                                                : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                                         )}
                                     >
                                         <item.icon className="h-4 w-4 shrink-0" />
@@ -323,8 +341,52 @@ export function SidebarContent({ userId, showBell = true, institutionName }: { u
                                 )
                             })}
                         </div>
-                    </div>
-                ))}
+                    )
+
+                    if (isStudent) {
+                        return (
+                            <div key={group.label} className="pt-4 first:pt-0">
+                                <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                                    {group.label}
+                                </p>
+                                {renderItems()}
+                            </div>
+                        )
+                    }
+
+                    return (
+                        <div key={group.label} className="border-b border-slate-200/60 last:border-b-0 pb-2 last:pb-0">
+                            <button
+                                type="button"
+                                onClick={() => toggleGroup(group.label)}
+                                className={cn(
+                                    "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-[10px] font-semibold uppercase tracking-widest transition-colors",
+                                    isOpen
+                                        ? "bg-indigo-200/80 text-indigo-800 hover:bg-indigo-300/80"
+                                        : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                                )}
+                            >
+                                <span>{group.label}</span>
+                                <ChevronDown
+                                    className={cn(
+                                        "h-3.5 w-3.5 shrink-0 transition-transform duration-300 ease-out",
+                                        isOpen ? "rotate-0" : "-rotate-90"
+                                    )}
+                                />
+                            </button>
+                            <div
+                                className={cn(
+                                    "grid transition-[grid-template-rows] duration-300 ease-out",
+                                    isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                                )}
+                            >
+                                <div className="min-h-0 overflow-hidden">
+                                    <div className="mt-0.5">{renderItems()}</div>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                })}
             </nav>
 
             {/* Zona inferior: nombre + rol + emergencia + logout */}
@@ -367,10 +429,10 @@ export function SidebarContent({ userId, showBell = true, institutionName }: { u
     )
 }
 
-export function Sidebar({ userId, institutionName }: { userId: string; institutionName?: string }) {
+export function Sidebar({ userId, institutionName, institutionLogoUrl }: { userId: string; institutionName?: string; institutionLogoUrl?: string }) {
     return (
         <aside className="fixed left-0 top-0 hidden h-screen w-64 border-r bg-slate-50/50 p-6 md:flex md:flex-col">
-            <SidebarContent userId={userId} institutionName={institutionName} />
+            <SidebarContent userId={userId} institutionName={institutionName} institutionLogoUrl={institutionLogoUrl} />
         </aside>
     )
 }

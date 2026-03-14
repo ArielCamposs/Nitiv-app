@@ -4,12 +4,14 @@ import { useState, useTransition, useMemo } from "react"
 import Link from "next/link"
 import { createConvivenciaRecord, updateConvivenciaRecord, resolveConvivenciaRecord } from "@/app/(dashboard)/registros-convivencia/actions"
 import { buildConvivenciaPdf, buildConvivenciaStatsPdf } from "@/lib/pdf/convivencia-pdf"
+import { loadInstitutionLogoForPdf, loadNitivLogoBase64 } from "@/lib/pdf/load-logos"
 import { toast } from "sonner"
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
     ResponsiveContainer, PieChart, Pie, Cell
 } from "recharts"
-import { ClipboardList, Plus, History, TrendingUp, TrendingDown, Minus, CheckCircle, ChevronDown, ChevronUp, Search, X, Mic, MicOff, BarChart3, Printer, Download, Edit, AlertCircle, Trophy, CalendarDays, Activity, MapPin, Users, Inbox, FileDown } from "lucide-react"
+import { ClipboardList, Plus, History, TrendingUp, TrendingDown, Minus, CheckCircle, ChevronDown, ChevronUp, Search, X, Mic, MicOff, BarChart3, Printer, Download, Edit, AlertCircle, Trophy, CalendarDays, Activity, MapPin, Users, Inbox, FileDown, FileText } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const RECORD_TYPES: { value: string; label: string; color: string }[] = [
@@ -25,9 +27,18 @@ const RECORD_TYPES: { value: string; label: string; color: string }[] = [
 
 const SEVERITIES = [
     { value: "leve", label: "Leve", color: "bg-yellow-100 text-yellow-700 border-yellow-300" },
-    { value: "moderada", label: "Moderada", color: "bg-orange-100 text-orange-700 border-orange-300" },
+    { value: "moderada", label: "Mediano", color: "bg-orange-100 text-orange-700 border-orange-300" },
     { value: "grave", label: "Grave", color: "bg-red-100 text-red-700 border-red-300" },
+    { value: "gravisimo", label: "Gravísimo", color: "bg-red-200 text-red-800 border-red-400" },
 ]
+
+/** Etiquetas de gravedad usadas en reg. de convivencia (Leve, Mediano, Grave, Gravísimo). */
+const SEVERITY_LABELS: Record<string, string> = {
+    leve: "Leve",
+    moderada: "Mediano",
+    grave: "Grave",
+    gravisimo: "Gravísimo",
+}
 
 const ACTIONS_OPTIONS = [
     "Entrevista con estudiante(s)",
@@ -42,12 +53,13 @@ const SEVERITY_COLORS: { [key: string]: string } = {
     leve: "bg-yellow-100 text-yellow-700",
     moderada: "bg-orange-100 text-orange-700",
     grave: "bg-red-100 text-red-700",
+    gravisimo: "bg-red-200 text-red-800",
 }
 
-const STATUS_LABELS: Record<string, { label: string; class: string }> = {
-    abierto: { label: "Abierta", class: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-    seguimiento: { label: "En seguimiento", class: "bg-orange-100 text-orange-700 border-orange-200" },
-    cerrado: { label: "Cerrada", class: "bg-slate-200 text-slate-700 border-slate-300" },
+const STATUS_LABELS: Record<string, { label: string; class: string; cardBorder: string }> = {
+    abierto: { label: "Abierta", class: "bg-emerald-100 text-emerald-700 border-emerald-200", cardBorder: "border-l-4 border-l-emerald-500" },
+    seguimiento: { label: "En seguimiento", class: "bg-orange-100 text-orange-700 border-orange-200", cardBorder: "border-l-4 border-l-orange-500" },
+    cerrado: { label: "Cerrada", class: "bg-slate-200 text-slate-700 border-slate-300", cardBorder: "border-l-4 border-l-slate-400" },
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -56,7 +68,7 @@ interface Student {
     name: string
     last_name: string
     rut?: string | null
-    courses?: { name: string } | null
+    courses?: { name: string; section?: string } | null
 }
 
 interface StaffUser {
@@ -68,7 +80,7 @@ interface StaffUser {
 
 interface InvolvedStudent {
     student_id: string
-    students: { id: string; name: string; last_name: string } | null
+    students: { id: string; name: string; last_name: string; courses?: { name: string; section?: string } | null; course?: { name: string; section?: string } | null } | null
 }
 
 interface ConvivenciaRecord {
@@ -95,6 +107,7 @@ interface Props {
     staffUsers: StaffUser[]
     reporterName: string
     institutionName?: string
+    institutionLogoUrl?: string
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -287,12 +300,17 @@ function ResolveRow({ record, onResolved }: {
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, reporterName, institutionName }: Props) {
+export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, reporterName, institutionName, institutionLogoUrl }: Props) {
     const [tab, setTab] = useState<"nuevo" | "historial" | "estadisticas">("nuevo")
     const [records, setRecords] = useState<ConvivenciaRecord[]>(initialRecords)
     const [pending, startTransition] = useTransition()
     const [createdRecord, setCreatedRecord] = useState<ConvivenciaRecord | null>(null)
     const [editingRecordId, setEditingRecordId] = useState<string | null>(null)
+    const [detailRecordId, setDetailRecordId] = useState<string | null>(null)
+
+    // Filtros del historial (gravedad y estado)
+    const [historialFilterSeverity, setHistorialFilterSeverity] = useState("")
+    const [historialFilterStatus, setHistorialFilterStatus] = useState("")
 
     // Form state
     const [status, setStatus] = useState("abierto")
@@ -300,6 +318,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
     const [apoyoId, setApoyoId] = useState("")
 
     const [type, setType] = useState("")
+    const [typeOther, setTypeOther] = useState("")
     const [severity, setSeverity] = useState("moderada")
     const [location, setLocation] = useState("")
     const [description, setDescription] = useState("")
@@ -455,7 +474,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
 
         return [
             { label: "Leve", count: counts.leve, color: "bg-indigo-100", textColor: "text-indigo-700" },
-            { label: "Moderada", count: counts.moderada, color: "bg-purple-100", textColor: "text-purple-700" },
+            { label: "Mediano", count: counts.moderada, color: "bg-purple-100", textColor: "text-purple-700" },
             { label: "Grave", count: counts.grave, color: "bg-rose-100", textColor: "text-rose-700" },
             { label: "Gravísimo", count: counts.gravisimo, color: "bg-red-200", textColor: "text-red-700" },
         ]
@@ -602,15 +621,47 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
         setRecords(prev => prev.map(r => r.id === id ? { ...r, resolved: true, resolution_notes: notes, status: "cerrado" } : r))
     }
 
+    /** Enriquece el registro con cursos de la lista de estudiantes cuando faltan en el anidado. */
+    function enrichRecordWithCourses(record: ConvivenciaRecord): ConvivenciaRecord {
+        const studentsById = new Map(students.map(st => [st.id, st]))
+        const enriched = (record.convivencia_record_students ?? []).map(rs => {
+            const st = rs.students
+            if (!st) return rs
+            const courseData = st.courses ?? st.course ?? studentsById.get(st.id)?.courses
+            if (!courseData) return rs
+            return { ...rs, students: { ...st, courses: courseData } }
+        })
+        return { ...record, convivencia_record_students: enriched }
+    }
+
+    async function getLogos() {
+        const [logoInst, logoNitiv] = await Promise.all([
+            institutionLogoUrl ? loadInstitutionLogoForPdf(institutionLogoUrl) : Promise.resolve(null),
+            loadNitivLogoBase64(),
+        ])
+        return { logoInst, logoNitiv }
+    }
+
     function handlePrint(record: ConvivenciaRecord) {
-        const doc = buildConvivenciaPdf(record, reporterName, institutionName)
-        doc.autoPrint()
-        doc.output('dataurlnewwindow')
+        getLogos().then(({ logoInst, logoNitiv }) => {
+            const doc = buildConvivenciaPdf(enrichRecordWithCourses(record), reporterName, institutionName, logoInst, logoNitiv)
+            doc.autoPrint()
+            doc.output("dataurlnewwindow")
+        }).catch(() => {
+            const doc = buildConvivenciaPdf(enrichRecordWithCourses(record), reporterName, institutionName)
+            doc.autoPrint()
+            doc.output("dataurlnewwindow")
+        })
     }
 
     function handleDownloadPdf(record: ConvivenciaRecord) {
-        const doc = buildConvivenciaPdf(record, reporterName, institutionName)
-        doc.save(`registro-convivencia-${record.type || 'caso'}.pdf`)
+        getLogos().then(({ logoInst, logoNitiv }) => {
+            const doc = buildConvivenciaPdf(enrichRecordWithCourses(record), reporterName, institutionName, logoInst, logoNitiv)
+            doc.save(`registro-convivencia-${record.type || "caso"}.pdf`)
+        }).catch(() => {
+            const doc = buildConvivenciaPdf(enrichRecordWithCourses(record), reporterName, institutionName)
+            doc.save(`registro-convivencia-${record.type || "caso"}.pdf`)
+        })
     }
 
     function getStatsPdfData() {
@@ -639,28 +690,32 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
     }
 
     function handleDownloadStatsPdf() {
-        try {
-            const data = getStatsPdfData()
-            const doc = buildConvivenciaStatsPdf(data)
-            doc.save(`estadisticas-convivencia-${new Date().toISOString().slice(0, 10)}.pdf`)
-            toast.success("PDF descargado")
-        } catch (e) {
-            console.error(e)
-            toast.error("No se pudo generar el PDF")
-        }
+        getLogos()
+            .then(({ logoInst, logoNitiv }) => {
+                const data = getStatsPdfData()
+                const doc = buildConvivenciaStatsPdf(data, logoInst, logoNitiv)
+                doc.save(`estadisticas-convivencia-${new Date().toISOString().slice(0, 10)}.pdf`)
+                toast.success("PDF descargado")
+            })
+            .catch((e) => {
+                console.error(e)
+                toast.error("No se pudo generar el PDF")
+            })
     }
 
     function handlePrintStats() {
-        try {
-            const data = getStatsPdfData()
-            const doc = buildConvivenciaStatsPdf(data)
-            doc.autoPrint()
-            doc.output("dataurlnewwindow")
-            toast.success("Abriendo impresión...")
-        } catch (e) {
-            console.error(e)
-            toast.error("No se pudo abrir la impresión")
-        }
+        getLogos()
+            .then(({ logoInst, logoNitiv }) => {
+                const data = getStatsPdfData()
+                const doc = buildConvivenciaStatsPdf(data, logoInst, logoNitiv)
+                doc.autoPrint()
+                doc.output("dataurlnewwindow")
+                toast.success("Abriendo impresión...")
+            })
+            .catch((e) => {
+                console.error(e)
+                toast.error("No se pudo abrir la impresión")
+            })
     }
 
     function handleEdit(record: ConvivenciaRecord) {
@@ -668,7 +723,13 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
         setStatus(record.status || "abierto")
         setResponsableId(record.responsable_id || "")
         setApoyoId(record.apoyo_id || "")
-        setType(record.type || "")
+        if (record.type === "Otro" || record.type.startsWith("Otro:")) {
+            setType("Otro")
+            setTypeOther(record.type.startsWith("Otro:") ? record.type.slice(6).trim() : "")
+        } else {
+            setType(record.type || "")
+            setTypeOther("")
+        }
         setSeverity(record.severity || "moderada")
         setLocation(record.location || "")
         setDescription(record.description || "")
@@ -713,7 +774,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                 responsable_id: responsableId || null,
                 apoyo_id: apoyoId || null,
                 agreements: agreements.trim(),
-                type,
+                type: (type === "Otro" && typeOther.trim()) ? `Otro: ${typeOther.trim()}` : type,
                 severity,
                 location: location.trim(),
                 description: description.trim(),
@@ -736,9 +797,10 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                 toast.success(editingRecordId ? "Registro actualizado correctamente" : "Registro creado correctamente")
 
                 // Optimistic update
+                const typeToSave = (type === "Otro" && typeOther.trim()) ? `Otro: ${typeOther.trim()}` : type
                 const newRecord: ConvivenciaRecord = {
                     id: editingRecordId || (result as any).id || crypto.randomUUID(),
-                    type,
+                    type: typeToSave,
                     severity,
                     location: location.trim() || null,
                     description: description.trim(),
@@ -759,7 +821,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                     setEditingRecordId(null)
                     // Reset
                     setStatus("abierto"); setResponsableId(""); setApoyoId("")
-                    setType(""); setSeverity("moderada"); setLocation("")
+                    setType(""); setTypeOther(""); setSeverity("moderada"); setLocation("")
                     setDescription(""); setAgreements(""); setInvolvedStudents([])
                     setSelectedCourse(""); setActions([]); setOtherAction("")
                     setIncidentDate(new Date().toISOString().slice(0, 16))
@@ -823,7 +885,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             setCreatedRecord(null)
                             // Reset state
                             setStatus("abierto"); setResponsableId(""); setApoyoId("")
-                            setType(""); setSeverity("moderada"); setLocation("")
+                            setType(""); setTypeOther(""); setSeverity("moderada"); setLocation("")
                             setDescription(""); setAgreements(""); setInvolvedStudents([])
                             setSelectedCourse(""); setActions([]); setOtherAction("")
                             setIncidentDate(new Date().toISOString().slice(0, 16))
@@ -989,33 +1051,45 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                     {/* ── Tipo de evento ── */}
                     <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-200">
                         <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Tipo de evento</h3>
-                        <div className="flex flex-col sm:flex-row gap-4 sm:items-center">
-                            <select value={type} onChange={e => { setType(e.target.value); if (e.target.value === "Entrevista apoderado") setSeverity("n/a") }}
-                                className="w-full sm:w-64 rounded-xl bg-white border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                                <option value="">Seleccione tipo...</option>
-                                {RECORD_TYPES.map(t => <option key={t.value} value={t.label}>{t.label}</option>)}
-                                <option value="Apoyo emocional">Apoyo emocional</option>
-                                <option value="Entrevista apoderado">Entrevista apoderado</option>
-                                <option value="Incumplimiento de normas">Incumplimiento de normas</option>
-                            </select>
-                            <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-xs font-medium text-slate-400">Frecuentes:</span>
-                                {[
-                                    { label: "Apoyo emocional", color: "border-yellow-400 text-yellow-700 bg-yellow-50 hover:bg-yellow-100" },
-                                    { label: "Entrevista apoderado", color: "border-red-400 text-red-700 bg-red-50 hover:bg-red-100" },
-                                    { label: "Incumplimiento de normas", color: "border-blue-400 text-blue-700 bg-blue-50 hover:bg-blue-100" },
-                                ].map(shortcut => (
-                                    <button key={shortcut.label} type="button"
-                                        onClick={() => { setType(shortcut.label); if (shortcut.label === "Entrevista apoderado") setSeverity("n/a") }}
-                                        className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${type === shortcut.label
-                                            ? `${shortcut.color} ring-2 ring-offset-1 ring-slate-300 font-bold`
-                                            : ["Apoyo emocional", "Entrevista apoderado", "Incumplimiento de normas"].includes(type)
-                                                ? "bg-slate-100 text-slate-400 border-slate-200 opacity-40 grayscale hover:opacity-70 hover:grayscale-0"
-                                                : shortcut.color
-                                            }`}
-                                    >{shortcut.label}</button>
-                                ))}
+                        <div className="flex flex-col gap-4">
+                            <div className="flex flex-col sm:flex-row gap-4 sm:items-center">
+                                <select value={type} onChange={e => { setType(e.target.value); if (e.target.value !== "Otro") setTypeOther(""); if (e.target.value === "Entrevista apoderado") setSeverity("n/a") }}
+                                    className="w-full sm:w-64 rounded-xl bg-white border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                                    <option value="">Seleccione tipo...</option>
+                                    {RECORD_TYPES.filter(t => t.value !== "otro").map(t => <option key={t.value} value={t.label}>{t.label}</option>)}
+                                    <option value="Apoyo emocional">Apoyo emocional</option>
+                                    <option value="Entrevista apoderado">Entrevista apoderado</option>
+                                    <option value="Incumplimiento de normas">Incumplimiento de normas</option>
+                                    {RECORD_TYPES.filter(t => t.value === "otro").map(t => <option key={t.value} value={t.label}>{t.label}</option>)}
+                                </select>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-xs font-medium text-slate-400">Frecuentes:</span>
+                                    {[
+                                        { label: "Apoyo emocional", color: "border-yellow-400 text-yellow-700 bg-yellow-50 hover:bg-yellow-100" },
+                                        { label: "Entrevista apoderado", color: "border-red-400 text-red-700 bg-red-50 hover:bg-red-100" },
+                                        { label: "Incumplimiento de normas", color: "border-blue-400 text-blue-700 bg-blue-50 hover:bg-blue-100" },
+                                    ].map(shortcut => (
+                                        <button key={shortcut.label} type="button"
+                                            onClick={() => { setType(shortcut.label); setTypeOther(""); if (shortcut.label === "Entrevista apoderado") setSeverity("n/a") }}
+                                            className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${type === shortcut.label
+                                                ? `${shortcut.color} ring-2 ring-offset-1 ring-slate-300 font-bold`
+                                                : ["Apoyo emocional", "Entrevista apoderado", "Incumplimiento de normas"].includes(type)
+                                                    ? "bg-slate-100 text-slate-400 border-slate-200 opacity-40 grayscale hover:opacity-70 hover:grayscale-0"
+                                                    : shortcut.color
+                                                }`}
+                                        >{shortcut.label}</button>
+                                    ))}
+                                </div>
                             </div>
+                            {type === "Otro" && (
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">Especifique el tipo de evento</label>
+                                    <input type="text" value={typeOther} onChange={e => setTypeOther(e.target.value)}
+                                        placeholder="Ej: Situación no categorizada..."
+                                        className="w-full sm:max-w-md rounded-xl bg-white border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                    />
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -1086,7 +1160,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             <button type="button" disabled={pending} onClick={() => {
                                 setEditingRecordId(null)
                                 setStatus("abierto"); setResponsableId(""); setApoyoId("")
-                                setType(""); setSeverity("moderada"); setLocation("")
+                                setType(""); setTypeOther(""); setSeverity("moderada"); setLocation("")
                                 setDescription(""); setAgreements(""); setInvolvedStudents([])
                                 setSelectedCourse(""); setActions([]); setOtherAction("")
                                 setIncidentDate(new Date().toISOString().slice(0, 16))
@@ -1445,119 +1519,187 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             <p className="text-xs text-slate-400 mt-0.5">
                                 {records.length} en total · {records.filter(r => r.resolved).length} resueltos
                             </p>
+                            {/* Filtros por gravedad y estado */}
+                            <div className="mt-4 flex flex-wrap items-center gap-3">
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs font-medium text-slate-500">Gravedad</label>
+                                    <select
+                                        value={historialFilterSeverity}
+                                        onChange={e => setHistorialFilterSeverity(e.target.value)}
+                                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                    >
+                                        <option value="">Todos</option>
+                                        {Object.entries(SEVERITY_LABELS).map(([value, label]) => (
+                                            <option key={value} value={value}>{label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs font-medium text-slate-500">Estado</label>
+                                    <select
+                                        value={historialFilterStatus}
+                                        onChange={e => setHistorialFilterStatus(e.target.value)}
+                                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                    >
+                                        <option value="">Todos</option>
+                                        <option value="abierto">Abierta</option>
+                                        <option value="seguimiento">En seguimiento</option>
+                                        <option value="cerrado">Cerrada</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
 
-                        {records.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-                                <ClipboardList className="w-12 h-12 mb-3 opacity-30" />
-                                <p className="text-sm font-medium">No hay registros aún</p>
-                                <button onClick={() => setTab("nuevo")} className="mt-3 text-xs text-indigo-600 hover:underline">
-                                    Registrar el primer caso →
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="p-4 space-y-4 bg-slate-50/50">
-                                {records.map(r => {
-                                    const rtype = RECORD_TYPES.find(t => t.value === r.type)
-                                    const involvedList = (r.convivencia_record_students ?? [])
-                                        .map(rs => rs.students)
-                                        .filter(Boolean)
-
+                        {(() => {
+                            // Estado efectivo igual que en la UI: si no hay status, usamos resolved para cerrado/abierto
+                            const effectiveStatus = (r: { status?: string | null; resolved?: boolean }) => {
+                                const s = (r.status || "").toLowerCase()
+                                if (s === "cerrado" || s === "cerrada") return "cerrado"
+                                if (s === "seguimiento") return "seguimiento"
+                                if (s === "abierto" || s === "abierta") return "abierto"
+                                return r.resolved ? "cerrado" : "abierto"
+                            }
+                            const filteredRecords = records.filter(r => {
+                                const matchSeverity = !historialFilterSeverity || r.severity === historialFilterSeverity
+                                const matchStatus = !historialFilterStatus || effectiveStatus(r) === historialFilterStatus
+                                return matchSeverity && matchStatus
+                            })
+                            const hasFilters = !!historialFilterSeverity || !!historialFilterStatus
+                            return filteredRecords.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+                                    <ClipboardList className="w-12 h-12 mb-3 opacity-30" />
+                                    <p className="text-sm font-medium">{hasFilters ? "Ningún registro coincide con los filtros" : "No hay registros aún"}</p>
+                                    {hasFilters ? (
+                                        <button onClick={() => { setHistorialFilterSeverity(""); setHistorialFilterStatus("") }} className="mt-3 text-xs text-indigo-600 hover:underline">
+                                            Limpiar filtros
+                                        </button>
+                                    ) : (
+                                        <button onClick={() => setTab("nuevo")} className="mt-3 text-xs text-indigo-600 hover:underline">
+                                            Registrar el primer caso →
+                                        </button>
+                                    )}
+                                </div>
+                            ) : (
+                            <>
+                            <div className="p-4 space-y-2 bg-slate-50/50">
+                                {filteredRecords.map(r => {
+                                    const typeLabel = (r.type === "Otro" || r.type.startsWith("Otro:")) ? r.type : (RECORD_TYPES.find(t => t.value === r.type || t.label === r.type)?.label ?? r.type)
+                                    const statusMeta = STATUS_LABELS[effectiveStatus(r)]
                                     return (
-                                        <div key={r.id} className={`bg-white rounded-2xl border p-5 shadow-sm transition-all hover:border-slate-300 ${r.resolved ? "opacity-75 grayscale-[30%]" : "border-l-4 border-l-indigo-500"}`}>
-                                            <div className="flex flex-col md:flex-row items-start justify-between gap-4">
-
-                                                {/* Left Column: Info */}
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                                                        <span className="font-bold text-slate-800 text-sm">{rtype?.label ?? r.type}</span>
-                                                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${(STATUS_LABELS[r.status] ?? (r.resolved ? STATUS_LABELS.cerrado : STATUS_LABELS.abierto)).class}`}>
-                                                            {(STATUS_LABELS[r.status] ?? (r.resolved ? STATUS_LABELS.cerrado : STATUS_LABELS.abierto)).label}
-                                                        </span>
-                                                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${SEVERITY_COLORS[r.severity] ?? "bg-slate-100 text-slate-600"}`}>
-                                                            {r.severity.toUpperCase()}
-                                                        </span>
-                                                    </div>
-
-                                                    <p className="text-sm text-slate-600 mt-2 leading-relaxed whitespace-pre-wrap">{r.description}</p>
-
-                                                    <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-slate-500 font-medium bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                                                        {r.location && <span className="flex items-center gap-1.5"><span className="text-base">📍</span> {r.location}</span>}
-                                                        <span className="flex items-center gap-1.5"><span className="text-base">👥</span> {r.involved_count} involucrado{r.involved_count !== 1 && "s"}</span>
-                                                    </div>
-
-                                                    {/* Involved students */}
-                                                    {involvedList.length > 0 && (
-                                                        <div className="mt-3">
-                                                            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5 ml-1">Estudiantes Asociados</p>
-                                                            <div className="flex flex-wrap gap-2">
-                                                                {involvedList.map((s: any) => (
-                                                                    <span key={s.id} className="px-2.5 py-1 rounded-lg bg-indigo-50/50 text-indigo-700 border border-indigo-100 text-xs font-medium">
-                                                                        {s.last_name}, {s.name}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-
-                                                {/* Right Column: Meta & Actions */}
-                                                <div className="flex flex-col items-end shrink-0 md:w-48">
-                                                    <div className="text-right bg-slate-50 px-3 py-2 rounded-xl border border-slate-100 w-full mb-3">
-                                                        <p className="text-xs font-bold text-slate-700">
-                                                            {new Date(r.incident_date).toLocaleDateString("es-CL", { day: "numeric", month: "long", year: "numeric" })}
-                                                        </p>
-                                                        <p className="text-xs font-medium text-slate-500 mt-0.5 flex items-center justify-end gap-1">
-                                                            <History className="w-3 h-3" />
-                                                            {new Date(r.incident_date).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })} hrs
-                                                        </p>
-                                                    </div>
-
-                                                    {r.actions_taken?.length > 0 && (
-                                                        <div className="w-full flex flex-wrap justify-end gap-1.5 mb-4">
-                                                            {r.actions_taken.map(a => (
-                                                                <span key={a} className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md text-[10px] uppercase font-bold tracking-wide">{a}</span>
-                                                            ))}
-                                                        </div>
-                                                    )}
-
-                                                    <div className="w-full mt-auto flex justify-end gap-2">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleDownloadPdf(r)}
-                                                            className="h-8 w-8 flex items-center justify-center rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100 transition-colors"
-                                                            aria-label="Descargar PDF"
-                                                        >
-                                                            <Download className="w-3.5 h-3.5" />
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handlePrint(r)}
-                                                            className="h-8 w-8 flex items-center justify-center rounded-full bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100 transition-colors"
-                                                            aria-label="Imprimir registro"
-                                                        >
-                                                            <Printer className="w-3.5 h-3.5" />
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleEdit(r)}
-                                                            className="h-8 w-8 flex items-center justify-center rounded-full bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-sm"
-                                                            aria-label="Editar registro"
-                                                        >
-                                                            <Edit className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    </div>
-                                                </div>
+                                        <div
+                                            key={r.id}
+                                            className={`flex flex-wrap items-center justify-between gap-3 bg-white rounded-xl border px-4 py-3 shadow-sm transition-all hover:border-slate-300 ${r.resolved ? "opacity-80" : ""} ${statusMeta.cardBorder}`}
+                                        >
+                                            <div className="flex flex-wrap items-center gap-2 min-w-0">
+                                                <span className="text-xs font-medium text-slate-500 shrink-0">
+                                                    {new Date(r.incident_date).toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                                </span>
+                                                <span className="font-semibold text-slate-800 text-sm">{typeLabel}</span>
+                                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${statusMeta.class}`}>{statusMeta.label}</span>
+                                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${SEVERITY_COLORS[r.severity] ?? "bg-slate-100 text-slate-600"}`}>{SEVERITY_LABELS[r.severity] ?? r.severity}</span>
+                                                {r.location && <span className="text-xs text-slate-500 truncate max-w-[120px]" title={r.location}>📍 {r.location}</span>}
                                             </div>
-
-                                            <div className="mt-4 pt-4 border-t border-slate-100">
-                                                <ResolveRow record={r} onResolved={handleResolved} />
-                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setDetailRecordId(r.id)}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-medium hover:bg-indigo-100 transition-colors shrink-0"
+                                            >
+                                                <FileText className="w-3.5 h-3.5" />
+                                                Ver registro
+                                            </button>
                                         </div>
                                     )
                                 })}
                             </div>
-                        )}
+
+                        {/* Modal detalle del registro */}
+                        <Dialog open={!!detailRecordId} onOpenChange={(open) => !open && setDetailRecordId(null)}>
+                            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl sm:rounded-[2rem]">
+                                <DialogHeader>
+                                    <DialogTitle>Registro de convivencia</DialogTitle>
+                                </DialogHeader>
+                                {(() => {
+                                    const r = detailRecordId ? records.find(rec => rec.id === detailRecordId) : null
+                                    if (!r) return null
+                                    const typeLabel = (r.type === "Otro" || r.type.startsWith("Otro:")) ? r.type : (RECORD_TYPES.find(t => t.value === r.type || t.label === r.type)?.label ?? r.type)
+                                    const involvedList = (r.convivencia_record_students ?? []).map(rs => rs.students).filter(Boolean)
+                                    const statusMeta = STATUS_LABELS[effectiveStatus(r)]
+                                    return (
+                                        <div className="space-y-4 text-sm">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span className="font-bold text-slate-800">{typeLabel}</span>
+                                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${statusMeta.class}`}>{statusMeta.label}</span>
+                                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${SEVERITY_COLORS[r.severity] ?? "bg-slate-100 text-slate-600"}`}>{SEVERITY_LABELS[r.severity] ?? r.severity}</span>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-slate-600">
+                                                <p><span className="font-medium text-slate-500">Fecha y hora:</span> {new Date(r.incident_date).toLocaleDateString("es-CL", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+                                                {r.location && <p><span className="font-medium text-slate-500">Lugar:</span> {r.location}</p>}
+                                                <p><span className="font-medium text-slate-500">Involucrados:</span> {r.involved_count}</p>
+                                            </div>
+                                            <div>
+                                                <p className="font-medium text-slate-500 mb-1">Descripción</p>
+                                                <p className="text-slate-700 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 border border-slate-100">{r.description}</p>
+                                            </div>
+                                            {involvedList.length > 0 && (
+                                                <div>
+                                                    <p className="font-medium text-slate-500 mb-1.5">Estudiantes asociados</p>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {involvedList.map((s: any) => {
+                                                            const courseData = s.courses ?? s.course ?? students.find((st: Student) => st.id === s.id)?.courses
+                                                            const courseLabel = courseData ? ` — ${courseData.name}${courseData.section ? " " + courseData.section : ""}` : ""
+                                                            return (
+                                                                <span key={s.id} className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 text-xs font-medium">
+                                                                    {s.last_name}, {s.name}{courseLabel}
+                                                                </span>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {r.actions_taken?.length > 0 && (
+                                                <div>
+                                                    <p className="font-medium text-slate-500 mb-1.5">Acciones realizadas</p>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {r.actions_taken.map(a => (
+                                                            <span key={a} className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-xs">{a}</span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {r.agreements && (
+                                                <div>
+                                                    <p className="font-medium text-slate-500 mb-1">Acuerdos</p>
+                                                    <p className="text-slate-700 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 border border-slate-100 text-xs">{r.agreements}</p>
+                                                </div>
+                                            )}
+                                            {r.resolution_notes && (
+                                                <div>
+                                                    <p className="font-medium text-slate-500 mb-1">Notas de cierre</p>
+                                                    <p className="text-slate-700 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 border border-slate-100 text-xs">{r.resolution_notes}</p>
+                                                </div>
+                                            )}
+                                            <div className="pt-4 border-t border-slate-200 space-y-3">
+                                                <ResolveRow record={r} onResolved={(id, notes) => { handleResolved(id, notes); setDetailRecordId(null) }} />
+                                                <div className="flex flex-wrap gap-2">
+                                                    <button type="button" onClick={() => handleDownloadPdf(r)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-medium hover:bg-indigo-100">
+                                                        <Download className="w-3.5 h-3.5" /> Descargar PDF
+                                                    </button>
+                                                    <button type="button" onClick={() => handlePrint(r)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200">
+                                                        <Printer className="w-3.5 h-3.5" /> Imprimir
+                                                    </button>
+                                                    <button type="button" onClick={() => { handleEdit(r); setDetailRecordId(null) }} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50">
+                                                        <Edit className="w-3.5 h-3.5" /> Editar
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })()}
+                            </DialogContent>
+                        </Dialog>
+                            </>
+                            );
+                            })()}
                     </div>
                 </div>
             )}

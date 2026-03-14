@@ -56,7 +56,6 @@ export function InstitucionClient({ institution: initial }: { institution: Insti
         const file = e.target.files?.[0]
         if (!file) return
 
-        // Validar tipo y tamaño
         if (!file.type.startsWith("image/")) {
             toast.error("Solo se permiten imágenes.")
             return
@@ -68,32 +67,24 @@ export function InstitucionClient({ institution: initial }: { institution: Insti
 
         setUploading(true)
         try {
-            const ext = file.name.split(".").pop()
-            const filePath = `${form.id}/logo.${ext}`
+            const formData = new FormData()
+            formData.append("file", file)
 
-            const { error: uploadError } = await supabase.storage
-                .from("institution-logos")
-                .upload(filePath, file, { upsert: true })
+            const res = await fetch("/api/admin/institution/logo", {
+                method: "POST",
+                body: formData,
+            })
 
-            if (uploadError) throw uploadError
+            const data = await res.json().catch(() => ({}))
 
-            const { data: { publicUrl } } = supabase.storage
-                .from("institution-logos")
-                .getPublicUrl(filePath)
+            if (!res.ok) {
+                throw new Error(data.error || res.statusText || "Error al subir el logo.")
+            }
 
-            // Forzar cache bust
-            const urlWithBust = `${publicUrl}?t=${Date.now()}`
-
-            const { error: updateError } = await supabase
-                .from("institutions")
-                .update({ logo_url: publicUrl })
-                .eq("id", form.id)
-
-            if (updateError) throw updateError
-
+            const logoUrl = data.logo_url as string
+            const urlWithBust = logoUrl ? `${logoUrl}${logoUrl.includes("?") ? "&" : "?"}t=${Date.now()}` : logoUrl
             setForm(p => ({ ...p, logo_url: urlWithBust }))
             toast.success("Logo actualizado correctamente.")
-
         } catch (e: unknown) {
             toast.error(e instanceof Error ? e.message : "Error al subir el logo.")
         } finally {
@@ -165,7 +156,7 @@ export function InstitucionClient({ institution: initial }: { institution: Insti
                 <div className="flex items-start gap-4">
                     {/* Logo clickeable */}
                     <div className="relative group shrink-0">
-                        <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center overflow-hidden border border-slate-100">
+                        <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center overflow-hidden border border-slate-100">
                             {form.logo_url ? (
                                 // eslint-disable-next-line @next/next/no-img-element
                                 <img src={form.logo_url} alt="Logo" className="w-full h-full object-contain p-1" />
@@ -204,6 +195,9 @@ export function InstitucionClient({ institution: initial }: { institution: Insti
                         </span>
                         <p className="text-xs text-slate-400 mt-1">
                             Haz clic en el logo para cambiarlo · Máx. 2MB
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                            La imagen se guarda en el almacenamiento; en la base de datos solo se guarda el enlace. Se muestra junto al nombre del colegio en el menú.
                         </p>
                     </div>
                 </div>

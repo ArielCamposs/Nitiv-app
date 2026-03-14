@@ -17,17 +17,17 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
     if (!user) redirect("/login")
 
-    // Detectar si es admin para usar su sidebar propio; nombre del colegio para todos los roles
+    // Detectar si es admin para usar su sidebar propio; nombre y logo del colegio para todos los roles
     const { data: profile } = await supabase
         .from("users")
-        .select("role, institution_id, institution:institution_id(name)")
+        .select("role, institution_id, institution:institution_id(name, logo_url)")
         .eq("id", user.id)
         .single()
 
     const isAdmin = profile?.role === "admin"
     const isStudent = profile?.role === "estudiante" || profile?.role === "centro_alumnos"
-    const institutionName =
-        (profile as any)?.institution?.name ?? "Institución"
+    const institutionName = (profile as any)?.institution?.name ?? "Institución"
+    const institutionLogoUrl = (profile as any)?.institution?.logo_url ?? undefined
 
     return (
         <DecBadgeProvider>
@@ -36,20 +36,25 @@ export default async function DashboardLayout({ children }: { children: React.Re
                     {/* Sidebar condicional — oculto al imprimir */}
                     <div className="print:hidden">
                         {isAdmin
-                            ? <AdminSidebar userId={user.id} institutionName={institutionName} />
-                            : <Sidebar userId={user.id} institutionName={institutionName} />
+                            ? <AdminSidebar userId={user.id} institutionName={institutionName} institutionLogoUrl={institutionLogoUrl} />
+                            : <Sidebar userId={user.id} institutionName={institutionName} institutionLogoUrl={institutionLogoUrl} />
                         }
                     </div>
 
                     {/* Navbar mobile — oculto al imprimir */}
                     <div className="fixed left-0 top-0 z-10 flex w-full items-center border-b bg-white px-4 py-2 md:hidden justify-between print:hidden">
                         <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <MobileNav userId={user.id} institutionName={institutionName} />
-                            <div className="flex flex-col min-w-0 flex-1">
-                                <span className="font-bold text-primary leading-tight text-sm">Nitiv</span>
-                                <span className="text-xs font-medium text-slate-600 leading-tight truncate">
-                                    {institutionName}
-                                </span>
+                            <MobileNav userId={user.id} institutionName={institutionName} institutionLogoUrl={institutionLogoUrl} />
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                                {institutionLogoUrl ? (
+                                    <img src={institutionLogoUrl} alt="" className="h-6 w-6 shrink-0 rounded object-contain bg-slate-50 border border-slate-100" />
+                                ) : null}
+                                <div className="flex flex-col min-w-0 flex-1">
+                                    <span className="font-bold text-primary leading-tight text-sm">Nitiv</span>
+                                    <span className="text-xs font-medium text-slate-600 leading-tight truncate">
+                                        {institutionName}
+                                    </span>
+                                </div>
                             </div>
                         </div>
                         <NotificationBell userId={user.id} />

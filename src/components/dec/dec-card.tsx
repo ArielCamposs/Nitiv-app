@@ -40,7 +40,7 @@ export function DecCard({ dec }: { dec: DecCase }) {
 
     return (
         <Link href={`/dec/${dec.id}`}>
-            <Card className="cursor-pointer hover:shadow-md transition-shadow">
+            <Card className="cursor-pointer rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md hover:border-slate-300/80 transition-all">
                 <CardContent className="py-4 px-4 space-y-2">
                     <div className="flex items-start justify-between gap-2">
                         <div>

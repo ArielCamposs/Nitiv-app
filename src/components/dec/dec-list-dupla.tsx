@@ -142,7 +142,7 @@ export function DecListDupla({ cases, currentUserId, userRole }: Props) {
                         const severity = SEVERITY_META[dec.severity as keyof typeof SEVERITY_META]
 
                         return (
-                            <Card key={dec.id} className="hover:shadow-md transition-shadow">
+                            <Card key={dec.id} className="rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md hover:border-slate-300/80 transition-all">
                                 <CardContent className="py-3 px-4">
                                     <div className="flex items-center justify-between gap-4">
                                         {/* Información principal — LINK */}

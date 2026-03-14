@@ -40,13 +40,15 @@ export default async function PaecDetailPage({
     if (!paec) notFound()
 
     let institutionName: string | undefined
+    let institutionLogoUrl: string | undefined
     if (profile.institution_id) {
         const { data: inst } = await supabase
             .from("institutions")
-            .select("name")
+            .select("name, logo_url")
             .eq("id", profile.institution_id)
             .maybeSingle()
         institutionName = inst?.name
+        institutionLogoUrl = inst?.logo_url ?? undefined
     }
 
     const { data: studentRow } = await supabase
@@ -63,6 +65,7 @@ export default async function PaecDetailPage({
                     paec={paec as any}
                     userRole={profile.role}
                     institutionName={institutionName}
+                    institutionLogoUrl={institutionLogoUrl}
                     courseName={courseName}
                 />
             </div>

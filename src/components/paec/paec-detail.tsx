@@ -15,6 +15,7 @@ type Props = {
     paec: any
     userRole: string
     institutionName?: string
+    institutionLogoUrl?: string
     courseName?: string | null
 }
 
@@ -45,7 +46,7 @@ const calcularEdad = (fecha: string | null): number | null => {
     return edad
 }
 
-export function PaecDetail({ paec, userRole, institutionName, courseName: courseNameProp }: Props) {
+export function PaecDetail({ paec, userRole, institutionName, institutionLogoUrl, courseName: courseNameProp }: Props) {
     const router = useRouter()
     const supabase = createClient()
     const [signing, setSigning] = useState(false)
@@ -135,7 +136,7 @@ export function PaecDetail({ paec, userRole, institutionName, courseName: course
                         {courseName ?? "Sin curso"} · RUT: {student?.rut ?? "N/A"}
                     </p>
                 </div>
-                <PaecPrintPdf data={pdfData} institutionName={institutionName} />
+                <PaecPrintPdf data={pdfData} institutionName={institutionName} institutionLogoUrl={institutionLogoUrl} />
             </div>
 
             {/* Sección 1: Identificación */}

@@ -5,7 +5,8 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { ConvivenciaRecordsTabs } from "@/components/convivencia/convivencia-records-tabs"
 
-const BLOCKED_ROLES = ["estudiante", "centro_alumnos", "admin"]
+// Solo estudiantes (y centro_alumnos) no pueden ver registros de convivencia; el resto de roles sí.
+const BLOCKED_ROLES = ["estudiante", "centro_alumnos"]
 
 export default async function RegistrosConvivenciaPage() {
     const cookieStore = await cookies()
@@ -38,7 +39,7 @@ export default async function RegistrosConvivenciaPage() {
 
     const { data: institution } = await supabase
         .from("institutions")
-        .select("name")
+        .select("name, logo_url")
         .eq("id", profile.institution_id)
         .maybeSingle()
 
@@ -55,7 +56,7 @@ export default async function RegistrosConvivenciaPage() {
                 resolution_notes, incident_date,
                 convivencia_record_students (
                     student_id,
-                    students ( id, name, last_name )
+                    students ( id, name, last_name, course_id, course:course_id ( name, section ) )
                 )
             `)
             .eq("institution_id", profile.institution_id)
@@ -65,7 +66,7 @@ export default async function RegistrosConvivenciaPage() {
         // All active students for the institution (for the picker)
         supabase
             .from("students")
-            .select("id, name, last_name, rut, courses(name)")
+            .select("id, name, last_name, rut, courses(name, section)")
             .eq("institution_id", profile.institution_id)
             .eq("active", true)
             .order("last_name"),
@@ -109,6 +110,7 @@ export default async function RegistrosConvivenciaPage() {
                     staffUsers={(staffUsers ?? []) as any}
                     reporterName={reporterName}
                     institutionName={institution?.name ?? "Institución"}
+                    institutionLogoUrl={institution?.logo_url ?? undefined}
                 />
             </div>
         </main>

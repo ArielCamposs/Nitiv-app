@@ -1,8 +1,9 @@
 import { createClient } from "@/lib/supabase/server"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { DecListDupla } from "@/components/dec/dec-list-dupla"
+import { DecPageTabs } from "@/components/dec/dec-page-tabs"
 import { MarkDecSeen } from "@/components/dec/mark-dec-seen"
+import { getDecStats } from "@/lib/dec-stats"
 
 async function getDecCases() {
     const supabase = await createClient()
@@ -17,53 +18,56 @@ async function getDecCases() {
 
     if (!profile) return null
 
-    // ✅ Permite TODOS excepto estudiante
-    const allowedRoles = ["dupla", "convivencia", "docente", "director", "inspector", "utp", "pie"]
+    // Permite todos los roles excepto estudiante y centro_alumnos
+    const allowedRoles = ["dupla", "convivencia", "docente", "director", "inspector", "utp", "pie", "admin"]
     if (!allowedRoles.includes(profile.role)) {
         return null // No tiene acceso
     }
 
-    const { data: cases } = await supabase
-        .from("incidents")
-        .select(`
-            id,
-            folio,
-            type,
-            severity,
-            location,
-            incident_date,
-            end_date,
-            resolved,
-            students (
+    const [casesRes, decStats] = await Promise.all([
+        supabase
+            .from("incidents")
+            .select(`
                 id,
-                name,
-                last_name,
-                courses ( name )
-            ),
-            users!reporter_id (
-                name,
-                last_name,
-                role
-            ),
-            incident_recipients (
-                id,
-                recipient_id,
-                seen,
-                seen_at,
-                role
-            )
-        `)
-        .eq("institution_id", profile.institution_id)
-        .order("incident_date", { ascending: false })
+                folio,
+                type,
+                severity,
+                location,
+                incident_date,
+                end_date,
+                resolved,
+                students (
+                    id,
+                    name,
+                    last_name,
+                    courses ( name )
+                ),
+                users!reporter_id (
+                    name,
+                    last_name,
+                    role
+                ),
+                incident_recipients (
+                    id,
+                    recipient_id,
+                    seen,
+                    seen_at,
+                    role
+                )
+            `)
+            .eq("institution_id", profile.institution_id)
+            .order("incident_date", { ascending: false }),
+        getDecStats(profile.institution_id),
+    ])
 
-    return { cases: cases ?? [], role: profile.role, userId: user.id }
+    return { cases: casesRes.data ?? [], role: profile.role, userId: user.id, decStats }
 }
 
 export default async function DecPage() {
     const data = await getDecCases()
     if (!data) return <div>No tienes acceso a este módulo.</div>
 
-    const { cases, role, userId } = data
+    const { cases, role, userId, decStats } = data
 
     return (
         <main className="min-h-screen bg-slate-50">
@@ -78,7 +82,6 @@ export default async function DecPage() {
                             Desregulación Emocional y Conductual
                         </p>
                     </div>
-                    {/* ✅ Botón disponible para todos excepto estudiante */}
                     {role !== "estudiante" && (
                         <Link href="/dec/nuevo">
                             <Button>+ Nuevo caso DEC</Button>
@@ -86,8 +89,7 @@ export default async function DecPage() {
                     )}
                 </div>
 
-                {/* ✅ Muestra la lista para todos los que tienen acceso */}
-                <DecListDupla cases={cases as any} currentUserId={userId} userRole={role} />
+                <DecPageTabs cases={cases as any} currentUserId={userId} userRole={role} decStats={decStats} />
             </div>
         </main>
     )

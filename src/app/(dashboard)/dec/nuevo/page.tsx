@@ -16,23 +16,56 @@ async function getFormData() {
 
     const { data: students } = await supabase
         .from("students")
-        .select("id, name, last_name, courses(name)")
+        .select("id, name, last_name, birthdate, guardian_name, guardian_phone, course_id, courses(id, name, section)")
         .eq("institution_id", profile.institution_id)
         .eq("active", true)
         .order("last_name")
 
-    // Usuarios que pueden recibir notificaciones DEC
+    // Profesor jefe por curso (para auto-completar al seleccionar estudiante)
+    const { data: courses } = await supabase
+        .from("courses")
+        .select("id")
+        .eq("institution_id", profile.institution_id)
+        .eq("active", true)
+    const courseIds = (courses ?? []).map((c: { id: string }) => c.id)
+
+    const headTeacherByCourse: Record<string, string> = {}
+    if (courseIds.length > 0) {
+        const { data: headTeachers } = await supabase
+            .from("course_teachers")
+            .select("course_id, users!teacher_id(name, last_name)")
+            .eq("is_head_teacher", true)
+            .in("course_id", courseIds)
+        for (const ht of headTeachers ?? []) {
+            const u = (ht as any).users
+            const name = u ? `${u.name ?? ""} ${u.last_name ?? ""}`.trim() : ""
+            headTeacherByCourse[(ht as any).course_id] = name || "—"
+        }
+    }
+
+    // Notificaciones: Dupla y Convivencia (sin Director)
     const { data: notifiables } = await supabase
         .from("users")
         .select("id, name, last_name, role")
         .eq("institution_id", profile.institution_id)
         .eq("active", true)
-        .in("role", ["director", "dupla", "convivencia", "inspector", "utp"])
-        .neq("id", profile.id) // no notificarse a sí mismo
+        .in("role", ["dupla", "convivencia", "inspector", "utp"])
+        .neq("id", profile.id)
         .order("role")
+
+    // Profesionales del establecimiento (para Encargado, Acompañante interno/externo)
+    const { data: professionals } = await supabase
+        .from("users")
+        .select("id, name, last_name, role")
+        .eq("institution_id", profile.institution_id)
+        .eq("active", true)
+        .in("role", ["docente", "dupla", "convivencia", "director", "inspector", "utp", "admin"])
+        .order("last_name")
 
     return {
         students: students ?? [],
+        headTeacherByCourse,
+        professionals: professionals ?? [],
         notifiables: notifiables ?? [],
         teacherId: profile.id,
         institutionId: profile.institution_id,
@@ -57,6 +90,8 @@ export default async function NuevoDecPage() {
 
                 <DecForm
                     students={data.students as any}
+                    headTeacherByCourse={data.headTeacherByCourse}
+                    professionals={data.professionals as any}
                     notifiables={data.notifiables as any}
                     teacherId={data.teacherId}
                     institutionId={data.institutionId}

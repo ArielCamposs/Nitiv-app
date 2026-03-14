@@ -1,4 +1,5 @@
 import jsPDF from "jspdf"
+import { addPdfLogoHeader } from "./pdf-logos"
 
 export type PaecPdfData = {
     student: { name?: string; last_name?: string; rut?: string; birthdate?: string } | null
@@ -108,12 +109,20 @@ function edad(birthdate: string | null): number | null {
     return e
 }
 
-export function buildPaecPdf(data: PaecPdfData, institutionName?: string): jsPDF {
+export function buildPaecPdf(
+    data: PaecPdfData,
+    institutionName?: string,
+    institutionLogoBase64?: string | null,
+    nitivLogoBase64?: string | null
+): jsPDF {
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
     const margin = 18
+    const pageWidth = doc.internal.pageSize.getWidth()
     const pageHeight = doc.internal.pageSize.getHeight()
-    const contentWidth = doc.internal.pageSize.getWidth() - margin * 2
+    const contentWidth = pageWidth - margin * 2
     let y = margin
+
+    y = addPdfLogoHeader(doc, margin, pageWidth, institutionLogoBase64 ?? null, nitivLogoBase64 ?? null)
 
     if (institutionName) {
         doc.setFont("helvetica", "normal")
