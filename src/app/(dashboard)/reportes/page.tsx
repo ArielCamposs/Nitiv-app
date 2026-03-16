@@ -44,15 +44,16 @@ async function getReportesData() {
     since.setDate(since.getDate() - 90)
 
     const [
-        { data: courses },
-        { data: students },
-        { data: emotions },
-        { data: incidents },
-        { data: alerts },
-        { data: paecs },
-        { data: teacherLogs },
+        { data: coursesRaw },
+        { data: studentsRaw },
+        { data: emotionsRaw },
+        { data: incidentsRaw },
+        { data: alertsRaw },
+        { data: paecsRaw },
+        { data: teacherLogsRaw },
         { data: reporters },
         { data: institution },
+        ...teacherCoursesResult
     ] = await Promise.all([
         supabase.from("courses").select("id, name, section").eq("institution_id", iid).eq("active", true),
         supabase.from("students").select("id, name, last_name, course_id").eq("institution_id", iid).eq("active", true),
@@ -67,8 +68,33 @@ async function getReportesData() {
         supabase.from("paec").select("id, student_id, active").eq("institution_id", iid),
         supabase.from("teacher_logs").select("course_id, energy_level, log_date").eq("institution_id", iid).gte("log_date", new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]),
         supabase.from("users").select("id, name, last_name").eq("institution_id", iid),
-        supabase.from("institutions").select("name").eq("id", iid).maybeSingle(),
+        supabase.from("institutions").select("name, logo_url").eq("id", iid).maybeSingle(),
+        profile.role === "docente"
+            ? supabase.from("course_teachers").select("course_id").eq("teacher_id", user.id)
+            : Promise.resolve({ data: null as { course_id: string }[] | null }),
     ])
+
+    let courses = coursesRaw ?? []
+    let students = studentsRaw ?? []
+    let emotions = emotionsRaw ?? []
+    let incidents = incidentsRaw ?? []
+    let alerts = alertsRaw ?? []
+    let paecs = paecsRaw ?? []
+    let teacherLogs = teacherLogsRaw ?? []
+
+    if (profile.role === "docente") {
+        const teacherCourseIds = new Set(((teacherCoursesResult[0] as any)?.data ?? []).map((r: { course_id: string }) => r.course_id))
+        if (teacherCourseIds.size > 0) {
+            courses = courses.filter(c => teacherCourseIds.has(c.id))
+            const allowedStudentIds = new Set(students.filter(s => s.course_id && teacherCourseIds.has(s.course_id)).map(s => s.id))
+            students = students.filter(s => allowedStudentIds.has(s.id))
+            emotions = emotions.filter(e => allowedStudentIds.has(e.student_id))
+            incidents = incidents.filter(i => allowedStudentIds.has(i.student_id))
+            alerts = alerts.filter(a => allowedStudentIds.has(a.student_id))
+            paecs = paecs.filter(p => allowedStudentIds.has(p.student_id))
+            teacherLogs = teacherLogs.filter(l => l.course_id && teacherCourseIds.has(l.course_id))
+        }
+    }
 
     const studentsMap = Object.fromEntries((students ?? []).map(s => [s.id, s]))
     const coursesMap = Object.fromEntries((courses ?? []).map(c => [c.id, c]))
@@ -215,13 +241,14 @@ async function getReportesData() {
         emotionRows, incidentRows, alertRows, mesesData,
         coursesClimate,
         institutionName: institution?.name ?? "Institución",
+        institutionLogoUrl: (institution as { logo_url?: string } | null)?.logo_url ?? undefined,
         totalStudents: students?.length ?? 0,
         totalAlerts: (alerts ?? []).filter(a => !a.resolved).length,
         totalIncidents: (incidents ?? []).filter(i => !i.resolved).length,
         studentsList,
-        emotionsByStudent: (emotions ?? []),
-        incidentsByStudent: (incidents ?? []),
-        alertsByStudent: (alerts ?? []),
+        emotionsByStudent: emotions ?? [],
+        incidentsByStudent: incidents ?? [],
+        alertsByStudent: alerts ?? [],
         studentsMap,
     }
 }

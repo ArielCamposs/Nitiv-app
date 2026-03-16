@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useMemo } from "react"
+import { useState, useTransition, useMemo, useRef } from "react"
 import Link from "next/link"
 import { createConvivenciaRecord, updateConvivenciaRecord, resolveConvivenciaRecord } from "@/app/(dashboard)/registros-convivencia/actions"
 import { buildConvivenciaPdf, buildConvivenciaStatsPdf } from "@/lib/pdf/convivencia-pdf"
@@ -307,19 +307,22 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
     const [createdRecord, setCreatedRecord] = useState<ConvivenciaRecord | null>(null)
     const [editingRecordId, setEditingRecordId] = useState<string | null>(null)
     const [detailRecordId, setDetailRecordId] = useState<string | null>(null)
+    const originalPayloadRef = useRef<any | null>(null)
+    const originalIncidentDateInputRef = useRef<string | null>(null)
 
     // Filtros del historial (gravedad y estado)
     const [historialFilterSeverity, setHistorialFilterSeverity] = useState("")
     const [historialFilterStatus, setHistorialFilterStatus] = useState("")
 
     // Form state
-    const [status, setStatus] = useState("abierto")
+    // En formulario nuevo, parte sin selección visual de estado ni gravedad
+    const [status, setStatus] = useState("")
     const [responsableId, setResponsableId] = useState("")
     const [apoyoId, setApoyoId] = useState("")
 
     const [type, setType] = useState("")
     const [typeOther, setTypeOther] = useState("")
-    const [severity, setSeverity] = useState("moderada")
+    const [severity, setSeverity] = useState("")
     const [location, setLocation] = useState("")
     const [description, setDescription] = useState("")
     const [agreements, setAgreements] = useState("")
@@ -332,7 +335,11 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
     const [involvedStudents, setInvolvedStudents] = useState<Student[]>([])
     const [actions, setActions] = useState<string[]>([])
     const [otherAction, setOtherAction] = useState("")
-    const [incidentDate, setIncidentDate] = useState(new Date().toISOString().slice(0, 16))
+    const [incidentDate, setIncidentDate] = useState(() => {
+        const now = new Date()
+        const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+        return local.toISOString().slice(0, 16)
+    })
 
     // Stats
     const last30 = useMemo(() => {
@@ -753,7 +760,34 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
             const d = new Date(record.incident_date)
             const offset = d.getTimezoneOffset()
             const local = new Date(d.getTime() - (offset * 60 * 1000))
-            setIncidentDate(local.toISOString().slice(0, 16))
+            const inputValue = local.toISOString().slice(0, 16)
+            setIncidentDate(inputValue)
+            originalIncidentDateInputRef.current = inputValue
+        } else {
+            originalIncidentDateInputRef.current = null
+        }
+
+        // Guardar snapshot original para detectar si no se hicieron cambios
+        try {
+            const originalParsedDate = record.incident_date ? new Date(record.incident_date).toISOString() : null
+            originalPayloadRef.current = {
+                status: record.status,
+                responsable_id: record.responsable_id || null,
+                apoyo_id: record.apoyo_id || null,
+                agreements: (record.agreements || "").trim(),
+                type: record.type,
+                severity: record.severity,
+                location: (record.location || "").trim(),
+                description: (record.description || "").trim(),
+                involved_count: Math.max((record.convivencia_record_students ?? []).length, 1),
+                student_ids: (record.convivencia_record_students ?? [])
+                    .map(s => s.students?.id)
+                    .filter(Boolean),
+                actions_taken: record.actions_taken || [],
+                incident_date: originalParsedDate,
+            }
+        } catch {
+            originalPayloadRef.current = null
         }
 
         setTab("nuevo")
@@ -764,26 +798,57 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
         e.preventDefault()
         if (!type) { toast.error("Selecciona el tipo de caso"); return }
         if (!description.trim()) { toast.error("La descripción es obligatoria"); return }
+        if (involvedStudents.length === 0) {
+            toast.error("Debes asociar al menos un estudiante al caso.")
+            return
+        }
 
         const allActions = [...actions, ...(otherAction.trim() ? [otherAction.trim()] : [])]
         const parsedDate = new Date(incidentDate).toISOString()
 
-        startTransition(async () => {
-            const payload = {
-                status,
-                responsable_id: responsableId || null,
-                apoyo_id: apoyoId || null,
-                agreements: agreements.trim(),
-                type: (type === "Otro" && typeOther.trim()) ? `Otro: ${typeOther.trim()}` : type,
-                severity,
-                location: location.trim(),
-                description: description.trim(),
-                involved_count: Math.max(involvedStudents.length, 1),
-                student_ids: involvedStudents.map(s => s.id),
-                actions_taken: allActions,
-                incident_date: parsedDate,
+        const payload = {
+            status,
+            responsable_id: responsableId || null,
+            apoyo_id: apoyoId || null,
+            agreements: agreements.trim(),
+            type: (type === "Otro" && typeOther.trim()) ? `Otro: ${typeOther.trim()}` : type,
+            severity,
+            location: location.trim(),
+            description: description.trim(),
+            involved_count: Math.max(involvedStudents.length, 1),
+            student_ids: involvedStudents.map(s => s.id),
+            actions_taken: allActions,
+            incident_date: parsedDate,
+        }
+
+        // Si está en edición y nada cambió, avisar y no guardar
+        if (editingRecordId && originalPayloadRef.current) {
+            try {
+                const prev = JSON.stringify(originalPayloadRef.current)
+                const next = JSON.stringify(payload)
+                if (prev === next) {
+                    toast.error("No has modificado ningún dato de este registro.")
+                    return
+                }
+            } catch {
+                // si falla comparación, seguimos normalmente
             }
 
+            // Además, si al editar dejaste exactamente la misma fecha/hora, pedir confirmación explícita
+            if (typeof window !== "undefined" && originalIncidentDateInputRef.current) {
+                if (incidentDate === originalIncidentDateInputRef.current) {
+                    const keepSameDate = window.confirm(
+                        "No has cambiado la fecha y hora del incidente.\n\n" +
+                        "¿Confirmas que quieres mantener la misma fecha que tenía el registro?"
+                    )
+                    if (!keepSameDate) {
+                        return
+                    }
+                }
+            }
+        }
+
+        startTransition(async () => {
             let result
             if (editingRecordId) {
                 result = await updateConvivenciaRecord(editingRecordId, payload)
@@ -795,6 +860,9 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                 toast.error(result.error)
             } else {
                 toast.success(editingRecordId ? "Registro actualizado correctamente" : "Registro creado correctamente")
+
+                // limpiar snapshot después de guardar
+                originalPayloadRef.current = null
 
                 // Optimistic update
                 const typeToSave = (type === "Otro" && typeOther.trim()) ? `Otro: ${typeOther.trim()}` : type
@@ -880,17 +948,37 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             <Printer className="w-4 h-4" /> Imprimir
                         </button>
                     </div>
-                    <div className="pt-2 border-t mt-6 border-slate-100">
-                        <button type="button" onClick={() => {
-                            setCreatedRecord(null)
-                            // Reset state
-                            setStatus("abierto"); setResponsableId(""); setApoyoId("")
-                            setType(""); setTypeOther(""); setSeverity("moderada"); setLocation("")
-                            setDescription(""); setAgreements(""); setInvolvedStudents([])
-                            setSelectedCourse(""); setActions([]); setOtherAction("")
-                            setIncidentDate(new Date().toISOString().slice(0, 16))
-                            setTab("historial")
-                        }} className="text-indigo-600 font-semibold hover:underline text-sm">
+                    <div className="pt-2 border-t mt-6 border-slate-100 flex flex-col sm:flex-row items-center justify-center gap-3">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setCreatedRecord(null)
+                                // Reset form para crear otro caso de inmediato
+                                setStatus(""); setResponsableId(""); setApoyoId("")
+                                setType(""); setTypeOther(""); setSeverity(""); setLocation("")
+                                setDescription(""); setAgreements(""); setInvolvedStudents([])
+                                setSelectedCourse(""); setActions([]); setOtherAction("")
+                                setIncidentDate(new Date().toISOString().slice(0, 16))
+                                setTab("nuevo")
+                            }}
+                            className="text-indigo-600 font-semibold hover:underline text-sm"
+                        >
+                            Crear otro caso
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setCreatedRecord(null)
+                                // Reset básico al volver al historial
+                                setStatus(""); setResponsableId(""); setApoyoId("")
+                                setType(""); setTypeOther(""); setSeverity(""); setLocation("")
+                                setDescription(""); setAgreements(""); setInvolvedStudents([])
+                                setSelectedCourse(""); setActions([]); setOtherAction("")
+                                setIncidentDate(new Date().toISOString().slice(0, 16))
+                                setTab("historial")
+                            }}
+                            className="text-slate-500 font-semibold hover:underline text-sm"
+                        >
                             Volver al historial
                         </button>
                     </div>
@@ -905,17 +993,18 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             <span className="text-sm font-semibold text-slate-700">Estado del caso</span>
                             <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-full border">
                                 {[
-                                    { value: "abierto", label: "Abierto", color: "bg-emerald-400 text-white hover:bg-emerald-500", activeColor: "bg-emerald-500 text-white shadow-md ring-2 ring-emerald-200" },
-                                    { value: "seguimiento", label: "En seguimiento", color: "bg-orange-300 text-white hover:bg-orange-400", activeColor: "bg-orange-400 text-white shadow-md ring-2 ring-orange-200" },
-                                    { value: "cerrado", label: "Cerrado", color: "bg-red-400 text-white hover:bg-red-500", activeColor: "bg-red-500 text-white shadow-md ring-2 ring-red-200" },
+                                    { value: "abierto", label: "Abierto", activeClass: "bg-emerald-500 text-white shadow-md ring-2 ring-emerald-200 border-emerald-500" },
+                                    { value: "seguimiento", label: "En seguimiento", activeClass: "bg-orange-500 text-white shadow-md ring-2 ring-orange-200 border-orange-500" },
+                                    { value: "cerrado", label: "Cerrado", activeClass: "bg-red-500 text-white shadow-md ring-2 ring-red-200 border-red-500" },
                                 ].map(s => (
                                     <button
                                         type="button"
                                         key={s.value}
-                                        onClick={() => setStatus(s.value)}
-                                        className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${status === s.value
-                                            ? s.activeColor
-                                            : `${s.color} opacity-40 grayscale hover:opacity-70 hover:grayscale-0`
+                                        onClick={() => setStatus(prev => (prev === s.value ? "" : s.value))}
+                                        className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                                            status === s.value
+                                                ? s.activeClass
+                                                : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
                                             }`}
                                     >
                                         {s.label}
@@ -963,11 +1052,9 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                 {["Patio", "Aula", "Baño", "Comedor", "Redes sociales", "Fuera del colegio"].map(loc => (
                                     <button key={loc} type="button"
                                         onClick={() => setLocation(prev => prev === loc ? "" : loc)}
-                                        className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${location === loc
-                                            ? "bg-indigo-500 text-white shadow-sm ring-2 ring-indigo-200"
-                                            : location !== ""
-                                                ? "bg-slate-100 text-slate-400 border border-slate-200 opacity-40 grayscale hover:opacity-70 hover:grayscale-0"
-                                                : "bg-indigo-50 text-indigo-600 border border-indigo-100 hover:bg-indigo-100"
+                                        className={`px-3 py-1 rounded-full text-xs font-medium transition-all border ${location === loc
+                                            ? "bg-indigo-500 text-white border-indigo-500 shadow-sm ring-2 ring-indigo-200"
+                                            : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
                                             }`}
                                     >{loc}</button>
                                 ))}
@@ -979,17 +1066,27 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Gravedad</h3>
                             <div className="flex flex-wrap gap-2">
                                 {[
-                                    { value: "leve", label: "Leve", baseClass: "bg-indigo-100 text-indigo-700 border-indigo-200", activeClass: "bg-indigo-500 text-white shadow-md ring-2 ring-indigo-200" },
-                                    { value: "moderada", label: "Mediano", baseClass: "bg-purple-100 text-purple-700 border-purple-200", activeClass: "bg-purple-500 text-white shadow-md ring-2 ring-purple-200" },
-                                    { value: "grave", label: "Grave", baseClass: "bg-rose-100 text-rose-700 border-rose-200", activeClass: "bg-rose-500 text-white shadow-md ring-2 ring-rose-200" },
-                                    { value: "gravisimo", label: "Gravísimo", baseClass: "bg-red-100 text-red-700 border-red-200", activeClass: "bg-red-600 text-white shadow-md ring-2 ring-red-200" },
+                                    // Verde (baja intensidad)
+                                    { value: "leve", label: "Leve", activeClass: "bg-emerald-500 text-white border-emerald-500 shadow-md ring-2 ring-emerald-200" },
+                                    // Amarillo (media)
+                                    { value: "moderada", label: "Mediano", activeClass: "bg-amber-400 text-white border-amber-400 shadow-md ring-2 ring-amber-200" },
+                                    // Rojo claro
+                                    { value: "grave", label: "Grave", activeClass: "bg-rose-400 text-white border-rose-400 shadow-md ring-2 ring-rose-200" },
+                                    // Rojo más intenso
+                                    { value: "gravisimo", label: "Gravísimo", activeClass: "bg-red-600 text-white border-red-600 shadow-md ring-2 ring-red-200" },
                                 ].map(s => (
-                                    <button type="button" key={s.value} onClick={() => setSeverity(s.value)}
-                                        className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${severity === s.value
-                                            ? s.activeClass
-                                            : `${s.baseClass} opacity-40 grayscale hover:opacity-70 hover:grayscale-0`
-                                            } ${type === "Entrevista apoderado" ? "opacity-40 grayscale pointer-events-none" : ""}`}
-                                    >{s.label}</button>
+                                    <button
+                                        type="button"
+                                        key={s.value}
+                                        onClick={() => setSeverity(prev => (prev === s.value ? "" : s.value))}
+                                        className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                                            severity === s.value
+                                                ? s.activeClass
+                                                : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
+                                        } ${type === "Entrevista apoderado" ? "opacity-40 grayscale pointer-events-none" : ""}`}
+                                    >
+                                        {s.label}
+                                    </button>
                                 ))}
                             </div>
                         </div>
@@ -1017,9 +1114,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                                 onClick={() => setSelectedCourse(prev => prev === name ? "" : name)}
                                                 className={`px-3 py-1 rounded-full text-xs font-medium transition-all border ${selectedCourse === name
                                                     ? "bg-indigo-500 text-white border-indigo-500 shadow-sm ring-2 ring-indigo-200"
-                                                    : selectedCourse !== ""
-                                                        ? "bg-slate-100 text-slate-400 border-slate-200 opacity-40 grayscale hover:opacity-70 hover:grayscale-0"
-                                                        : "bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100"
+                                                    : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
                                                     }`}
                                             >{name}</button>
                                         ))}
@@ -1065,17 +1160,16 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <span className="text-xs font-medium text-slate-400">Frecuentes:</span>
                                     {[
-                                        { label: "Apoyo emocional", color: "border-yellow-400 text-yellow-700 bg-yellow-50 hover:bg-yellow-100" },
-                                        { label: "Entrevista apoderado", color: "border-red-400 text-red-700 bg-red-50 hover:bg-red-100" },
-                                        { label: "Incumplimiento de normas", color: "border-blue-400 text-blue-700 bg-blue-50 hover:bg-blue-100" },
+                                        { label: "Apoyo emocional" },
+                                        { label: "Entrevista apoderado" },
+                                        { label: "Incumplimiento de normas" },
                                     ].map(shortcut => (
                                         <button key={shortcut.label} type="button"
                                             onClick={() => { setType(shortcut.label); setTypeOther(""); if (shortcut.label === "Entrevista apoderado") setSeverity("n/a") }}
-                                            className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${type === shortcut.label
-                                                ? `${shortcut.color} ring-2 ring-offset-1 ring-slate-300 font-bold`
-                                                : ["Apoyo emocional", "Entrevista apoderado", "Incumplimiento de normas"].includes(type)
-                                                    ? "bg-slate-100 text-slate-400 border-slate-200 opacity-40 grayscale hover:opacity-70 hover:grayscale-0"
-                                                    : shortcut.color
+                                            className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
+                                                type === shortcut.label
+                                                    ? "bg-indigo-500 text-white border-indigo-500 shadow-sm ring-2 ring-indigo-200"
+                                                    : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
                                                 }`}
                                         >{shortcut.label}</button>
                                     ))}

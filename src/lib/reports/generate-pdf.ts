@@ -1,5 +1,26 @@
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
+import { addPdfLogoHeader } from "@/lib/pdf/pdf-logos"
+
+const MARGIN = 14
+const PAGE_WIDTH = 210
+
+/** Sanitiza un texto para usarlo en nombre de archivo (sin acentos, sin caracteres inválidos). */
+function sanitizeFileNamePart(s: string, maxLen = 40): string {
+    const out = String(s ?? "")
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .replace(/[\s/\\:*?"<>|°ºª]/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_|_$/g, "")
+        .slice(0, maxLen)
+    return out || "sin_nombre"
+}
+
+const SEVERITY_LABEL: Record<string, string> = {
+    moderada: "Moderada", severa: "Severa",
+    leve: "Leve", grave: "Grave", muy_grave: "Muy grave",
+}
 
 // ── Reporte ficha individual estudiante ──
 export function generateStudentPDF(data: {
@@ -9,29 +30,32 @@ export function generateStudentPDF(data: {
     incidents: { folio: string; type: string; severity: string; date: string; resolved: boolean }[]
     hasPaec: boolean
     alerts: { type: string; description: string; date: string; resolved: boolean }[]
-}) {
+}, institutionLogoBase64?: string | null, nitivLogoBase64?: string | null) {
     const doc = new jsPDF()
     const today = new Date().toLocaleDateString("es-CL")
+    let y = addPdfLogoHeader(doc, MARGIN, PAGE_WIDTH, institutionLogoBase64 ?? null, nitivLogoBase64 ?? null)
+    y += 6
 
-    // Header
     doc.setFontSize(18)
     doc.setFont("helvetica", "bold")
-    doc.text("Nitiv — Ficha Individual", 14, 20)
-
+    doc.text("Nitiv — Ficha Individual", MARGIN, y)
+    y += 7
     doc.setFontSize(10)
     doc.setFont("helvetica", "normal")
     doc.setTextColor(120)
-    doc.text(`${data.institutionName}`, 14, 27)
-    doc.text(`Generado el ${today}`, 14, 33)
+    doc.text(`${data.institutionName}`, MARGIN, y)
+    y += 6
+    doc.text(`Generado el ${today}`, MARGIN, y)
+    y += 10
 
-    // Datos del estudiante
     doc.setTextColor(0)
     doc.setFontSize(13)
     doc.setFont("helvetica", "bold")
-    doc.text("Datos del estudiante", 14, 46)
+    doc.text("Datos del estudiante", MARGIN, y)
+    y += 4
 
     autoTable(doc, {
-        startY: 50,
+        startY: y,
         head: [["Campo", "Valor"]],
         body: [
             ["Nombre", `${data.student.name} ${data.student.last_name}`],
@@ -40,7 +64,7 @@ export function generateStudentPDF(data: {
         ],
         styles: { fontSize: 10 },
         headStyles: { fillColor: [30, 30, 30] },
-        margin: { left: 14, right: 14 },
+        margin: { left: MARGIN, right: MARGIN },
     })
 
     // Resumen de bienestar y seguimiento
@@ -55,7 +79,7 @@ export function generateStudentPDF(data: {
     const yResumen = (doc as any).lastAutoTable.finalY + 8
     doc.setFontSize(13)
     doc.setFont("helvetica", "bold")
-    doc.text("Resumen de bienestar y seguimiento", 14, yResumen)
+    doc.text("Resumen de bienestar y seguimiento", MARGIN, yResumen)
 
     autoTable(doc, {
         startY: yResumen + 4,
@@ -69,14 +93,14 @@ export function generateStudentPDF(data: {
         ],
         styles: { fontSize: 9 },
         headStyles: { fillColor: [30, 30, 30] },
-        margin: { left: 14, right: 14 },
+        margin: { left: MARGIN, right: MARGIN },
     })
 
     // Registros emocionales
     const y1 = (doc as any).lastAutoTable.finalY + 10
     doc.setFontSize(13)
     doc.setFont("helvetica", "bold")
-    doc.text("Registros emocionales recientes", 14, y1)
+    doc.text("Registros emocionales recientes", MARGIN, y1)
 
     const EMOTION_LABEL: Record<string, string> = {
         muy_bien: "Muy bien", bien: "Bien", neutral: "Neutral",
@@ -96,18 +120,14 @@ export function generateStudentPDF(data: {
         ]),
         styles: { fontSize: 9 },
         headStyles: { fillColor: [30, 30, 30] },
-        margin: { left: 14, right: 14 },
+        margin: { left: MARGIN, right: MARGIN },
     })
 
     // DEC
     const y2 = (doc as any).lastAutoTable.finalY + 10
     doc.setFontSize(13)
     doc.setFont("helvetica", "bold")
-    doc.text("Registros DEC", 14, y2)
-
-    const SEVERITY_LABEL: Record<string, string> = {
-        leve: "Leve", grave: "Grave", muy_grave: "Muy grave",
-    }
+    doc.text("Registros DEC", MARGIN, y2)
 
     autoTable(doc, {
         startY: y2 + 4,
@@ -123,14 +143,14 @@ export function generateStudentPDF(data: {
             : [["Sin registros DEC", "", "", "", ""]],
         styles: { fontSize: 9 },
         headStyles: { fillColor: [30, 30, 30] },
-        margin: { left: 14, right: 14 },
+        margin: { left: MARGIN, right: MARGIN },
     })
 
     // PAEC
     const y3 = (doc as any).lastAutoTable.finalY + 10
     doc.setFontSize(13)
     doc.setFont("helvetica", "bold")
-    doc.text("Alertas generadas", 14, y3)
+    doc.text("Alertas generadas", MARGIN, y3)
 
     autoTable(doc, {
         startY: y3 + 4,
@@ -145,7 +165,7 @@ export function generateStudentPDF(data: {
             : [["Sin alertas", "", "", ""]],
         styles: { fontSize: 9 },
         headStyles: { fillColor: [30, 30, 30] },
-        margin: { left: 14, right: 14 },
+        margin: { left: MARGIN, right: MARGIN },
     })
 
     // Footer
@@ -156,11 +176,16 @@ export function generateStudentPDF(data: {
         doc.setTextColor(150)
         doc.text(
             `Nitiv — Documento confidencial — Página ${i} de ${pageCount}`,
-            14, doc.internal.pageSize.height - 10
+            MARGIN, doc.internal.pageSize.height - 10
         )
     }
 
-    doc.save(`ficha_${data.student.last_name}_${data.student.name}.pdf`)
+    const year = new Date().getFullYear()
+    const dateStr = today.replace(/\//g, "-")
+    const apellido = sanitizeFileNamePart(data.student.last_name, 30)
+    const nombre = sanitizeFileNamePart(data.student.name, 30)
+    const curso = sanitizeFileNamePart(data.student.courseName, 20)
+    doc.save(`Ficha_individual_estudiante_${apellido}_${nombre}_${curso}_${year}_${dateStr}.pdf`)
 }
 
 // ── Reporte clima del curso ──
@@ -169,31 +194,36 @@ export function generateClimatePDF(data: {
     courseName: string
     weeks: { semana: string; promedio: number | null; registros: number }[]
     students: { name: string; hasPaec: boolean; alertCount: number; incidentCount: number; lastEmotion: string }[]
-}) {
+}, institutionLogoBase64?: string | null, nitivLogoBase64?: string | null) {
     const doc = new jsPDF()
     const today = new Date().toLocaleDateString("es-CL")
+    let y = addPdfLogoHeader(doc, MARGIN, PAGE_WIDTH, institutionLogoBase64 ?? null, nitivLogoBase64 ?? null)
+    y += 6
 
     doc.setFontSize(18)
     doc.setFont("helvetica", "bold")
-    doc.text("Nitiv — Reporte de Clima del Curso", 14, 20)
-
+    doc.text("Nitiv — Reporte de Clima del Curso", MARGIN, y)
+    y += 7
     doc.setFontSize(10)
     doc.setFont("helvetica", "normal")
     doc.setTextColor(120)
-    doc.text(data.institutionName, 14, 27)
-    doc.text(`Curso: ${data.courseName} — Generado el ${today}`, 14, 33)
+    doc.text(data.institutionName, MARGIN, y)
+    y += 6
+    doc.text(`Curso: ${data.courseName} — Generado el ${today}`, MARGIN, y)
+    y += 10
 
     doc.setTextColor(0)
     doc.setFontSize(13)
     doc.setFont("helvetica", "bold")
-    doc.text("Tendencia de energía — últimas 4 semanas", 14, 46)
+    doc.text("Tendencia de energía — últimas 4 semanas", MARGIN, y)
+    y += 4
 
     const SCORE_LABEL: Record<number, string> = {
         4: "Regulada", 3: "Inquieta", 2: "Apática", 1: "Explosiva",
     }
 
     autoTable(doc, {
-        startY: 50,
+        startY: y,
         head: [["Semana", "Promedio", "Clima predominante", "Registros"]],
         body: data.weeks.map(w => [
             w.semana,
@@ -203,13 +233,13 @@ export function generateClimatePDF(data: {
         ]),
         styles: { fontSize: 10 },
         headStyles: { fillColor: [30, 30, 30] },
-        margin: { left: 14, right: 14 },
+        margin: { left: MARGIN, right: MARGIN },
     })
 
     const y1 = (doc as any).lastAutoTable.finalY + 10
     doc.setFontSize(13)
     doc.setFont("helvetica", "bold")
-    doc.text("Seguimiento de estudiantes (PAEC, alertas, DEC)", 14, y1)
+    doc.text("Seguimiento de estudiantes (PAEC, alertas, DEC)", MARGIN, y1)
 
     autoTable(doc, {
         startY: y1 + 4,
@@ -223,7 +253,7 @@ export function generateClimatePDF(data: {
         ]),
         styles: { fontSize: 10 },
         headStyles: { fillColor: [30, 30, 30] },
-        margin: { left: 14, right: 14 },
+        margin: { left: MARGIN, right: MARGIN },
     })
 
     const pageCount = (doc as any).getNumberOfPages()
@@ -233,11 +263,14 @@ export function generateClimatePDF(data: {
         doc.setTextColor(150)
         doc.text(
             `Nitiv — Documento confidencial — Página ${i} de ${pageCount}`,
-            14, doc.internal.pageSize.height - 10
+            MARGIN, doc.internal.pageSize.height - 10
         )
     }
 
-    doc.save(`clima_${data.courseName.replace(/\s/g, "_")}.pdf`)
+    const year = new Date().getFullYear()
+    const dateStr = today.replace(/\//g, "-")
+    const curso = sanitizeFileNamePart(data.courseName, 30)
+    doc.save(`Reporte_clima_aula_${curso}_${year}_${dateStr}.pdf`)
 }
 
 // ── Reporte institucional ──
@@ -251,26 +284,30 @@ export function generateInstitutionalPDF(data: {
     alertsByType?: { type: string; total: number; open: number }[]
     decBySeverity?: { severity: string; total: number; open: number }[]
     topRiskCourses?: { courseName: string; label: string; alerts: number; incidents: number }[]
-}) {
+}, institutionLogoBase64?: string | null, nitivLogoBase64?: string | null) {
     const doc = new jsPDF()
     const today = new Date().toLocaleDateString("es-CL")
+    let y = addPdfLogoHeader(doc, MARGIN, PAGE_WIDTH, institutionLogoBase64 ?? null, nitivLogoBase64 ?? null)
+    y += 6
 
     doc.setFontSize(18)
     doc.setFont("helvetica", "bold")
-    doc.text("Nitiv — Reporte Institucional", 14, 20)
-
+    doc.text("Nitiv — Reporte Institucional", MARGIN, y)
+    y += 7
     doc.setFontSize(10)
     doc.setFont("helvetica", "normal")
     doc.setTextColor(120)
-    doc.text(`${data.institutionName} — Generado el ${today}`, 14, 27)
+    doc.text(`${data.institutionName} — Generado el ${today}`, MARGIN, y)
+    y += 10
 
     doc.setTextColor(0)
     doc.setFontSize(13)
     doc.setFont("helvetica", "bold")
-    doc.text("Resumen general", 14, 40)
+    doc.text("Resumen general", MARGIN, y)
+    y += 4
 
     autoTable(doc, {
-        startY: 44,
+        startY: y,
         head: [["Indicador", "Valor"]],
         body: [
             ["Total estudiantes activos", data.totalStudents.toString()],
@@ -279,13 +316,13 @@ export function generateInstitutionalPDF(data: {
         ],
         styles: { fontSize: 10 },
         headStyles: { fillColor: [30, 30, 30] },
-        margin: { left: 14, right: 14 },
+        margin: { left: MARGIN, right: MARGIN },
     })
 
     const y1 = (doc as any).lastAutoTable.finalY + 10
     doc.setFontSize(13)
     doc.setFont("helvetica", "bold")
-    doc.text("Registros negativos por mes", 14, y1)
+    doc.text("Registros negativos por mes", MARGIN, y1)
 
     autoTable(doc, {
         startY: y1 + 4,
@@ -298,13 +335,13 @@ export function generateInstitutionalPDF(data: {
         ]),
         styles: { fontSize: 10 },
         headStyles: { fillColor: [30, 30, 30] },
-        margin: { left: 14, right: 14 },
+        margin: { left: MARGIN, right: MARGIN },
     })
 
     const y2 = (doc as any).lastAutoTable.finalY + 10
     doc.setFontSize(13)
     doc.setFont("helvetica", "bold")
-    doc.text("Clima por curso", 14, y2)
+    doc.text("Clima por curso", MARGIN, y2)
 
     autoTable(doc, {
         startY: y2 + 4,
@@ -312,7 +349,7 @@ export function generateInstitutionalPDF(data: {
         body: data.courses.map(c => [c.courseName, c.label, c.registros.toString()]),
         styles: { fontSize: 10 },
         headStyles: { fillColor: [30, 30, 30] },
-        margin: { left: 14, right: 14 },
+        margin: { left: MARGIN, right: MARGIN },
     })
 
     // Alertas por tipo
@@ -320,7 +357,7 @@ export function generateInstitutionalPDF(data: {
         const y3 = (doc as any).lastAutoTable.finalY + 10
         doc.setFontSize(13)
         doc.setFont("helvetica", "bold")
-        doc.text("Alertas por tipo", 14, y3)
+        doc.text("Alertas por tipo", MARGIN, y3)
 
         autoTable(doc, {
             startY: y3 + 4,
@@ -328,7 +365,7 @@ export function generateInstitutionalPDF(data: {
             body: data.alertsByType.map(a => [a.type, a.total.toString(), a.open.toString()]),
             styles: { fontSize: 10 },
             headStyles: { fillColor: [30, 30, 30] },
-            margin: { left: 14, right: 14 },
+            margin: { left: MARGIN, right: MARGIN },
         })
     }
 
@@ -337,15 +374,15 @@ export function generateInstitutionalPDF(data: {
         const y4 = (doc as any).lastAutoTable.finalY + 10
         doc.setFontSize(13)
         doc.setFont("helvetica", "bold")
-        doc.text("DEC por severidad", 14, y4)
+        doc.text("DEC por severidad", MARGIN, y4)
 
         autoTable(doc, {
             startY: y4 + 4,
             head: [["Severidad", "Total", "Abiertos"]],
-            body: data.decBySeverity.map(d => [d.severity, d.total.toString(), d.open.toString()]),
+            body: data.decBySeverity.map(d => [SEVERITY_LABEL[d.severity] ?? d.severity, d.total.toString(), d.open.toString()]),
             styles: { fontSize: 10 },
             headStyles: { fillColor: [30, 30, 30] },
-            margin: { left: 14, right: 14 },
+            margin: { left: MARGIN, right: MARGIN },
         })
     }
 
@@ -354,7 +391,7 @@ export function generateInstitutionalPDF(data: {
         const y5 = (doc as any).lastAutoTable.finalY + 10
         doc.setFontSize(13)
         doc.setFont("helvetica", "bold")
-        doc.text("Cursos en mayor riesgo", 14, y5)
+        doc.text("Cursos en mayor riesgo", MARGIN, y5)
 
         autoTable(doc, {
             startY: y5 + 4,
@@ -367,7 +404,7 @@ export function generateInstitutionalPDF(data: {
             ]),
             styles: { fontSize: 10 },
             headStyles: { fillColor: [30, 30, 30] },
-            margin: { left: 14, right: 14 },
+            margin: { left: MARGIN, right: MARGIN },
         })
     }
 
@@ -378,9 +415,11 @@ export function generateInstitutionalPDF(data: {
         doc.setTextColor(150)
         doc.text(
             `Nitiv — Documento confidencial — Página ${i} de ${pageCount}`,
-            14, doc.internal.pageSize.height - 10
+            MARGIN, doc.internal.pageSize.height - 10
         )
     }
 
-    doc.save(`reporte_institucional_${today.replace(/\//g, "-")}.pdf`)
+    const year = new Date().getFullYear()
+    const dateStr = today.replace(/\//g, "-")
+    doc.save(`Reporte_institucional_${year}_${dateStr}.pdf`)
 }

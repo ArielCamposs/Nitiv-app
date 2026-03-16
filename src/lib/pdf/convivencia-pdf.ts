@@ -6,13 +6,10 @@ const TITLE_BAR_H = 9
 const LINE_H = 5
 const BOX_GAP = 6
 
-/** Colores de la barra del cuadro según estado del registro (abierta verde, seguimiento naranja, cerrado gris). */
+/** Barra de los cuadros en PDF (todos en gris, sin color por estado). */
 function getStatusBarColor(resolved: boolean, status?: string): [number, number, number] {
-    const s = (status ?? "").toLowerCase()
-    if (resolved || s === "cerrado") return [226, 232, 240]   // slate-200 gris
-    if (s === "seguimiento") return [254, 215, 170]           // orange-200 naranja
-    // Abierta / abierto: verde claro bien visible (poco azul para que no se vea azulado)
-    return [180, 240, 185]   // verde claro (R y B bajos, G alto)
+    // Usar siempre un gris claro homogéneo para todos los estados
+    return [226, 232, 240]   // slate-200 gris
 }
 
 /** Dibuja una línea con etiqueta en negrita y valor en normal (si tiene "Etiqueta: valor"). */
@@ -292,7 +289,6 @@ export function buildConvivenciaStatsPdf(
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
     const margin = 18
     const pageWidth = doc.internal.pageSize.width
-    const contentWidth = pageWidth - margin * 2
     let y = margin
 
     y = addPdfLogoHeader(doc, margin, pageWidth, institutionLogoBase64 ?? null, nitivLogoBase64 ?? null)
@@ -305,164 +301,197 @@ export function buildConvivenciaStatsPdf(
         y += 8
     }
 
-    const title = (text: string, fontSize: number = 14) => {
-        y = newPageIfNeeded(doc, y, margin, 25)
-        doc.setFont("helvetica", "bold")
-        doc.setFontSize(fontSize)
-        doc.setTextColor(30, 41, 59)
-        doc.text(text, margin, y)
-        y += fontSize * 0.5 + 4
-    }
-
-    const section = (text: string) => {
-        y = newPageIfNeeded(doc, y, margin, 18)
-        doc.setFont("helvetica", "bold")
-        doc.setFontSize(11)
-        doc.setTextColor(51, 65, 85)
-        doc.text(text, margin, y)
-        y += 6
-    }
-
-    const row = (label: string, value: string, indent: number = 0) => {
-        const labelW = 70 - indent
-        const valX = margin + 72
-        const valW = pageWidth - margin - valX
-        y = newPageIfNeeded(doc, y, margin, 12)
-        doc.setFont("helvetica", "normal")
-        doc.setFontSize(10)
-        doc.setTextColor(71, 85, 105)
-        const labelLines = doc.splitTextToSize(label, labelW)
-        doc.text(labelLines, margin + indent, y)
-        doc.setTextColor(15, 23, 42)
-        const valueLines = doc.splitTextToSize(String(value), valW)
-        doc.text(valueLines, valX, y)
-        y += Math.max(labelLines.length * 5, valueLines.length * 5) + 3
-    }
-
-    // Titulo del informe
+    // TÍTULO PRINCIPAL DEL INFORME
     doc.setFont("helvetica", "bold")
-    doc.setFontSize(16)
-    doc.setTextColor(79, 70, 229)
-    doc.text("Informe de Estadisticas", margin, y)
-    y += 6
+    doc.setFontSize(14)
+    doc.setTextColor(30, 41, 59)
+    doc.text("INFORME DE ESTADISTICAS DE CONVIVENCIA", margin, y)
+    y += 8
+
     doc.setFont("helvetica", "normal")
-    doc.setFontSize(10)
+    doc.setFontSize(9)
     doc.setTextColor(100, 116, 139)
-    doc.text("Registros de Convivencia Escolar", margin, y)
-    y += 6
-    doc.setDrawColor(226, 232, 240)
-    doc.line(margin, y, pageWidth - margin, y)
+    doc.text(`Generado el ${new Date().toLocaleString("es-CL")}`, margin, y)
     y += 10
 
-    doc.setFontSize(9)
-    doc.setTextColor(148, 163, 184)
-    doc.text(`Generado el ${new Date().toLocaleString("es-CL")}`, margin, y)
-    y += 12
+    const pageHeight = doc.internal.pageSize.height
 
-    // 1. Estado de casos
-    section("1. Estado de casos (periodo)")
-    row("Abiertos (requieren atencion)", String(data.statusCounts.abiertos))
-    row("En seguimiento", String(data.statusCounts.seguimiento))
-    row("Cerrados / Resueltos", String(data.statusCounts.cerrados))
-    y += 4
+    // 1. ESTADO DE CASOS
+    const estadoContent: string[] = [
+        `Abiertos (requieren atencion): ${data.statusCounts.abiertos}`,
+        `En seguimiento: ${data.statusCounts.seguimiento}`,
+        `Cerrados / Resueltos: ${data.statusCounts.cerrados}`,
+    ]
+    y = addBoxedSection(
+        doc,
+        y,
+        margin,
+        pageHeight,
+        pageWidth,
+        "1. ESTADO DE CASOS",
+        estadoContent
+    )
 
-    // 2. Resumen numerico
-    section("2. Resumen del periodo")
-    row("Casos ultimos 30 dias", String(data.last30))
-    if (data.trendVsPrev !== null) {
-        row("Variacion vs 30 dias anteriores", `${data.trendVsPrev >= 0 ? "+" : ""}${data.trendVsPrev}%`)
-    }
-    row("Casos esta semana", String(data.lastWeek))
-    if (data.weekPct !== null) {
-        row("Variacion vs semana pasada", `${data.weekDiff >= 0 ? "+" : ""}${data.weekPct}%`)
-    }
-    row("Tipo mas frecuente (30 dias)", data.topTypeLabel || "-")
-    row("Casos graves (30 dias)", String(data.gravesLast30))
-    y += 4
+    // 2. RESUMEN DEL PERIODO
+    const resumenContent: string[] = [
+        `Casos ultimos 30 dias: ${data.last30}`,
+        ...(data.trendVsPrev !== null
+            ? [`Variacion vs 30 dias anteriores: ${data.trendVsPrev >= 0 ? "+" : ""}${data.trendVsPrev}%`]
+            : []),
+        `Casos esta semana: ${data.lastWeek}`,
+        ...(data.weekPct !== null
+            ? [`Variacion vs semana pasada: ${data.weekDiff >= 0 ? "+" : ""}${data.weekPct}%`]
+            : []),
+        `Tipo mas frecuente (30 dias): ${data.topTypeLabel || "-"}`,
+        `Casos graves (30 dias): ${data.gravesLast30}`,
+    ]
+    y = addBoxedSection(
+        doc,
+        y,
+        margin,
+        pageHeight,
+        pageWidth,
+        "2. RESUMEN DEL PERIODO",
+        resumenContent
+    )
 
-    // 3. Tasa de resolucion
-    section("3. Tasa de resolucion")
-    row("Casos resueltos", `${data.resolvedCount} de ${data.totalRecords}`)
-    row("Porcentaje", `${data.resolutionRate}%`)
-    y += 4
+    // 3. TASA DE RESOLUCION
+    const tasaContent: string[] = [
+        `Casos resueltos: ${data.resolvedCount} de ${data.totalRecords}`,
+        `Porcentaje: ${data.resolutionRate}%`,
+    ]
+    y = addBoxedSection(
+        doc,
+        y,
+        margin,
+        pageHeight,
+        pageWidth,
+        "3. TASA DE RESOLUCION",
+        tasaContent
+    )
 
-    // 4. Distribucion por gravedad
-    section("4. Distribucion por gravedad")
-    data.severityDist.forEach(s => {
+    // 4. DISTRIBUCION POR GRAVEDAD
+    const gravedadContent: string[] = data.severityDist.map(s => {
         const pct = data.totalRecords > 0 ? Math.round((s.count / data.totalRecords) * 100) : 0
-        row(s.label, `${s.count} (${pct}%)`, 4)
+        return `${s.label}: ${s.count} (${pct}%)`
     })
-    y += 4
+    if (gravedadContent.length > 0) {
+        y = addBoxedSection(
+            doc,
+            y,
+            margin,
+            pageHeight,
+            pageWidth,
+            "4. DISTRIBUCION POR GRAVEDAD",
+            gravedadContent
+        )
+    }
 
-    // 5. Dias de la semana
-    section("5. Casos por dia (Lun - Vie)")
-    data.daysHeatmap.forEach(d => {
-        row(d.name, String(d.count), 4)
-    })
-    y += 4
+    // 5. CASOS POR DIA (LUN - VIE)
+    const diasContent: string[] = data.daysHeatmap.map(d => `${d.name}: ${d.count}`)
+    if (diasContent.length > 0) {
+        y = addBoxedSection(
+            doc,
+            y,
+            margin,
+            pageHeight,
+            pageWidth,
+            "5. CASOS POR DIA (LUN - VIE)",
+            diasContent
+        )
+    }
 
-    // 6. Lugares
+    // 6. LUGARES CON MAS CASOS
     if (data.byLocation.length > 0) {
-        section("6. Lugares donde ocurren mas casos")
-        data.byLocation.slice(0, 8).forEach(loc => {
+        const locContent: string[] = data.byLocation.slice(0, 8).map(loc => {
             const pct = data.totalRecords > 0 ? Math.round((loc.count / data.totalRecords) * 100) : 0
-            row(loc.name, `${loc.count} (${pct}%)`, 4)
+            return `${loc.name}: ${loc.count} (${pct}%)`
         })
-        y += 4
+        y = addBoxedSection(
+            doc,
+            y,
+            margin,
+            pageHeight,
+            pageWidth,
+            "6. LUGARES CON MAS CASOS",
+            locContent
+        )
     }
 
-    // 7. Involucrados
-    section("7. Involucrados por caso")
-    row("Promedio de personas por caso", String(data.involvedStats.avg))
-    row("Casos con 1 involucrado", String(data.involvedStats.soloUno))
-    row("Casos con 2 o mas involucrados", String(data.involvedStats.dosOMas))
-    y += 4
+    // 7. INVOLUCRADOS POR CASO
+    const invContent: string[] = [
+        `Promedio de personas por caso: ${data.involvedStats.avg}`,
+        `Casos con 1 involucrado: ${data.involvedStats.soloUno}`,
+        `Casos con 2 o mas involucrados: ${data.involvedStats.dosOMas}`,
+    ]
+    y = addBoxedSection(
+        doc,
+        y,
+        margin,
+        pageHeight,
+        pageWidth,
+        "7. INVOLUCRADOS POR CASO",
+        invContent
+    )
 
-    // 8. Evolucion semanal
+    // 8. EVOLUCION SEMANAL
     if (data.weeklyData.length > 0) {
-        section("8. Evolucion semanal (ultimas 6 semanas)")
-        data.weeklyData.forEach(w => {
-            row(w.semana, String(w.casos), 4)
-        })
-        y += 4
+        const evoContent: string[] = data.weeklyData.map(w => `${w.semana}: ${w.casos}`)
+        y = addBoxedSection(
+            doc,
+            y,
+            margin,
+            pageHeight,
+            pageWidth,
+            "8. EVOLUCION SEMANAL (ULTIMAS 6 SEMANAS)",
+            evoContent
+        )
     }
 
-    // 9. Tipos (pie)
+    // 9. DISTRIBUCION POR TIPO (30 DIAS)
     if (data.pieData.length > 0) {
-        section("9. Distribucion por tipo (30 dias)")
-        data.pieData.forEach(p => {
-            row(p.name, String(p.value), 4)
-        })
-        y += 4
+        const tipoContent: string[] = data.pieData.map(p => `${p.name}: ${p.value}`)
+        y = addBoxedSection(
+            doc,
+            y,
+            margin,
+            pageHeight,
+            pageWidth,
+            "9. DISTRIBUCION POR TIPO (30 DIAS)",
+            tipoContent
+        )
     }
 
-    // 10. Estudiantes reincidentes
+    // 10. ESTUDIANTES REINCIDENTES
     if (data.topReincidentStudents.length > 0) {
-        section("10. Estudiantes reincidentes (top 5)")
-        data.topReincidentStudents.forEach((s, i) => {
-            row(`${i + 1}. ${s.last_name}, ${s.name}`, `${s.count} casos`, 4)
-        })
-        y += 4
+        const reincContent: string[] = data.topReincidentStudents.map((s, i) =>
+            `${i + 1}. ${s.last_name}, ${s.name}: ${s.count} casos`
+        )
+        y = addBoxedSection(
+            doc,
+            y,
+            margin,
+            pageHeight,
+            pageWidth,
+            "10. ESTUDIANTES REINCIDENTES (TOP 5)",
+            reincContent
+        )
     }
 
-    // 11. Acciones mas frecuentes
+    // 11. MEDIDAS Y ACCIONES MAS FRECUENTES
     if (data.topActionsTaken.length > 0) {
-        section("11. Medidas y acciones mas frecuentes")
-        data.topActionsTaken.forEach((a, i) => {
-            const lines = doc.splitTextToSize(a.name, contentWidth - 55)
-            y = newPageIfNeeded(doc, y, margin, lines.length * 5 + 4)
-            doc.setFont("helvetica", "normal")
-            doc.setFontSize(10)
-            doc.setTextColor(71, 85, 105)
-            doc.text(`${i + 1}.`, margin + 4, y)
-            doc.setTextColor(15, 23, 42)
-            doc.text(lines, margin + 12, y)
-            y += (lines.length * 5) + 2
-            doc.setFontSize(9)
-            doc.setTextColor(100, 116, 139)
-            doc.text(`${a.count} veces`, margin + 12, y)
-            y += 6
-        })
+        const accionesContent: string[] = data.topActionsTaken.map((a, i) =>
+            `${i + 1}. ${a.name}: ${a.count} veces`
+        )
+        y = addBoxedSection(
+            doc,
+            y,
+            margin,
+            pageHeight,
+            pageWidth,
+            "11. MEDIDAS Y ACCIONES MAS FRECUENTES",
+            accionesContent
+        )
     }
 
     // Footer en todas las paginas

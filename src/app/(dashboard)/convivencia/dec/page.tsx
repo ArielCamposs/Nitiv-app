@@ -18,7 +18,7 @@ async function getDecCasesForConvivencia() {
 
     if (profile?.role !== "convivencia") return null
 
-    const [casesRes, decStats] = await Promise.all([
+    const [casesRes, decStats, institutionRes] = await Promise.all([
         supabase
             .from("incidents")
             .select(`
@@ -52,13 +52,16 @@ async function getDecCasesForConvivencia() {
             .eq("institution_id", profile.institution_id)
             .order("incident_date", { ascending: false }),
         getDecStats(profile.institution_id),
+        supabase.from("institutions").select("name, logo_url").eq("id", profile.institution_id).maybeSingle(),
     ])
 
+    const institution = institutionRes.data ?? null
     return {
         cases: casesRes.data ?? [],
         role: "convivencia",
         userId: user.id,
         decStats,
+        institution,
     }
 }
 
@@ -93,7 +96,7 @@ export default async function ConvivenciaDecPage() {
                     </Link>
                 </div>
 
-                <DecPageTabs cases={data.cases as any} currentUserId={data.userId} userRole={data.role} decStats={data.decStats} />
+                <DecPageTabs cases={data.cases as any} currentUserId={data.userId} userRole={data.role} decStats={data.decStats} institutionName={data.institution?.name ?? undefined} institutionLogoUrl={data.institution?.logo_url ?? undefined} />
             </div>
         </main>
     )

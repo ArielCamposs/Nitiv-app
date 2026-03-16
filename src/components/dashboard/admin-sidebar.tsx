@@ -24,6 +24,8 @@ type NavItem = {
     icon: React.ElementType
     badge?: boolean
     chatBadge?: boolean
+    /** Si es true, solo se marca activo cuando pathname coincide exactamente (ej. Inicio) */
+    exactMatch?: boolean
 }
 
 type NavGroup = {
@@ -36,14 +38,14 @@ const ADMIN_GROUPS: NavGroup[] = [
     {
         label: "Panel de Control",
         items: [
-            { title: "Inicio", href: "/admin", icon: LayoutDashboard },
+            { title: "Inicio", href: "/admin", icon: LayoutDashboard, exactMatch: true },
         ],
     },
     {
         label: "Gestión de Personas",
         items: [
             { title: "Usuarios", href: "/admin/usuarios", icon: UserCog },
-            { title: "Estudiantes", href: "/admin/estudiantes", icon: GraduationCap },
+            { title: "Cursos", href: "/admin/estudiantes", icon: GraduationCap },
             { title: "Cursos", href: "/admin/cursos", icon: School },
         ],
     },
@@ -92,7 +94,7 @@ export function AdminSidebarContent({ userId, showBell = true, institutionName, 
     useEffect(() => {
         const next: Record<string, boolean> = {}
         for (const g of ADMIN_GROUPS) {
-            const hasActive = g.items.some(item => pathname === item.href || (pathname.startsWith(item.href + "/") && item.href !== "/"))
+            const hasActive = g.items.some(item => item.exactMatch ? pathname === item.href : (pathname === item.href || (pathname.startsWith(item.href + "/") && item.href !== "/")))
             next[g.label] = hasActive
         }
         setOpenGroups(next)
@@ -111,7 +113,7 @@ export function AdminSidebarContent({ userId, showBell = true, institutionName, 
             <div className="mb-1 flex flex-col gap-0.5 px-0">
                 <div className="flex items-start justify-between gap-1">
                     <div className="flex flex-col max-w-[88%] -ml-1 min-w-0">
-                        <img src="/logo.svg" alt="Nitiv Logo" className="h-28 w-auto object-contain object-left" />
+                        <img src="/3%20ft.svg" alt="Nitiv Logo" className="h-28 w-auto object-contain object-left" />
                         <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 -mt-2 ml-1">
                             Admin
                         </span>
@@ -168,8 +170,7 @@ export function AdminSidebarContent({ userId, showBell = true, institutionName, 
                                             href={item.href}
                                             className={cn(
                                                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                                                pathname === item.href ||
-                                                    (pathname.startsWith(item.href + "/") && item.href !== "/")
+                                                (item.exactMatch ? pathname === item.href : (pathname === item.href || (pathname.startsWith(item.href + "/") && item.href !== "/")))
                                                     ? "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
                                                     : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                                             )}

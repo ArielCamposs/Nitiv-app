@@ -24,6 +24,8 @@ type NavItem = {
     icon: React.ElementType
     badge?: boolean
     chatBadge?: boolean
+    /** Si es true, solo se marca activo cuando pathname coincide exactamente (ej. Inicio) */
+    exactMatch?: boolean
 }
 
 type NavGroup = {
@@ -56,7 +58,7 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
 
     // ── Bloque 1: Centro de Acción ─────────────────────────────────────────────
     const centroAccion: NavItem[] = [
-        { title: "Inicio", href: dashHref, icon: Home },
+        { title: "Inicio", href: dashHref, icon: Home, exactMatch: true },
     ]
 
     if (isStudent) {
@@ -72,7 +74,7 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
     const gestionCasos: NavItem[] = []
 
     if (isDocente) {
-        gestionCasos.push({ title: "Estudiantes", href: "/docente/estudiantes", icon: Users })
+        gestionCasos.push({ title: "Cursos", href: "/docente/estudiantes", icon: Users })
     }
 
     if (isGestion || isDocente) {
@@ -95,7 +97,7 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
             href: `/${currentRole}/heatmap`,
             icon: Activity,
         })
-        gestionCasos.push({ title: "Estudiantes", href: `/${currentRole}/estudiantes`, icon: Users })
+        gestionCasos.push({ title: "Cursos", href: `/${currentRole}/estudiantes`, icon: Users })
     }
 
     // Radar de Competencias — solo dupla y convivencia
@@ -141,7 +143,21 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
     return groups
 }
 
-function AvatarContent({ fullName, role }: { fullName: string; role: string | null }) {
+function AvatarContent({ fullName, role, studentCourseLabel }: { fullName: string; role: string | null; studentCourseLabel?: string | null }) {
+    const roleLabel =
+        role === "docente" ? "Docente"
+            : role === "dupla" ? "Dupla Psicosocial"
+                : role === "convivencia" ? "Encargado de Convivencia"
+                    : role === "director" ? "Director"
+                        : role === "admin" ? "Administrador"
+                            : role === "inspector" ? "Inspector"
+                                : role === "utp" ? "UTP"
+                                    : role === "estudiante"
+                                        ? (studentCourseLabel ? `Estudiante · ${studentCourseLabel}` : "Estudiante")
+                                        : role === "centro_alumnos"
+                                            ? (studentCourseLabel ? `Centro de Alumnos · ${studentCourseLabel}` : "Centro de Alumnos")
+                                            : role ?? ""
+
     return (
         <>
             <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
@@ -158,17 +174,8 @@ function AvatarContent({ fullName, role }: { fullName: string; role: string | nu
                 <p className="text-sm font-semibold text-slate-800 truncate">
                     {fullName}
                 </p>
-                <p className="text-xs text-slate-400">
-                    {role === "docente" ? "Docente"
-                        : role === "dupla" ? "Dupla Psicosocial"
-                            : role === "convivencia" ? "Encargado de Convivencia"
-                                : role === "director" ? "Director"
-                                    : role === "admin" ? "Administrador"
-                                        : role === "inspector" ? "Inspector"
-                                            : role === "utp" ? "UTP"
-                                                : role === "estudiante" ? "Estudiante"
-                                                    : role === "centro_alumnos" ? "Centro de Alumnos"
-                                                        : role ?? ""}
+                <p className="text-xs text-slate-400 truncate" title={roleLabel}>
+                    {roleLabel}
                 </p>
             </div>
         </>
@@ -176,13 +183,14 @@ function AvatarContent({ fullName, role }: { fullName: string; role: string | nu
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
-export function SidebarContent({ userId, showBell = true, institutionName, institutionLogoUrl, isMobileMenuOpen }: { userId: string; showBell?: boolean; institutionName?: string; institutionLogoUrl?: string; isMobileMenuOpen?: boolean }) {
+export function SidebarContent({ userId, showBell = true, institutionName, institutionLogoUrl, isMobileMenuOpen, initialRole, initialFullName, studentCourseLabel: initialStudentCourseLabel }: { userId: string; showBell?: boolean; institutionName?: string; institutionLogoUrl?: string; isMobileMenuOpen?: boolean; initialRole?: string; initialFullName?: string; studentCourseLabel?: string | null }) {
     const pathname = usePathname()
     const router = useRouter()
     const supabase = createClient()
-    const [role, setRole] = useState<string | null>(null)
-    const [fullName, setFullName] = useState<string | null>(null)
-    const [loading, setLoading] = useState(true)
+    const [role, setRole] = useState<string | null>(initialRole ?? null)
+    const [fullName, setFullName] = useState<string | null>(initialFullName ?? null)
+    const [studentCourseLabel, setStudentCourseLabel] = useState<string | null>(initialStudentCourseLabel ?? null)
+    const [loading, setLoading] = useState(!(initialRole && initialFullName))
     const [radarActive, setRadarActive] = useState<boolean | null>(null)
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
     const { totalUnread } = useChatUnread()
@@ -201,7 +209,7 @@ export function SidebarContent({ userId, showBell = true, institutionName, insti
         if (groups.length === 0) return
         const next: Record<string, boolean> = {}
         for (const g of groups) {
-            const hasActive = g.items.some(item => pathname === item.href || (pathname.startsWith(item.href + "/") && item.href !== "/"))
+            const hasActive = g.items.some(item => item.exactMatch ? pathname === item.href : (pathname === item.href || (pathname.startsWith(item.href + "/") && item.href !== "/")))
             next[g.label] = hasActive
         }
         setOpenGroups(next)
@@ -221,7 +229,7 @@ export function SidebarContent({ userId, showBell = true, institutionName, insti
                     setRole(profile.role)
                     setFullName([profile.name, profile.last_name].filter(Boolean).join(" "))
 
-                    // Si es estudiante, verificar si tiene radar activo en su curso
+                    // Si es estudiante, obtener curso y verificar si tiene radar activo
                     if (profile.role === "estudiante" || profile.role === "centro_alumnos") {
                         const { data: student } = await supabase
                             .from("students")
@@ -230,6 +238,14 @@ export function SidebarContent({ userId, showBell = true, institutionName, insti
                             .maybeSingle()
 
                         if (student?.course_id) {
+                            const { data: course } = await supabase
+                                .from("courses")
+                                .select("name, section")
+                                .eq("id", student.course_id)
+                                .maybeSingle()
+                            if (course) {
+                                setStudentCourseLabel([course.name, course.section].filter(Boolean).join(" ").trim() || null)
+                            }
                             const { data: sessions } = await supabase
                                 .from("radar_sessions")
                                 .select("id")
@@ -274,7 +290,7 @@ export function SidebarContent({ userId, showBell = true, institutionName, insti
             {/* Logo + nombre del colegio + campana */}
             <div className="mb-1 flex flex-col gap-0.5 px-0">
                 <div className="flex items-start justify-between gap-1">
-                    <img src="/logo.svg" alt="Nitiv Logo" className="h-28 w-auto max-w-[88%] object-contain object-left -ml-1 shrink-0" />
+                    <img src="/3%20ft.svg" alt="Nitiv Logo" className="h-28 w-auto max-w-[88%] object-contain object-left -ml-1 shrink-0" />
                     {showBell && <span className="shrink-0 mt-0.5"><NotificationBell userId={userId} /></span>}
                 </div>
                 {institutionName && (
@@ -314,8 +330,9 @@ export function SidebarContent({ userId, showBell = true, institutionName, insti
                                     )
                                 }
 
-                                const isActive = pathname === item.href ||
-                                    (pathname.startsWith(item.href + "/") && item.href !== "/")
+                                const isActive = item.exactMatch
+                                    ? pathname === item.href
+                                    : (pathname === item.href || (pathname.startsWith(item.href + "/") && item.href !== "/"))
                                 return (
                                     <Link
                                         key={item.href}
@@ -397,11 +414,11 @@ export function SidebarContent({ userId, showBell = true, institutionName, insti
                     <div className="px-3 py-2 mb-2">
                         {isStudent ? (
                             <Link href="/estudiante/configuracion" className="flex items-center gap-3 hover:bg-slate-100 p-2 -mx-2 rounded-lg transition-colors cursor-pointer">
-                                <AvatarContent fullName={fullName} role={role} />
+                                <AvatarContent fullName={fullName} role={role} studentCourseLabel={studentCourseLabel} />
                             </Link>
                         ) : (
                             <div className="flex items-center gap-3 p-2 -mx-2">
-                                <AvatarContent fullName={fullName} role={role} />
+                                <AvatarContent fullName={fullName} role={role} studentCourseLabel={studentCourseLabel} />
                             </div>
                         )}
                     </div>
@@ -429,10 +446,10 @@ export function SidebarContent({ userId, showBell = true, institutionName, insti
     )
 }
 
-export function Sidebar({ userId, institutionName, institutionLogoUrl }: { userId: string; institutionName?: string; institutionLogoUrl?: string }) {
+export function Sidebar({ userId, institutionName, institutionLogoUrl, initialRole, initialFullName, studentCourseLabel }: { userId: string; institutionName?: string; institutionLogoUrl?: string; initialRole?: string; initialFullName?: string; studentCourseLabel?: string }) {
     return (
         <aside className="fixed left-0 top-0 hidden h-screen w-64 border-r bg-slate-50/50 p-6 md:flex md:flex-col">
-            <SidebarContent userId={userId} institutionName={institutionName} institutionLogoUrl={institutionLogoUrl} />
+            <SidebarContent userId={userId} institutionName={institutionName} institutionLogoUrl={institutionLogoUrl} initialRole={initialRole} initialFullName={initialFullName} studentCourseLabel={studentCourseLabel} />
         </aside>
     )
 }

@@ -4,10 +4,9 @@ import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { createNotifications, getUserIdsByRoles } from "@/lib/notifications"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { Mic, MicOff } from "lucide-react"
+import { Mic, MicOff, Plus, X } from "lucide-react"
 import {
     Card,
     CardContent,
@@ -92,14 +91,13 @@ type Props = {
     students: StudentOption[]
     headTeacherByCourse?: Record<string, string>
     professionals: ProfessionalOption[]
-    notifiables: { id: string; name: string; last_name: string; role: string }[]
     teacherId: string
     institutionId: string
 }
 
-const TOTAL_STEPS = 7
+const TOTAL_STEPS = 6
 
-export function DecForm({ students, headTeacherByCourse = {}, professionals = [], notifiables = [], teacherId, institutionId }: Props) {
+export function DecForm({ students, headTeacherByCourse = {}, professionals = [], teacherId, institutionId }: Props) {
     const router = useRouter()
     const supabase = createClient()
 
@@ -107,7 +105,12 @@ export function DecForm({ students, headTeacherByCourse = {}, professionals = []
     const [loading, setLoading] = useState(false)
 
     // 1. Contexto inmediato
-    const [incidentDate, setIncidentDate] = useState(new Date().toISOString().slice(0, 16))
+    const [incidentDate, setIncidentDate] = useState(() => {
+        const now = new Date()
+        // Ajustar a hora local para datetime-local (evita desfase UTC)
+        const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+        return local.toISOString().slice(0, 16)
+    })
     const [incidentEndDate, setIncidentEndDate] = useState("")
     const [location, setLocation] = useState("")
     const [locationOther, setLocationOther] = useState("")
@@ -120,6 +123,7 @@ export function DecForm({ students, headTeacherByCourse = {}, professionals = []
     const [professionalEncargadoId, setProfessionalEncargadoId] = useState("")
     const [professionalAcompananteIntId, setProfessionalAcompananteIntId] = useState("")
     const [professionalAcompananteExtId, setProfessionalAcompananteExtId] = useState("")
+    const [additionalProfessionalIds, setAdditionalProfessionalIds] = useState<string[]>([])
 
     // 4. Apoderado (auto desde estudiante)
     const [guardianContacted, setGuardianContacted] = useState(false)
@@ -133,15 +137,14 @@ export function DecForm({ students, headTeacherByCourse = {}, professionals = []
 
     // 7. Situaciones desencadenantes
     const [triggers, setTriggers] = useState<string[]>([])
+    const [triggerOther, setTriggerOther] = useState("")
 
     // 8-9. Acciones y observaciones
     const [actions, setActions] = useState<string[]>([])
+    const [actionOther, setActionOther] = useState("")
     const [description, setDescription] = useState("")
     const [isListening, setIsListening] = useState(false)
     const recognitionRef = useRef<any>(null)
-
-    // Notificaciones
-    const [recipients, setRecipients] = useState<string[]>([])
 
     const selectedStudent = students.find((s) => s.id === studentId) ?? null
     const age = selectedStudent ? calcAge(selectedStudent.birthdate) : null
@@ -240,11 +243,15 @@ export function DecForm({ students, headTeacherByCourse = {}, professionals = []
             const encargado = professionalEncargadoId ? professionals.find((p) => p.id === professionalEncargadoId) : null
             const acompInt = professionalAcompananteIntId ? professionals.find((p) => p.id === professionalAcompananteIntId) : null
             const acompExt = professionalAcompananteExtId ? professionals.find((p) => p.id === professionalAcompananteExtId) : null
-            if (encargado || acompInt || acompExt) {
+            const additionalProfs = additionalProfessionalIds
+                .map((id) => id ? professionals.find((p) => p.id === id) : null)
+                .filter(Boolean) as { name: string; last_name: string }[]
+            if (encargado || acompInt || acompExt || additionalProfs.length > 0) {
                 const profs = [
                     encargado && `Encargado: ${encargado.name} ${encargado.last_name}`.trim(),
                     acompInt && `Acompañante interno: ${acompInt.name} ${acompInt.last_name}`.trim(),
                     acompExt && `Acompañante externo: ${acompExt.name} ${acompExt.last_name}`.trim(),
+                    ...additionalProfs.map((ap) => `Otro profesional: ${ap.name} ${ap.last_name}`),
                 ].filter(Boolean)
                 if (profs.length) contextParts.push(profs.join(" | "))
             }
@@ -265,8 +272,8 @@ export function DecForm({ students, headTeacherByCourse = {}, professionals = []
                     location: location === "Otro" && locationOther.trim() ? `Otro: ${locationOther.trim()}` : location,
                     context: contextString,
                     conduct_types: conductOther.trim() ? [...conductTypes.filter((c) => c !== "Otro"), `Otro: ${conductOther.trim()}`] : conductTypes,
-                    triggers,
-                    actions_taken: actions,
+                    triggers: triggerOther.trim() ? [...triggers.filter((t) => t !== "Otro"), `Otro: ${triggerOther.trim()}`] : triggers,
+                    actions_taken: actionOther.trim() ? [...actions.filter((a) => a !== "Otro"), `Otro: ${actionOther.trim()}`] : actions,
                     description: description.trim() || null,
                     guardian_contacted: guardianContacted,
                     incident_date: new Date(incidentDate).toISOString(),
@@ -282,53 +289,7 @@ export function DecForm({ students, headTeacherByCourse = {}, professionals = []
                 return
             }
 
-            // 2) Insertar destinatarios
-            if (recipients.length > 0) {
-                const recipientRows = recipients.map((recipientId) => {
-                    const user = notifiables.find((u) => u.id === recipientId)
-                    return {
-                        incident_id: incident.id,
-                        recipient_id: recipientId,
-                        role: user?.role ?? "unknown",
-                        seen: false,
-                    }
-                })
-
-                const { error: recipientsError } = await supabase
-                    .from("incident_recipients")
-                    .insert(recipientRows)
-
-                if (recipientsError) {
-                    console.error(recipientsError)
-                    // No bloquear el flujo, el DEC ya fue guardado
-                } else {
-                    // Notificar a directivos en bulk
-                    const student = students.find((s) => s.id === studentId)
-                    const studentName = student ? `${student.name} ${student.last_name}` : "Estudiante"
-                    const course = student?.courses?.name ?? "Sin curso"
-
-                    const { data: reporterObj } = await supabase
-                        .from("users")
-                        .select("name, last_name")
-                        .eq("id", teacherId)
-                        .single()
-                    const reporterName = reporterObj ? `${reporterObj.name} ${reporterObj.last_name}` : "Docente"
-
-                    // Notificar SOLO a los seleccionados manualmente
-                    const finalRecipients = recipients
-                    await createNotifications({
-                        institutionId,
-                        recipientIds: finalRecipients,
-                        type: "dec_nuevo",
-                        title: "Nuevo caso DEC",
-                        message: `${studentName} · ${course} — reportado por ${reporterName}`,
-                        relatedId: incident.id,
-                        relatedUrl: `/dec/${incident.id}`,
-                    })
-                }
-            }
-
-            toast.success("Caso DEC reportado. Los notificados recibirán la alerta.")
+            toast.success("Caso DEC reportado.")
             router.push("/dec")
         } finally {
             setLoading(false)
@@ -487,55 +448,121 @@ export function DecForm({ students, headTeacherByCourse = {}, professionals = []
                         )}
                         <div className="pt-2 border-t border-slate-100">
                             <p className="text-sm font-medium text-slate-900 mb-2">3. Profesionales del establecimiento designados para intervención</p>
+                            <p className="text-xs text-slate-500 mb-2">Cada profesional solo puede ser seleccionado en un rol. Los ya elegidos se bloquean en los demás.</p>
                             <div className="space-y-2">
-                                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                                    <span className="text-xs text-slate-500 w-36 shrink-0">Encargado</span>
-                                    <Select value={professionalEncargadoId || "_none"} onValueChange={(v) => setProfessionalEncargadoId(v === "_none" ? "" : v)}>
-                                        <SelectTrigger className="flex-1">
-                                            <SelectValue placeholder="Seleccionar profesional..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="_none">Ninguno</SelectItem>
-                                            {professionals.map((p) => (
-                                                <SelectItem key={p.id} value={p.id}>
-                                                    {p.last_name}, {p.name} {p.role ? `— ${p.role}` : ""}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                                    <span className="text-xs text-slate-500 w-36 shrink-0">Acompañante interno</span>
-                                    <Select value={professionalAcompananteIntId || "_none"} onValueChange={(v) => setProfessionalAcompananteIntId(v === "_none" ? "" : v)}>
-                                        <SelectTrigger className="flex-1">
-                                            <SelectValue placeholder="Seleccionar profesional..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="_none">Ninguno</SelectItem>
-                                            {professionals.map((p) => (
-                                                <SelectItem key={p.id} value={p.id}>
-                                                    {p.last_name}, {p.name} {p.role ? `— ${p.role}` : ""}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                                    <span className="text-xs text-slate-500 w-36 shrink-0">Acompañante externo</span>
-                                    <Select value={professionalAcompananteExtId || "_none"} onValueChange={(v) => setProfessionalAcompananteExtId(v === "_none" ? "" : v)}>
-                                        <SelectTrigger className="flex-1">
-                                            <SelectValue placeholder="Seleccionar profesional..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="_none">Ninguno</SelectItem>
-                                            {professionals.map((p) => (
-                                                <SelectItem key={p.id} value={p.id}>
-                                                    {p.last_name}, {p.name} {p.role ? `— ${p.role}` : ""}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                                {(() => {
+                                    const othersForEncargado = [professionalAcompananteIntId, professionalAcompananteExtId, ...additionalProfessionalIds].filter(Boolean)
+                                    const othersForAcompInt = [professionalEncargadoId, professionalAcompananteExtId, ...additionalProfessionalIds].filter(Boolean)
+                                    const othersForAcompExt = [professionalEncargadoId, professionalAcompananteIntId, ...additionalProfessionalIds].filter(Boolean)
+                                    return (
+                                        <>
+                                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                                <span className="text-xs text-slate-500 w-36 shrink-0">Encargado</span>
+                                                <Select value={professionalEncargadoId || "_none"} onValueChange={(v) => setProfessionalEncargadoId(v === "_none" ? "" : v)}>
+                                                    <SelectTrigger className="flex-1">
+                                                        <SelectValue placeholder="Seleccionar profesional..." />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="_none">Ninguno</SelectItem>
+                                                        {professionals.map((p) => (
+                                                            <SelectItem key={p.id} value={p.id} disabled={othersForEncargado.includes(p.id)}>
+                                                                {p.last_name}, {p.name} {p.role ? `— ${p.role}` : ""}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                                <span className="text-xs text-slate-500 w-36 shrink-0">Acompañante interno</span>
+                                                <Select value={professionalAcompananteIntId || "_none"} onValueChange={(v) => setProfessionalAcompananteIntId(v === "_none" ? "" : v)}>
+                                                    <SelectTrigger className="flex-1">
+                                                        <SelectValue placeholder="Seleccionar profesional..." />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="_none">Ninguno</SelectItem>
+                                                        {professionals.map((p) => (
+                                                            <SelectItem key={p.id} value={p.id} disabled={othersForAcompInt.includes(p.id)}>
+                                                                {p.last_name}, {p.name} {p.role ? `— ${p.role}` : ""}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                                <span className="text-xs text-slate-500 w-36 shrink-0">Acompañante externo</span>
+                                                <Select value={professionalAcompananteExtId || "_none"} onValueChange={(v) => setProfessionalAcompananteExtId(v === "_none" ? "" : v)}>
+                                                    <SelectTrigger className="flex-1">
+                                                        <SelectValue placeholder="Seleccionar profesional..." />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="_none">Ninguno</SelectItem>
+                                                        {professionals.map((p) => (
+                                                            <SelectItem key={p.id} value={p.id} disabled={othersForAcompExt.includes(p.id)}>
+                                                                {p.last_name}, {p.name} {p.role ? `— ${p.role}` : ""}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            {additionalProfessionalIds.map((id, idx) => {
+                                                const othersForThis = [
+                                                    professionalEncargadoId,
+                                                    professionalAcompananteIntId,
+                                                    professionalAcompananteExtId,
+                                                    ...additionalProfessionalIds.filter((_, i) => i !== idx),
+                                                ].filter(Boolean)
+                                                return (
+                                                    <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                                                        <span className="text-xs text-slate-500 w-36 shrink-0">Otro profesional</span>
+                                                        <Select
+                                                            value={id || "_none"}
+                                                            onValueChange={(v) => {
+                                                                const val = v === "_none" ? "" : v
+                                                                setAdditionalProfessionalIds((prev) => {
+                                                                    const next = [...prev]
+                                                                    next[idx] = val
+                                                                    return next
+                                                                })
+                                                            }}
+                                                        >
+                                                            <SelectTrigger className="flex-1">
+                                                                <SelectValue placeholder="Seleccionar profesional..." />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="_none">Ninguno</SelectItem>
+                                                                {professionals.map((p) => (
+                                                                    <SelectItem key={p.id} value={p.id} disabled={othersForThis.includes(p.id)}>
+                                                                        {p.last_name}, {p.name} {p.role ? `— ${p.role}` : ""}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <Button
+                                                            type="button"
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="shrink-0 h-9 w-9 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                                            onClick={() => setAdditionalProfessionalIds((prev) => prev.filter((_, i) => i !== idx))}
+                                                            aria-label="Quitar profesional"
+                                                        >
+                                                            <X className="h-4 w-4" />
+                                                        </Button>
+                                                    </div>
+                                                )
+                                            })}
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                size="sm"
+                                                className="gap-1.5 mt-1"
+                                                onClick={() => setAdditionalProfessionalIds((prev) => [...prev, ""])}
+                                            >
+                                                <Plus className="h-4 w-4" />
+                                                Agregar otro profesional
+                                            </Button>
+                                        </>
+                                    )
+                                })()}
                             </div>
                         </div>
                     </CardContent>
@@ -667,6 +694,17 @@ export function DecForm({ students, headTeacherByCourse = {}, professionals = []
                                 </button>
                             ))}
                         </div>
+                        {triggers.includes("Otro") && (
+                            <div className="mt-3">
+                                <input
+                                    type="text"
+                                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                                    placeholder="Especifique otra situación desencadenante..."
+                                    value={triggerOther}
+                                    onChange={(e) => setTriggerOther(e.target.value)}
+                                />
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             )}
@@ -690,6 +728,17 @@ export function DecForm({ students, headTeacherByCourse = {}, professionals = []
                                     </button>
                                 ))}
                             </div>
+                            {actions.includes("Otro") && (
+                                <div className="mt-3">
+                                    <input
+                                        type="text"
+                                        className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                                        placeholder="Especifique otra acción..."
+                                        value={actionOther}
+                                        onChange={(e) => setActionOther(e.target.value)}
+                                    />
+                                </div>
+                            )}
                         </div>
                         <div className="space-y-2">
                             <div className="flex items-center justify-between">
@@ -700,62 +749,6 @@ export function DecForm({ students, headTeacherByCourse = {}, professionals = []
                             </div>
                             <Textarea rows={4} placeholder="Describe en detalle lo que ocurrió, contexto adicional..." value={description} onChange={(e) => setDescription(e.target.value)} />
                         </div>
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* Notificaciones (Dupla, Convivencia — sin Director) */}
-            {step === 7 && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Notificaciones</CardTitle>
-                        <CardDescription>
-                            Selecciona a quién notificar (Dupla, Convivencia u otros roles disponibles).
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                        {notifiables.length === 0 ? (
-                            <p className="text-sm text-slate-400">
-                                No hay otros usuarios disponibles para notificar en esta institución.
-                            </p>
-                        ) : (
-                            <div className="space-y-2">
-                                {notifiables.map((u) => {
-                                    return (
-                                        <label
-                                            key={u.id}
-                                            className={`flex items-center justify-between rounded-lg border px-3 py-2 cursor-pointer transition-all ${recipients.includes(u.id)
-                                                ? "border-indigo-400 bg-indigo-50"
-                                                : "border-slate-200 hover:border-slate-300"
-                                                }`}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={recipients.includes(u.id)}
-                                                    onChange={() => {
-                                                        setRecipients((prev) =>
-                                                            prev.includes(u.id)
-                                                                ? prev.filter((id) => id !== u.id)
-                                                                : [...prev, u.id]
-                                                        )
-                                                    }}
-                                                    className="h-4 w-4"
-                                                />
-                                                <div>
-                                                    <p className="text-sm font-medium text-slate-900">
-                                                        {u.name} {u.last_name}
-                                                    </p>
-                                                    <p className="text-xs capitalize text-slate-400">
-                                                        {u.role}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </label>
-                                    )
-                                })}
-                            </div>
-                        )}
                     </CardContent>
                 </Card>
             )}

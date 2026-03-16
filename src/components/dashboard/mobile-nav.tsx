@@ -9,7 +9,7 @@ import { useState, useEffect } from "react"
 import { usePathname } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 
-export function MobileNav({ userId, institutionName, institutionLogoUrl }: { userId: string; institutionName?: string; institutionLogoUrl?: string }) {
+export function MobileNav({ userId, institutionName, institutionLogoUrl, initialRole, initialFullName, studentCourseLabel }: { userId: string; institutionName?: string; institutionLogoUrl?: string; initialRole?: string; initialFullName?: string; studentCourseLabel?: string }) {
     const [mounted, setMounted] = useState(false)
     const [open, setOpen] = useState(false)
     const [isAdmin, setIsAdmin] = useState(false)
@@ -67,7 +67,7 @@ export function MobileNav({ userId, institutionName, institutionLogoUrl }: { use
                 <div className="flex flex-col h-full overflow-y-auto p-6">
                     {isAdmin
                         ? <AdminSidebarContent userId={userId} showBell={false} institutionName={institutionName} institutionLogoUrl={institutionLogoUrl} isMobileMenuOpen={open} />
-                        : <SidebarContent userId={userId} showBell={false} institutionName={institutionName} institutionLogoUrl={institutionLogoUrl} isMobileMenuOpen={open} />
+                        : <SidebarContent userId={userId} showBell={false} institutionName={institutionName} institutionLogoUrl={institutionLogoUrl} isMobileMenuOpen={open} initialRole={initialRole} initialFullName={initialFullName} studentCourseLabel={studentCourseLabel} />
                     }
                 </div>
             </SheetContent>

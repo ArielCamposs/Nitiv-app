@@ -27,8 +27,7 @@ export interface DecStatsResult {
     decsByType: { name: string; count: number; color: string }[]
     decsBySeverity: { name: string; count: number; color: string }[]
     monthlyTrend: { mes: string; decs: number; cierres: number }[]
-    recentDecs: { id: string; folio: string; studentName: string; courseName: string; severity: string; type: string; incident_date: string }[]
-    resolutionRate: number
+    topStudentsByDecs: { studentId: string; studentName: string; courseName: string; count: number }[]
     topCourses: { courseName: string; count: number }[]
     totalPeriodDecs: number
     topConductTypes: { name: string; count: number }[]
@@ -66,8 +65,6 @@ export async function getDecStats(institutionId: string): Promise<DecStatsResult
     }
 
     const totalPeriodDecs = allIncidents.length
-    const resolvedCount = allIncidents.filter(d => d.resolved).length
-    const resolutionRate = totalPeriodDecs > 0 ? Math.round((resolvedCount / totalPeriodDecs) * 100) : 0
 
     const decsByType = Object.entries(typeCount)
         .filter(([, count]) => count > 0)
@@ -162,21 +159,23 @@ export async function getDecStats(institutionId: string): Promise<DecStatsResult
         .slice(0, 10)
         .map(([name, count]) => ({ name, count }))
 
-    const openDecs = allIncidents.filter(i => !i.resolved)
-    const recentDecs = openDecs
-        .sort((a, b) => new Date(b.incident_date).getTime() - new Date(a.incident_date).getTime())
-        .slice(0, 5)
-        .map(d => {
-            const st = studentsMap[d.student_id] as any
+    const studentDecCount: Record<string, number> = {}
+    for (const d of allIncidents) {
+        if (d.student_id) {
+            studentDecCount[d.student_id] = (studentDecCount[d.student_id] ?? 0) + 1
+        }
+    }
+    const topStudentsByDecs = Object.entries(studentDecCount)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([studentId, count]) => {
+            const st = studentsMap[studentId] as any
             const co = st ? coursesMap[st.course_id ?? ""] as any : null
             return {
-                id: d.id,
-                folio: d.folio,
+                studentId,
                 studentName: st ? `${st.name} ${st.last_name}` : "Estudiante",
                 courseName: co ? `${co.name}${co.section ? " " + co.section : ""}` : "Sin curso",
-                severity: d.severity,
-                type: LABEL_TYPE[d.type] ?? d.type,
-                incident_date: d.incident_date,
+                count,
             }
         })
 
@@ -184,8 +183,7 @@ export async function getDecStats(institutionId: string): Promise<DecStatsResult
         decsByType,
         decsBySeverity,
         monthlyTrend,
-        recentDecs,
-        resolutionRate,
+        topStudentsByDecs,
         topCourses,
         totalPeriodDecs,
         topConductTypes,

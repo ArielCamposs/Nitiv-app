@@ -1,10 +1,17 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Sparkles, X, Send, Bot, ExternalLink, RefreshCw } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Sparkles, X, Send, Bot, ExternalLink, RefreshCw, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
+
+const ROTATING_PHRASES = [
+  "¿Necesitas algo?",
+  "¿En qué puedo ayudarte?",
+  "¿Tienes alguna duda?",
+];
 
 type ChatMessage = {
   id: string;
@@ -18,9 +25,18 @@ export function FloatingHelpAgent() {
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [userProfile, setUserProfile] = useState<{ name: string; role: string } | null>(null);
+  const [phraseIndex, setPhraseIndex] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const supabase = createClient();
   const router = useRouter();
+
+  useEffect(() => {
+    if (open) return;
+    const t = setInterval(() => {
+      setPhraseIndex((i) => (i + 1) % ROTATING_PHRASES.length);
+    }, 15000);
+    return () => clearInterval(t);
+  }, [open]);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -140,21 +156,42 @@ export function FloatingHelpAgent() {
   };
 
   return (
-    <div className="fixed bottom-6 right-24 z-40 flex flex-col items-end gap-3 transition-all duration-300">
-      {/* Tooltip Bubble */}
-      {!open && (
-        <div className="absolute right-0 bottom-16 mr-2 mb-1 w-max animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <div className="bg-white text-indigo-700 text-xs font-medium px-4 py-2.5 rounded-2xl rounded-br-sm shadow-xl shadow-indigo-500/10 border border-indigo-100 flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>¿Necesitas ayuda con algo?</span>
-          </div>
-        </div>
-      )}
+    <div className="fixed bottom-6 right-24 z-40 flex flex-col items-end gap-1 transition-all duration-300">
+      {/* Mensaje rotativo cerca del bot, con animación de diálogo (abajo → arriba) */}
+      <AnimatePresence mode="wait">
+        {!open && (
+          <motion.div
+            key="phrase"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="absolute right-4 bottom-full mb-1 w-max"
+          >
+            {/* Bocadillo de diálogo: cola desde la esquina inferior derecha hacia el bot */}
+            <div className="relative bg-white text-indigo-700 text-xs font-medium pl-4 pr-4 pt-3 pb-4 rounded-2xl rounded-br-md shadow-xl shadow-indigo-500/10 border border-indigo-100 flex items-center gap-2">
+              <HelpCircle className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+              <span>{ROTATING_PHRASES[phraseIndex]}</span>
+              {/* Cola del bocadillo: triángulo abajo a la derecha apuntando al bot */}
+              <span
+                className="absolute -right-1 -bottom-2 w-4 h-4 rotate-45 bg-white border-r border-b border-indigo-100"
+                aria-hidden
+              />
+            </div>
+          </motion.div>
+        )}
 
-      {open && (
-        <div className="w-80 h-[480px] rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-5 origin-bottom-right">
+        {open && (
+          <motion.div
+            key="panel"
+            initial={{ opacity: 0, y: 12, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="w-80 h-[480px] rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col overflow-hidden"
+          >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-linear-to-r from-indigo-500 to-purple-600 border-b shrink-0">
+          <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 border-b shrink-0">
             <div className="flex items-center gap-2">
               <span className="bg-white/20 p-1.5 rounded-lg">
                 <Sparkles className="w-4 h-4 text-white" />
@@ -266,22 +303,24 @@ export function FloatingHelpAgent() {
               POTENCIADO POR IA <Sparkles className="w-2.5 h-2.5" />
             </p>
           </div>
-        </div>
-      )}
+        </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Main Floating Button */}
-      <button
+      {/* Botón flotante: solo cabeza del bot (icono), sin círculo exterior de fondo */}
+      <motion.button
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
-          "relative h-12 w-12 rounded-full shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center ring-4 ring-white/50 group",
-          open
-            ? "bg-slate-800 text-white scale-95"
-            : "bg-indigo-600 hover:bg-indigo-500 text-white hover:scale-105"
+          "relative flex items-center justify-center group p-1",
+          open ? "text-slate-800" : "text-indigo-600 hover:text-indigo-500"
         )}
+        aria-label={open ? "Cerrar asistente" : "Abrir NitivBot"}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.98 }}
+        transition={{ type: "spring", stiffness: 400, damping: 17 }}
       >
-        <div className="absolute inset-0 rounded-full bg-linear-to-tr from-indigo-600/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-        {open ? <X className="w-5 h-5" /> : <Bot className="w-5 h-5 group-hover:animate-pulse" />}
-      </button>
+        {open ? <X className="w-8 h-8" /> : <Bot className="w-10 h-10 group-hover:animate-pulse" />}
+      </motion.button>
     </div>
   );
 }

@@ -1,5 +1,17 @@
 import * as XLSX from "xlsx"
 
+/** Sanitiza un texto para usarlo en nombre de archivo (sin acentos, sin caracteres inválidos). */
+function sanitizeFileNamePart(s: string, maxLen = 40): string {
+    const out = String(s ?? "")
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .replace(/[\s/\\:*?"<>|°ºª]/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/^_|_$/g, "")
+        .slice(0, maxLen)
+    return out || "sin_nombre"
+}
+
 // ── Excel registros emocionales ──
 export function generateEmotionsExcel(data: {
     courseName: string
@@ -49,6 +61,7 @@ export function generateIncidentsExcel(data: {
     }[]
 }) {
     const SEVERITY_LABEL: Record<string, string> = {
+        moderada: "Moderada", severa: "Severa",
         leve: "Leve", grave: "Grave", muy_grave: "Muy grave",
     }
 
@@ -67,7 +80,9 @@ export function generateIncidentsExcel(data: {
 
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Casos DEC")
-    XLSX.writeFile(wb, `dec_${new Date().toLocaleDateString("es-CL").replace(/\//g, "-")}.xlsx`)
+    const year = new Date().getFullYear()
+    const dateStr = new Date().toLocaleDateString("es-CL").replace(/\//g, "-")
+    XLSX.writeFile(wb, `Casos_DEC_${year}_${dateStr}.xlsx`)
 }
 
 // ── Excel estudiantes en alerta ──
@@ -94,5 +109,7 @@ export function generateAlertsExcel(data: {
 
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, "Alertas")
-    XLSX.writeFile(wb, `alertas_${new Date().toLocaleDateString("es-CL").replace(/\//g, "-")}.xlsx`)
+    const year = new Date().getFullYear()
+    const dateStr = new Date().toLocaleDateString("es-CL").replace(/\//g, "-")
+    XLSX.writeFile(wb, `Alertas_estudiantes_${year}_${dateStr}.xlsx`)
 }

@@ -53,7 +53,7 @@ export default async function RegistrosConvivenciaPage() {
             .select(`
                 id, type, severity, location, description,
                 involved_count, actions_taken, resolved, status,
-                resolution_notes, incident_date,
+                agreements, resolution_notes, incident_date,
                 convivencia_record_students (
                     student_id,
                     students ( id, name, last_name, course_id, course:course_id ( name, section ) )

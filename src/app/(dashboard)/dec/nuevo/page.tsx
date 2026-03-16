@@ -43,16 +43,6 @@ async function getFormData() {
         }
     }
 
-    // Notificaciones: Dupla y Convivencia (sin Director)
-    const { data: notifiables } = await supabase
-        .from("users")
-        .select("id, name, last_name, role")
-        .eq("institution_id", profile.institution_id)
-        .eq("active", true)
-        .in("role", ["dupla", "convivencia", "inspector", "utp"])
-        .neq("id", profile.id)
-        .order("role")
-
     // Profesionales del establecimiento (para Encargado, Acompañante interno/externo)
     const { data: professionals } = await supabase
         .from("users")
@@ -66,7 +56,6 @@ async function getFormData() {
         students: students ?? [],
         headTeacherByCourse,
         professionals: professionals ?? [],
-        notifiables: notifiables ?? [],
         teacherId: profile.id,
         institutionId: profile.institution_id,
     }
@@ -92,7 +81,6 @@ export default async function NuevoDecPage() {
                     students={data.students as any}
                     headTeacherByCourse={data.headTeacherByCourse}
                     professionals={data.professionals as any}
-                    notifiables={data.notifiables as any}
                     teacherId={data.teacherId}
                     institutionId={data.institutionId}
                 />

@@ -10,7 +10,6 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { AcuseRecibo } from "@/components/dec/acuse-recibo"
 import { DecDeleteButton } from "@/components/dec/dec-delete-button"
 import { DecPrintPdf } from "@/components/dec/dec-print-pdf"
 
@@ -73,28 +72,6 @@ async function getDecDetail(id: string) {
 
     if (error || !incident) return null
 
-    // Obtener destinatarios/notificados
-    const { data: recipients } = await supabase
-        .from("incident_recipients")
-        .select(`
-      id,
-      role,
-      seen,
-      seen_at,
-      response,
-      responded_at,
-      users!recipient_id (
-        name,
-        last_name
-      )
-    `)
-        .eq("incident_id", id)
-
-    // Ver si el usuario actual es destinatario pendiente
-    const myRecipient = user ? recipients?.find(
-        (r: any) => r.recipient_id === user.id && !r.seen
-    ) : null
-
     // Detectar si el usuario actual es admin y nombre de institución (para PDF)
     const profile = user
         ? (await supabase.from("users").select("role, institution_id").eq("id", user.id).single()).data
@@ -114,8 +91,6 @@ async function getDecDetail(id: string) {
 
     return {
         incident,
-        recipients: recipients ?? [],
-        myRecipientId: myRecipient?.id ?? null,
         isAdmin,
         institutionName,
         institutionLogoUrl,
@@ -189,7 +164,7 @@ export default async function DecDetailPage({
 
     if (!data) return notFound()
 
-    const { incident, recipients, institutionName, institutionLogoUrl } = data
+    const { incident, institutionName, institutionLogoUrl } = data
     const student = incident.students as any
     const reporter = incident.users as any
     const severity = SEVERITY_META[incident.severity as keyof typeof SEVERITY_META]
@@ -210,7 +185,7 @@ export default async function DecDetailPage({
         end_date: incident.end_date,
         student: student ? { name: student.name, last_name: student.last_name, rut: student.rut, guardian_name: student.guardian_name, guardian_phone: student.guardian_phone, courses: student.courses } : null,
         reporter: reporter ? { name: reporter.name, last_name: reporter.last_name } : null,
-        recipients: recipients.map((r: any) => ({ role: r.role, users: r.users, seen: r.seen, seen_at: r.seen_at })),
+        recipients: [],
     }
 
     const backHref = data.userRole === "convivencia" ? "/convivencia/dec" : data.userRole === "dupla" ? "/dupla/dec" : "/dec"
@@ -430,76 +405,6 @@ export default async function DecDetailPage({
                             {incident.description}
                         </p>
                     </SectionBlock>
-                )}
-
-                {/* Sección 7: Destinatarios / Notificados */}
-                <SectionBlock title="7. Notificados del caso">
-                    {recipients.length === 0 ? (
-                        <p className="text-sm text-slate-400">
-                            No se registraron destinatarios para este caso.
-                        </p>
-                    ) : (
-                        <div className="space-y-3">
-                            {recipients.map((r: any) => (
-                                <div
-                                    key={r.id}
-                                    className="flex items-center justify-between rounded-md border px-3 py-2"
-                                >
-                                    <div>
-                                        <p className="text-sm font-medium text-slate-900">
-                                            {r.users ? (
-                                                <Link href={`/perfil/${r.recipient_id}`} className="hover:underline hover:text-indigo-600 transition-colors">
-                                                    {r.users.name} {r.users.last_name}
-                                                </Link>
-                                            ) : r.role}
-                                        </p>
-                                        <p className="text-xs capitalize text-slate-400">{r.role}</p>
-                                    </div>
-                                    <div className="text-right">
-                                        {r.seen ? (
-                                            <div>
-                                                <span className="text-xs font-medium text-emerald-600">
-                                                    Visto ✓
-                                                </span>
-                                                {r.seen_at && (
-                                                    <p className="text-[10px] text-slate-400">
-                                                        {new Date(r.seen_at).toLocaleDateString("es-CL", {
-                                                            day: "2-digit",
-                                                            month: "short",
-                                                            hour: "2-digit",
-                                                            minute: "2-digit",
-                                                        })}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            <span className="text-xs text-slate-400">Pendiente</span>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </SectionBlock>
-
-                {/* Estado del caso */}
-                <div className="flex items-center justify-between rounded-lg border border-dashed px-4 py-3">
-                    <p className="text-sm text-slate-600">Estado del caso</p>
-                    <Badge
-                        className={
-                            incident.resolved
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-amber-100 text-amber-700"
-                        }
-                    >
-                        {incident.resolved ? "Resuelto" : "En seguimiento"}
-                    </Badge>
-                </div>
-
-                {data.myRecipientId && (
-                    <div className="print:hidden">
-                        <AcuseRecibo recipientId={data.myRecipientId} />
-                    </div>
                 )}
 
             </div>

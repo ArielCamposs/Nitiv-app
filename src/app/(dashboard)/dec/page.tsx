@@ -24,7 +24,7 @@ async function getDecCases() {
         return null // No tiene acceso
     }
 
-    const [casesRes, decStats] = await Promise.all([
+    const [casesRes, decStats, institutionRes] = await Promise.all([
         supabase
             .from("incidents")
             .select(`
@@ -58,16 +58,18 @@ async function getDecCases() {
             .eq("institution_id", profile.institution_id)
             .order("incident_date", { ascending: false }),
         getDecStats(profile.institution_id),
+        supabase.from("institutions").select("name, logo_url").eq("id", profile.institution_id).maybeSingle(),
     ])
 
-    return { cases: casesRes.data ?? [], role: profile.role, userId: user.id, decStats }
+    const institution = institutionRes.data ?? null
+    return { cases: casesRes.data ?? [], role: profile.role, userId: user.id, decStats, institution }
 }
 
 export default async function DecPage() {
     const data = await getDecCases()
     if (!data) return <div>No tienes acceso a este módulo.</div>
 
-    const { cases, role, userId, decStats } = data
+    const { cases, role, userId, decStats, institution } = data
 
     return (
         <main className="min-h-screen bg-slate-50">
@@ -89,7 +91,7 @@ export default async function DecPage() {
                     )}
                 </div>
 
-                <DecPageTabs cases={cases as any} currentUserId={userId} userRole={role} decStats={decStats} />
+                <DecPageTabs cases={cases as any} currentUserId={userId} userRole={role} decStats={decStats} institutionName={institution?.name ?? undefined} institutionLogoUrl={institution?.logo_url ?? undefined} />
             </div>
         </main>
     )

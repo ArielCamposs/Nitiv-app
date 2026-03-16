@@ -1,19 +1,20 @@
 "use client"
 
-import { useState } from "react"
-import Link from "next/link"
-import { ChevronDown, ChevronUp } from "lucide-react"
+import { useState, useRef } from "react"
+import { ChevronDown, ChevronUp, Download } from "lucide-react"
+import html2canvas from "html2canvas-pro"
+import { toast } from "sonner"
 import {
     AreaChart, Area, PieChart, Pie, Cell,
     XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts"
+import { DecStatsAiAssistant } from "@/components/dec/dec-stats-ai-assistant"
 
 export interface DecStatsData {
     decsByType: { name: string; count: number; color: string }[]
     decsBySeverity: { name: string; count: number; color: string }[]
     monthlyTrend: { mes: string; decs: number; cierres: number }[]
-    recentDecs: { id: string; folio: string; studentName: string; courseName: string; severity: string; type: string; incident_date: string }[]
-    resolutionRate: number
+    topStudentsByDecs: { studentId: string; studentName: string; courseName: string; count: number }[]
     topCourses: { courseName: string; count: number }[]
     totalPeriodDecs: number
     topConductTypes: { name: string; count: number }[]
@@ -102,43 +103,82 @@ function TagRankCard({ title, items, color }: { title: string; items: { name: st
     )
 }
 
-export function DecStatsTab({ stats }: { stats: DecStatsData }) {
-    const { decsByType, decsBySeverity, monthlyTrend, recentDecs, resolutionRate, topCourses, totalPeriodDecs, topConductTypes, topTriggers, topActions } = stats
+type DecStatsTabProps = {
+    stats: DecStatsData
+    institutionName?: string
+    institutionLogoUrl?: string | null
+}
+
+function ChartCardWithDownload({
+    title,
+    fileName,
+    children,
+}: {
+    title: string
+    fileName: string
+    children: React.ReactNode
+}) {
+    const cardRef = useRef<HTMLDivElement>(null)
+    const [downloading, setDownloading] = useState(false)
+
+    async function handleDownloadPng() {
+        if (!cardRef.current) return
+        setDownloading(true)
+        try {
+            const canvas = await html2canvas(cardRef.current, {
+                useCORS: true,
+                scale: 2,
+                backgroundColor: "#ffffff",
+                logging: false,
+            })
+            const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"))
+            if (!blob) {
+                toast.error("No se pudo generar la imagen.")
+                return
+            }
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement("a")
+            a.href = url
+            a.download = fileName
+            a.click()
+            URL.revokeObjectURL(url)
+            toast.success("Gráfico descargado.")
+        } catch (e) {
+            console.error(e)
+            toast.error("No se pudo descargar el gráfico.")
+        } finally {
+            setDownloading(false)
+        }
+    }
+
+    return (
+        <div className="relative rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+            <button
+                type="button"
+                onClick={handleDownloadPng}
+                disabled={downloading}
+                className="absolute top-3 right-3 z-10 flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 shadow-sm transition-colors hover:bg-slate-50 hover:text-slate-700 disabled:opacity-50"
+                title="Descargar gráfico (PNG)"
+                aria-label="Descargar gráfico"
+            >
+                <Download className="h-4 w-4" />
+            </button>
+            <div ref={cardRef} className="chart-capture">
+                {title ? <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3 pr-10">{title}</p> : <div className="mb-3 pr-10" />}
+                {children}
+            </div>
+        </div>
+    )
+}
+
+export function DecStatsTab({ stats, institutionName = "Institución", institutionLogoUrl }: DecStatsTabProps) {
+    const { decsBySeverity, monthlyTrend, topStudentsByDecs, topCourses, topConductTypes, topTriggers, topActions } = stats
 
     return (
         <div className="space-y-6">
-            {/* Tasa de resolución + Top cursos */}
+            {/* Cursos con más incidentes DEC + DECs por severidad (uno al lado del otro) */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm flex items-center gap-5">
-                    <div
-                        className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-4"
-                        style={{ borderColor: resolutionRate >= 70 ? "#10b981" : resolutionRate >= 40 ? "#f59e0b" : "#ef4444" }}
-                    >
-                        <span
-                            className="text-xl font-extrabold tabular-nums"
-                            style={{ color: resolutionRate >= 70 ? "#10b981" : resolutionRate >= 40 ? "#f59e0b" : "#ef4444" }}
-                        >
-                            {resolutionRate}%
-                        </span>
-                    </div>
-                    <div>
-                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Tasa de resolución</p>
-                        <p className="text-2xl font-extrabold text-slate-800 mt-0.5">{resolutionRate}%</p>
-                        <p className="text-xs text-slate-400 mt-1">{totalPeriodDecs} DECs en 12 meses · {Math.round(totalPeriodDecs * resolutionRate / 100)} resueltos</p>
-                        <div className="mt-2 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
-                            <div
-                                className="h-full rounded-full transition-all"
-                                style={{
-                                    width: `${resolutionRate}%`,
-                                    background: resolutionRate >= 70 ? "#10b981" : resolutionRate >= 40 ? "#f59e0b" : "#ef4444"
-                                }}
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Cursos con más incidentes DEC</p>
+                <ChartCardWithDownload title="Cursos con más incidentes DEC" fileName="DEC_Cursos_mas_incidentes.png">
                     {topCourses.length > 0 ? (
                         <div className="space-y-2.5">
                             {topCourses.map((c, i) => (
@@ -160,13 +200,9 @@ export function DecStatsTab({ stats }: { stats: DecStatsData }) {
                     ) : (
                         <p className="text-xs text-slate-400 text-center py-4">Sin incidentes en el período</p>
                     )}
-                </div>
-            </div>
+                </ChartCardWithDownload>
 
-            {/* DEC por severidad + DEC por tipo (ambos con torta y colores que los representan) */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">DECs por severidad</p>
+                <ChartCardWithDownload title="DECs por severidad" fileName="DEC_Severidad.png">
                     {decsBySeverity.some(d => d.count > 0) ? (
                         <>
                             <ResponsiveContainer width="100%" height={150}>
@@ -200,57 +236,36 @@ export function DecStatsTab({ stats }: { stats: DecStatsData }) {
                     ) : (
                         <p className="text-xs text-slate-400 text-center py-4">Sin casos en el período</p>
                     )}
-                </div>
-
-                <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">DECs por tipo</p>
-                    {decsByType.some(d => d.count > 0) ? (
-                        <ResponsiveContainer width="100%" height={150}>
-                            <PieChart>
-                                <Pie data={decsByType.filter(d => d.count > 0)} cx="50%" cy="50%" innerRadius={38} outerRadius={62} dataKey="count" nameKey="name" strokeWidth={0}>
-                                    {decsByType.filter(d => d.count > 0).map((entry, i) => (
-                                        <Cell key={i} fill={entry.color} />
-                                    ))}
-                                </Pie>
-                                <Tooltip content={<ChartTooltip />} />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    ) : (
-                        <p className="text-xs text-slate-400 text-center py-4">Sin casos en el período</p>
-                    )}
-                    <div className="flex flex-wrap gap-3 mt-2">
-                        {decsByType.filter(d => d.count > 0).map(d => (
-                            <div key={d.name} className="flex items-center gap-1.5 text-xs">
-                                <span className="h-2 w-2 rounded-full shrink-0" style={{ background: d.color }} />
-                                <span className="text-slate-500 truncate max-w-[120px]" title={d.name}>{d.name}: <strong>{d.count}</strong></span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
+                </ChartCardWithDownload>
             </div>
 
             {/* Etiquetas más registradas: conductas, desencadenantes, acciones */}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <ChartCardWithDownload title="" fileName="DEC_Conductas_observadas.png">
                 <TagRankCard
                     title="Conductas observadas más registradas"
                     items={topConductTypes}
                     color="#8b5cf6"
                 />
+                </ChartCardWithDownload>
+                <ChartCardWithDownload title="" fileName="DEC_Situaciones_desencadenantes.png">
                 <TagRankCard
                     title="Situaciones desencadenantes más registradas"
                     items={topTriggers}
                     color="#f59e0b"
                 />
+                </ChartCardWithDownload>
+                <ChartCardWithDownload title="" fileName="DEC_Acciones_realizadas.png">
                 <TagRankCard
                     title="Acciones realizadas más registradas"
                     items={topActions}
                     color="#10b981"
                 />
+                </ChartCardWithDownload>
             </div>
 
             {/* Tendencia mensual */}
-            <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Tendencia de casos DEC</p>
+            <ChartCardWithDownload title="Tendencia de casos DEC" fileName="DEC_Tendencia_casos.png">
                 <ResponsiveContainer width="100%" height={160}>
                     <AreaChart data={monthlyTrend} margin={{ top: 4, right: 8, bottom: 0, left: -24 }}>
                         <defs>
@@ -271,40 +286,34 @@ export function DecStatsTab({ stats }: { stats: DecStatsData }) {
                         <Area type="monotone" dataKey="cierres" stroke="#10b981" strokeWidth={2} fill="url(#decStatsGradCierres)" name="Cierres" />
                     </AreaChart>
                 </ResponsiveContainer>
-            </div>
+            </ChartCardWithDownload>
 
-            {/* DECs recientes sin resolver */}
+            {/* Estudiantes con más DEC */}
             <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">DECs recientes sin resolver</p>
-                    <Link href="/convivencia/dec" className="text-[10px] text-indigo-600 hover:underline font-medium">Ver todos →</Link>
-                </div>
-                {recentDecs.length === 0 ? (
-                    <p className="text-xs text-slate-400 text-center py-6">Sin casos activos.</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Estudiantes con más DEC</p>
+                {topStudentsByDecs.length === 0 ? (
+                    <p className="text-xs text-slate-400 text-center py-6">Sin registros en el período.</p>
                 ) : (
                     <div className="divide-y divide-slate-100">
-                        {recentDecs.map(d => {
-                            const cfg = SEVERITY_CONFIG[d.severity] ?? { label: d.severity, color: "#94a3b8" }
-                            return (
-                                <div key={d.id} className="flex items-center justify-between py-2">
+                        {topStudentsByDecs.map((s, i) => (
+                            <div key={s.studentId} className="flex items-center justify-between py-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-black text-white ${i === 0 ? "bg-rose-500" : i === 1 ? "bg-orange-400" : "bg-amber-400"}`}>
+                                        {i + 1}
+                                    </span>
                                     <div className="min-w-0">
-                                        <p className="text-xs font-medium text-slate-800 truncate">{d.studentName}</p>
-                                        <p className="text-[10px] text-slate-400">{d.courseName} · {d.type} · Folio {d.folio}</p>
-                                    </div>
-                                    <div className="flex flex-col items-end shrink-0 ml-3">
-                                        <span className="rounded-full px-2 py-0.5 text-[10px] font-medium text-white" style={{ background: cfg.color }}>
-                                            {cfg.label}
-                                        </span>
-                                        <span className="text-[9px] text-slate-400 mt-0.5">
-                                            {new Date(d.incident_date).toLocaleDateString("es-CL", { day: "numeric", month: "short" })}
-                                        </span>
+                                        <p className="text-xs font-medium text-slate-800 truncate">{s.studentName}</p>
+                                        <p className="text-[10px] text-slate-400">{s.courseName}</p>
                                     </div>
                                 </div>
-                            )
-                        })}
+                                <span className="shrink-0 text-xs font-bold text-slate-800 tabular-nums ml-3">{s.count} DEC{s.count !== 1 ? "s" : ""}</span>
+                            </div>
+                        ))}
                     </div>
                 )}
             </div>
+
+            <DecStatsAiAssistant institutionName={institutionName} />
         </div>
     )
 }

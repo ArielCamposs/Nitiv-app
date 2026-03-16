@@ -253,8 +253,7 @@ function addHeaderBox(
     headerLines.push(
         { label: "Folio: ", value: data.folio ?? "—" },
         { label: "Fecha: ", value: dateStr },
-        { label: "Severidad: ", value: severityLabel },
-        { label: "Estado: ", value: data.resolved ? "Resuelto" : "En seguimiento" }
+        { label: "Severidad: ", value: severityLabel }
     )
     doc.setFontSize(10)
     let headerContentH = 0
@@ -373,42 +372,29 @@ export function buildDecPdf(
         y = addBoxedSection(doc, y, margin, pageHeight, pageWidth, "6. Observaciones adicionales", [data.description])
     }
 
-    if (data.recipients?.length) {
-        const recLines: string[] = []
-        for (const r of data.recipients) {
-            const name = r.users ? `${r.users.name ?? ""} ${r.users.last_name ?? ""}`.trim() : r.role ?? "—"
-            const status = r.seen ? `Visto ${r.seen_at ? new Date(r.seen_at).toLocaleDateString("es-CL", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}` : "Pendiente"
-            recLines.push(`${name} (${r.role ?? ""}) — ${status}`)
-        }
-        y = addBoxedSection(doc, y, margin, pageHeight, pageWidth, "7. Notificados del caso", recLines)
-    }
-
-    // Firmas: quien reporta el caso y apoderado/a
-    const sigBlockH = 28
-    const sigYNeeded = y + sigBlockH * 2 + BOX_GAP
-    if (sigYNeeded > pageHeight - margin) {
+    // Firmas: quien reporta y apoderado/a, una al lado de la otra; línea sobre el texto
+    y += BOX_GAP + 18
+    if (y > pageHeight - margin - 25) {
         doc.addPage()
         y = margin
     }
-    const sigLineW = 55
-    const sigLineH = 2
+    const sigLineLen = (pageWidth - 2 * margin - 15) / 2
+    const sigLineY = y
+    const sigTextY = y + 8
     doc.setDrawColor(148, 163, 184)
     doc.setLineWidth(0.4)
     doc.setFont("helvetica", "normal")
     doc.setFontSize(9)
     doc.setTextColor(71, 85, 105)
 
-    const reporterLabel = data.reporter ? `${data.reporter.name ?? ""} ${data.reporter.last_name ?? ""}`.trim() : "Quien reporta el caso"
-    doc.text("Firma: Quien reporta el caso", margin, y + 5)
-    doc.rect(margin, y + 6, sigLineW, sigLineH)
-    doc.setFontSize(8)
-    doc.text(reporterLabel, margin, y + 14)
-
-    const guardianLabel = data.student?.guardian_name?.trim() || "Apoderado/a"
-    doc.text("Firma: Apoderado/a", margin, y + 5 + sigBlockH)
-    doc.rect(margin, y + 6 + sigBlockH, sigLineW, sigLineH)
-    doc.setFontSize(8)
-    doc.text(guardianLabel, margin, y + 14 + sigBlockH)
+    const xLeft = margin
+    const xRight = margin + sigLineLen + 15
+    doc.setDrawColor(0, 0, 0)
+    doc.line(xLeft, sigLineY, xLeft + sigLineLen, sigLineY)
+    doc.line(xRight, sigLineY, xRight + sigLineLen, sigLineY)
+    doc.setDrawColor(148, 163, 184)
+    doc.text("Firma: Quien reporta el caso", xLeft, sigTextY)
+    doc.text("Firma: Apoderado/a", xRight, sigTextY)
 
     return doc
 }

@@ -18,6 +18,7 @@ import {
 import {
     generateEmotionsExcel, generateIncidentsExcel, generateAlertsExcel,
 } from "@/lib/reports/generate-excel"
+import { loadInstitutionLogoForPdf, loadNitivLogoBase64 } from "@/lib/pdf/load-logos"
 import { cn } from "@/lib/utils"
 
 // ─── Roles con acceso amplio ──────────────────────────────────────────────────
@@ -57,6 +58,7 @@ interface Props {
     mesesData: any[]
     coursesClimate: CourseClimate[]
     institutionName: string
+    institutionLogoUrl?: string
     totalStudents: number
     totalAlerts: number
     totalIncidents: number
@@ -370,7 +372,7 @@ function HighImpactLists({ coursesClimate }: { coursesClimate: CourseClimate[] }
 // ─── Componente principal ─────────────────────────────────────────────────────
 export function ReportesClient({
     role, emotionRows, incidentRows, alertRows,
-    mesesData, coursesClimate, institutionName,
+    mesesData, coursesClimate, institutionName, institutionLogoUrl,
     totalStudents, totalAlerts, totalIncidents,
     studentsList, emotionsByStudent, incidentsByStudent, alertsByStudent,
 }: Props) {
@@ -380,19 +382,28 @@ export function ReportesClient({
 
     const isStaff = STAFF_ROLES.includes(role)
 
-    const withLoading = async (key: string, fn: () => void) => {
+    const withLoading = async (key: string, fn: () => void | Promise<void>) => {
         setLoading(p => ({ ...p, [key]: true }))
         await new Promise(r => setTimeout(r, 100))
-        try { fn() } finally { setLoading(p => ({ ...p, [key]: false })) }
+        try { await Promise.resolve(fn()) } finally { setLoading(p => ({ ...p, [key]: false })) }
     }
 
-    const handleStudentPDF = () => {
+    const getLogos = async () => {
+        const [instLogo, nitivLogo] = await Promise.all([
+            institutionLogoUrl ? loadInstitutionLogoForPdf(institutionLogoUrl) : Promise.resolve(null),
+            loadNitivLogoBase64(),
+        ])
+        return { instLogo: instLogo ?? null, nitivLogo: nitivLogo ?? null }
+    }
+
+    const handleStudentPDF = async () => {
         if (!selectedStudent) return
         const st = studentsList.find(s => s.id === selectedStudent)
         if (!st) return
         const emotions2 = emotionsByStudent.filter(e => e.student_id === st.id)
         const incidents2 = incidentsByStudent.filter(i => i.student_id === st.id)
         const alerts2 = alertsByStudent.filter(a => a.student_id === st.id)
+        const { instLogo, nitivLogo } = await getLogos()
         generateStudentPDF({
             institutionName,
             student: { name: st.name, last_name: st.last_name, courseName: st.courseName },
@@ -418,7 +429,7 @@ export function ReportesClient({
                 date: a.created_at,
                 resolved: a.resolved,
             })),
-        })
+        }, instLogo, nitivLogo)
     }
 
     return (
@@ -632,7 +643,8 @@ export function ReportesClient({
                                             if (!selectedCourse) return
                                             const course = coursesClimate.find(c => c.courseId === selectedCourse)
                                             if (!course) return
-                                            withLoading("climate", () =>
+                                            withLoading("climate", async () => {
+                                                const { instLogo, nitivLogo } = await getLogos()
                                                 generateClimatePDF({
                                                     institutionName,
                                                     courseName: course.courseName,
@@ -644,8 +656,8 @@ export function ReportesClient({
                                                         incidentCount: s.incidentCount,
                                                         lastEmotion: s.lastEmotion,
                                                     })),
-                                                })
-                                            )
+                                                }, instLogo, nitivLogo)
+                                            })
                                         }}
                                         disabled={!selectedCourse || loading["climate"]}
                                         className="gap-1.5 shrink-0"
@@ -676,7 +688,8 @@ export function ReportesClient({
                                     title="Reporte institucional"
                                     description="Resumen general: estudiantes, alertas, DEC y tendencias mensuales"
                                     icon={FileText}
-                                    onPDF={() => withLoading("institutional", () =>
+                                    onPDF={() => withLoading("institutional", async () => {
+                                        const { instLogo, nitivLogo } = await getLogos()
                                         generateInstitutionalPDF({
                                             institutionName,
                                             totalStudents,
@@ -737,8 +750,8 @@ export function ReportesClient({
                                                     .sort((a, b) => (b.alerts + b.incidents) - (a.alerts + a.incidents))
                                                     .slice(0, 5)
                                             })(),
-                                        })
-                                    )}
+                                        }, instLogo, nitivLogo)
+                                    })}
                                     loadingPDF={loading["institutional"]}
                                 />
                             )}

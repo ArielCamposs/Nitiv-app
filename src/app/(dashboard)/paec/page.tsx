@@ -23,6 +23,7 @@ async function getPaecData() {
       student_id,
       created_at,
       review_date,
+      requires_adjustments,
       active,
       representative_signed,
       guardian_signed,

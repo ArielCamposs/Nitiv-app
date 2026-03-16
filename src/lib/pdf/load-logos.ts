@@ -58,7 +58,8 @@ export async function loadInstitutionLogoForPdf(url: string): Promise<string | n
     return loadImageAsPngBase64(url, INSTITUTION_LOGO_MAX_WIDTH_PX)
 }
 
-const NITIV_LOGO_PATHS = ["/LogoNitiv.svg", "/logo.svg"]
+/** Logo Nitiv en PDFs: 3 ft. Fallback a otros si no está disponible. */
+const NITIV_LOGO_PATHS = ["/3 ft.svg", "/logo.svg"]
 
 /** Carga el logo de Nitiv desde la ruta pública. */
 export async function loadNitivLogoBase64(): Promise<string | null> {
