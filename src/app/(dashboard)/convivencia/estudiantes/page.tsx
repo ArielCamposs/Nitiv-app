@@ -57,9 +57,12 @@ export default async function ConvivenciaEstudiantesPage() {
 
     const totalStudents = courses.reduce((acc, c) => acc + c.students.length, 0)
 
+    const basicCourses = courses.filter(c => !/medio|media|1°m|2°m|3°m|4°m|i medio|ii medio|iii medio|iv medio/i.test(c.name))
+    const highCourses = courses.filter(c => !basicCourses.includes(c))
+
     return (
         <main className="min-h-screen bg-slate-50">
-            <div className="mx-auto max-w-4xl px-4 py-8 space-y-8">
+            <div className="mx-auto max-w-5xl px-4 py-8 space-y-8">
                 <div>
                     <h1 className="text-2xl font-semibold text-slate-900">Estudiantes</h1>
                     <p className="text-slate-500 text-sm mt-1">
@@ -71,28 +74,68 @@ export default async function ConvivenciaEstudiantesPage() {
                     <p className="text-slate-400 text-sm">No hay cursos activos en la institución.</p>
                 )}
 
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {courses.map(course => (
-                        <Link key={course.id} href={`/convivencia/estudiantes/curso/${course.id}`}>
-                            <Card className="cursor-pointer hover:border-indigo-200 hover:shadow-md transition-all h-full">
-                                <CardContent className="flex flex-col justify-center p-6 h-full">
-                                    <div className="flex items-start justify-between gap-2">
-                                        <div>
-                                            <h2 className="text-lg font-semibold text-slate-800">
-                                                {course.name}{course.section ? ` ${course.section}` : ""}
-                                            </h2>
-                                            <p className="text-sm text-slate-500 mt-1">
-                                                {course.students.length} estudiante{course.students.length !== 1 ? "s" : ""}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="mt-6 flex items-center text-sm font-medium text-indigo-600 group">
-                                        Abrir curso <span className="ml-1 group-hover:translate-x-1 transition-transform">→</span>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </Link>
-                    ))}
+                <div className="space-y-6">
+                    {basicCourses.length > 0 && (
+                        <section className="space-y-3">
+                            <h2 className="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase">
+                                Educación básica
+                            </h2>
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                {basicCourses.map(course => (
+                                    <Link key={course.id} href={`/convivencia/estudiantes/curso/${course.id}`}>
+                                        <Card className="cursor-pointer hover:border-indigo-200 hover:shadow-md transition-all h-full">
+                                            <CardContent className="flex flex-col justify-between p-5 h-full">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div>
+                                                        <h3 className="text-base font-semibold text-slate-900">
+                                                            {course.name}{course.section ? ` ${course.section}` : ""}
+                                                        </h3>
+                                                        <p className="text-xs text-slate-500 mt-1">
+                                                            {course.students.length} estudiante{course.students.length !== 1 ? "s" : ""}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-4 flex items-center text-xs font-medium text-indigo-600 group">
+                                                    Ver curso <span className="ml-1 group-hover:translate-x-1 transition-transform">→</span>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </Link>
+                                ))}
+                            </div>
+                        </section>
+                    )}
+
+                    {highCourses.length > 0 && (
+                        <section className="space-y-3">
+                            <h2 className="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase">
+                                Educación media
+                            </h2>
+                            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                {highCourses.map(course => (
+                                    <Link key={course.id} href={`/convivencia/estudiantes/curso/${course.id}`}>
+                                        <Card className="cursor-pointer hover:border-indigo-200 hover:shadow-md transition-all h-full">
+                                            <CardContent className="flex flex-col justify-between p-5 h-full">
+                                                <div className="flex items-start justify-between gap-2">
+                                                    <div>
+                                                        <h3 className="text-base font-semibold text-slate-900">
+                                                            {course.name}{course.section ? ` ${course.section}` : ""}
+                                                        </h3>
+                                                        <p className="text-xs text-slate-500 mt-1">
+                                                            {course.students.length} estudiante{course.students.length !== 1 ? "s" : ""}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-4 flex items-center text-xs font-medium text-indigo-600 group">
+                                                    Ver curso <span className="ml-1 group-hover:translate-x-1 transition-transform">→</span>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </Link>
+                                ))}
+                            </div>
+                        </section>
+                    )}
                 </div>
             </div>
         </main>

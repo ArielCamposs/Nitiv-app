@@ -2,8 +2,9 @@
 
 import Link from "next/link"
 import {
-    ShieldAlert, FileText, Users, TrendingUp, AlertTriangle, ChevronRight,
+    ShieldAlert, FileText, Users, TrendingUp, AlertTriangle, ChevronRight, Thermometer,
 } from "lucide-react"
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 export interface ConvivenciaStats {
@@ -14,18 +15,27 @@ export interface ConvivenciaStats {
     decSummary: { total: number; resolved: number }
     convivenciaSummary: { total: number; closed: number }
     climateSummary: { coursesWithData: number }
+    monthlyConvivenciaCounts: { monthKey: string; label: string; count: number }[]
 }
 
 // ─── Main component ────────────────────────────────────────────────────────────
 export function ConvivenciaDashboardClient({ stats }: { stats: ConvivenciaStats }) {
-    const { openDecs, activeAlerts, activeConvivenciaRecords, lowestClimateCourse, decSummary, convivenciaSummary, climateSummary } = stats
+    const {
+        openDecs,
+        activeAlerts,
+        activeConvivenciaRecords,
+        lowestClimateCourse,
+        decSummary,
+        convivenciaSummary,
+        climateSummary,
+        monthlyConvivenciaCounts,
+    } = stats
 
     return (
         <div className="space-y-6">
             {/* ── KPI circles ── */}
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 {[
-                    { value: openDecs, label: "DECs abiertos", sub: "Sin resolver", icon: ShieldAlert, color: "bg-rose-500", href: "/convivencia/dec" },
                     { value: activeAlerts, label: "Alertas activas", sub: "Requieren atención", icon: AlertTriangle, color: openDecs > 3 ? "bg-orange-500" : "bg-amber-500", href: undefined },
                     { value: activeConvivenciaRecords, label: "Registros de convivencia activos", sub: "Reg. abiertos", icon: FileText, color: "bg-violet-500", href: "/registros-convivencia" },
                     { value: 0, label: "Curso con clima más bajo", sub: lowestClimateCourse ? `${lowestClimateCourse.courseName} · ${lowestClimateCourse.label}` : "Sin datos", icon: TrendingUp, color: "bg-indigo-500", href: "/convivencia/heatmap", isLowestClimateCard: true, lowestClimateScore: lowestClimateCourse?.score ?? null },
@@ -49,6 +59,39 @@ export function ConvivenciaDashboardClient({ stats }: { stats: ConvivenciaStats 
                     )
                     return href ? <Link key={label} href={href}>{content}</Link> : content
                 })}
+            </div>
+
+            {/* ── Casos de convivencia por mes ── */}
+            <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
+                    CASOS DE CONVIVENCIA POR MES (ULTIMOS 12 MESES)
+                </p>
+                <div className="h-56">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={monthlyConvivenciaCounts}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
+                            <XAxis
+                                dataKey="label"
+                                tick={{ fontSize: 10, fill: "#6B7280" }}
+                                axisLine={{ stroke: "#E5E7EB" }}
+                                tickLine={false}
+                            />
+                            <YAxis
+                                allowDecimals={false}
+                                tick={{ fontSize: 10, fill: "#6B7280" }}
+                                axisLine={{ stroke: "#E5E7EB" }}
+                                tickLine={false}
+                            />
+                            <Tooltip
+                                cursor={{ fill: "#F3F4F6" }}
+                                contentStyle={{ fontSize: 11 }}
+                                formatter={(value: any) => [`${value} casos`, "Casos de convivencia"]}
+                                labelFormatter={(label: any) => `Mes: ${label}`}
+                            />
+                            <Bar dataKey="count" fill="#4B5563" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
             </div>
 
             {/* ── Resumen por área (lo más importante al entrar) ── */}
@@ -104,7 +147,7 @@ export function ConvivenciaDashboardClient({ stats }: { stats: ConvivenciaStats 
                 {[
                     { href: "/convivencia/dec/nuevo", label: "Nuevo DEC", icon: ShieldAlert, color: "indigo" },
                     { href: "/convivencia/estudiantes", label: "Estudiantes", icon: Users, color: "cyan" },
-                    { href: "/convivencia/heatmap", label: "Clima de aula", icon: TrendingUp, color: "emerald" },
+                    { href: "/convivencia/heatmap", label: "Clima de aula", icon: Thermometer, color: "emerald" },
                     { href: "/paec", label: "Gestión PAEC", icon: FileText, color: "violet" },
                 ].map(({ href, label, icon: Icon, color }) => (
                     <Link key={href} href={href}

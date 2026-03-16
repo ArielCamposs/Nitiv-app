@@ -221,6 +221,10 @@ export default async function StudentProfilePage({
                                     </p>
                                 </div>
                                 <div>
+                                    <p className="text-xs text-slate-400">Correo del estudiante</p>
+                                    <p className="font-medium text-slate-700">{student.email ?? "No registrado"}</p>
+                                </div>
+                                <div>
                                     <p className="text-xs text-slate-400">Curso</p>
                                     <p className="font-medium text-slate-700">{(student.courses as any)?.name ?? "No asignado"}</p>
                                 </div>

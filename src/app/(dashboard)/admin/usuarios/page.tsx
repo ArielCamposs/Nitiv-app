@@ -27,7 +27,6 @@ export default async function AdminUsuariosPage() {
         .from("users")
         .select("id, name, last_name, email, role, phone, active, created_at")
         .eq("institution_id", profile.institution_id)
-        .neq("role", "admin")
         .order("name")
 
     return (

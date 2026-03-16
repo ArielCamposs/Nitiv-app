@@ -25,10 +25,10 @@ export default async function AdminEstudiantesPage() {
 
     const currentYear = new Date().getFullYear()
 
-    const [{ data: students }, { data: courses }, { data: yearRows }] = await Promise.all([
+    const [{ data: students }, { data: courses }, { data: yearRows }, { data: studentUsers }] = await Promise.all([
         supabase
             .from("students")
-            .select("id, name, last_name, rut, birthdate, guardian_name, guardian_phone, guardian_email, course_id, active, created_at")
+            .select("id, user_id, name, last_name, rut, birthdate, guardian_name, guardian_phone, guardian_email, course_id, active, created_at")
             .eq("institution_id", profile.institution_id)
             .order("last_name"),
         supabase
@@ -42,14 +42,25 @@ export default async function AdminEstudiantesPage() {
             .select("year")
             .eq("institution_id", profile.institution_id)
             .order("year", { ascending: false }),
+        supabase
+            .from("users")
+            .select("id, email")
+            .eq("institution_id", profile.institution_id)
+            .eq("role", "estudiante"),
     ])
 
     const availableYears = [...new Set((yearRows ?? []).map(c => c.year))].filter(Boolean) as number[]
 
+    const emailMap = new Map((studentUsers ?? []).map(u => [u.id, u.email as string]))
+    const studentsWithEmail = (students ?? []).map(s => ({
+        ...s,
+        email: s.user_id ? (emailMap.get(s.user_id) ?? "") : "",
+    }))
+
     return (
         <div className="px-6 py-8 max-w-5xl mx-auto">
             <StudentsClient
-                students={students ?? []}
+                students={studentsWithEmail}
                 courses={courses ?? []}
                 institutionId={profile.institution_id}
                 currentYear={currentYear}

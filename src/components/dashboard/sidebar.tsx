@@ -95,7 +95,7 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
         gestionCasos.push({
             title: "Clima de aula",
             href: `/${currentRole}/heatmap`,
-            icon: Activity,
+            icon: ThermometerSun,
         })
         gestionCasos.push({ title: "Cursos", href: `/${currentRole}/estudiantes`, icon: Users })
     }

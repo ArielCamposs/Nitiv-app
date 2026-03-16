@@ -130,8 +130,16 @@ export function RadarChart({ scores, size = 320 }: Props) {
                 return (
                     <g key={ax}>
                         <text x={lx} y={ly - 7} textAnchor="middle" fontSize="16">{a.emoji}</text>
-                        <text x={lx} y={ly + 10} textAnchor="middle" fontSize="8.5"
-                            fontWeight="700" fill={a.color} letterSpacing="0.5">
+                        <title>{a.label}</title>
+                        <text
+                            x={lx}
+                            y={ly + 10}
+                            textAnchor="middle"
+                            fontSize="8.5"
+                            fontWeight="700"
+                            fill={a.color}
+                            letterSpacing="0.5"
+                        >
                             {ax.toUpperCase()}
                         </text>
                     </g>

@@ -36,16 +36,32 @@ export default async function ConvivenciaPage() {
     ] = await Promise.all([
         getActiveAlerts(),
         supabase.from("incidents").select("id, resolved").eq("institution_id", iid).gte("incident_date", monthsAgo12.toISOString().split("T")[0]),
-        supabase.from("convivencia_records").select("id, resolved").eq("institution_id", iid).gte("incident_date", monthsAgo12.toISOString().split("T")[0]),
+        supabase.from("convivencia_records").select("id, resolved, incident_date").eq("institution_id", iid).gte("incident_date", monthsAgo12.toISOString().split("T")[0]),
     ])
 
     const convivenciaTypes = ["dec_repetido", "registros_negativos"]
     const filteredAlerts = alerts.filter((a: any) => convivenciaTypes.includes(a.type))
 
-    const allConvivenciaRecords = convivenciaRecords ?? []
-    const activeConvivenciaRecords = allConvivenciaRecords.filter((r: { resolved: boolean }) => !r.resolved).length
+    const allConvivenciaRecords = (convivenciaRecords ?? []) as { resolved: boolean; incident_date: string }[]
+    const activeConvivenciaRecords = allConvivenciaRecords.filter((r) => !r.resolved).length
     const totalConvivencia12m = allConvivenciaRecords.length
     const closedConvivencia12m = totalConvivencia12m - activeConvivenciaRecords
+
+    // Casos de convivencia por mes (enero–diciembre del año actual)
+    const monthlyMap: Record<string, number> = {}
+    for (const rec of allConvivenciaRecords) {
+        const d = new Date(rec.incident_date)
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+        monthlyMap[key] = (monthlyMap[key] ?? 0) + 1
+    }
+    const monthlyConvivenciaCounts: { monthKey: string; label: string; count: number }[] = []
+    const currentYear = now.getFullYear()
+    for (let month = 0; month < 12; month++) {
+        const d = new Date(currentYear, month, 1)
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+        const label = d.toLocaleDateString("es-CL", { month: "short" })
+        monthlyConvivenciaCounts.push({ monthKey: key, label, count: monthlyMap[key] ?? 0 })
+    }
 
     const activeAlerts = filteredAlerts.length
 
@@ -93,6 +109,7 @@ export default async function ConvivenciaPage() {
         decSummary: { total: totalDecs12m, resolved: resolvedDecs12m },
         convivenciaSummary: { total: totalConvivencia12m, closed: closedConvivencia12m },
         climateSummary: { coursesWithData: coursesWithClimateCount },
+        monthlyConvivenciaCounts,
     }
 
     return (

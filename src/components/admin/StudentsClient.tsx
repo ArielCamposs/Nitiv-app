@@ -20,6 +20,7 @@ import {
 
 interface Student {
     id: string
+    user_id?: string | null
     name: string
     last_name: string
     rut: string | null
@@ -30,6 +31,7 @@ interface Student {
     course_id: string | null
     active: boolean
     created_at: string
+    email?: string
 }
 
 interface Course { id: string; name: string; level: string; section: string | null; year: number }
@@ -270,13 +272,16 @@ export function StudentsClient({ students: initial, courses, institutionId, curr
     const openCreate = () => { setForm(EMPTY_FORM); setShowForm(true) }
     const openEdit = (s: Student) => {
         setForm({
-            id: s.id, name: s.name, last_name: s.last_name,
-            rut: s.rut ? formatRut(s.rut) : "", birthdate: s.birthdate ?? "",
+            id: s.id,
+            name: s.name,
+            last_name: s.last_name,
+            rut: s.rut ? formatRut(s.rut) : "",
+            birthdate: s.birthdate ?? "",
             course_id: s.course_id ?? "",
             guardian_name: s.guardian_name ?? "",
             guardian_phone: s.guardian_phone ? formatPhone(s.guardian_phone) : "+56 9 ",
             guardian_email: s.guardian_email ?? "",
-            email: "",
+            email: s.email ?? "",
             password: "",
         })
         setShowForm(true)
@@ -661,39 +666,43 @@ export function StudentsClient({ students: initial, courses, institutionId, curr
                                     </select>
                                 </div>
 
-                                {/* Acceso al sistema — solo al crear */}
-                                {!isEdit && (
-                                    <>
-                                        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide pt-2">
-                                            Acceso al sistema
-                                        </p>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="space-y-1 col-span-2 md:col-span-1">
-                                                <label className="text-xs font-medium text-slate-700">Email de acceso *</label>
-                                                <input
-                                                    type="email"
-                                                    value={form.email}
-                                                    onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                                                    placeholder="estudiante@colegio.cl"
-                                                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                                                />
-                                            </div>
-                                            <div className="space-y-1 col-span-2 md:col-span-1">
-                                                <label className="text-xs font-medium text-slate-700">Contraseña temporal *</label>
-                                                <input
-                                                    type="text"
-                                                    value={form.password}
-                                                    onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-                                                    placeholder="Mín. 6 caracteres"
-                                                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                                                />
-                                                <p className="text-[10px] text-slate-400">
-                                                    Comparte estos datos con el estudiante para que ingrese.
-                                                </p>
-                                            </div>
+                                {/* Acceso al sistema */}
+                                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide pt-2">
+                                    Acceso al sistema
+                                </p>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1 col-span-2 md:col-span-1">
+                                        <label className="text-xs font-medium text-slate-700">
+                                            Email de acceso *
+                                            {isEdit && (
+                                                <span className="text-slate-400 text-[11px]"> (solo lectura)</span>
+                                            )}
+                                        </label>
+                                        <input
+                                            type="email"
+                                            value={form.email}
+                                            onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                                            placeholder="estudiante@colegio.cl"
+                                            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:bg-slate-50 disabled:text-slate-400"
+                                            disabled={isEdit}
+                                        />
+                                    </div>
+                                    {!isEdit && (
+                                        <div className="space-y-1 col-span-2 md:col-span-1">
+                                            <label className="text-xs font-medium text-slate-700">Contraseña temporal *</label>
+                                            <input
+                                                type="text"
+                                                value={form.password}
+                                                onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+                                                placeholder="Mín. 6 caracteres"
+                                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                                            />
+                                            <p className="text-[10px] text-slate-400">
+                                                Comparte estos datos con el estudiante para que ingrese.
+                                            </p>
                                         </div>
-                                    </>
-                                )}
+                                    )}
+                                </div>
 
                                 {/* Apoderado */}
                                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide pt-2">Datos del apoderado</p>

@@ -347,14 +347,19 @@ export function UsersClient({ users: initial, institutionId }: {
                                 </div>
                             </div>
 
-                            {!isEdit && (
-                                <div className="space-y-1">
-                                    <label className="text-xs font-medium text-slate-700">Email *</label>
-                                    <input value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
-                                        type="email" placeholder="juan@colegio.cl"
-                                        className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200" />
-                                </div>
-                            )}
+                            <div className="space-y-1">
+                                <label className="text-xs font-medium text-slate-700">
+                                    Email * {isEdit && <span className="text-slate-400 text-[11px]">(solo lectura)</span>}
+                                </label>
+                                <input
+                                    value={form.email}
+                                    onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
+                                    type="email"
+                                    placeholder="juan@colegio.cl"
+                                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:bg-slate-50 disabled:text-slate-400"
+                                    disabled={isEdit}
+                                />
+                            </div>
 
                             {!isEdit && (
                                 <div className="space-y-1">

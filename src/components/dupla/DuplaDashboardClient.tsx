@@ -8,7 +8,7 @@ import {
 } from "recharts"
 import {
     Users, AlertTriangle, TrendingUp,
-    TrendingDown, MessageSquare, BookOpen,
+    TrendingDown, MessageSquare, BookOpen, ThermometerSun,
 } from "lucide-react"
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -333,7 +333,7 @@ export function DuplaDashboardClient({ stats }: { stats: DuplaStats }) {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 {[
                     { href: "/dupla/estudiantes", label: "Estudiantes", icon: Users, color: "indigo" },
-                    { href: "/dupla/heatmap", label: "Mapa de clima", icon: TrendingUp, color: "emerald" },
+                    { href: "/dupla/heatmap", label: "Mapa de clima", icon: ThermometerSun, color: "emerald" },
                     { href: "/dupla/dec", label: "Registros DEC", icon: BookOpen, color: "violet" },
                 ].map(({ href, label, icon: Icon, color }) => (
                     <Link key={href} href={href}

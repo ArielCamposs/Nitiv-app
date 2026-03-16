@@ -222,59 +222,114 @@ export async function RadarResultsPage({ params, role }: Props) {
                             <RadarStudentResultsClient students={studentResults} />
                         </div>
 
-                        {/* Per-axis cards */}
-                        <div className="grid grid-cols-1 gap-3">
-                            {AXIS_ORDER.map(ax => {
-                                const avg = globalAvg[ax]
-                                const dist = distribution[ax]
-                                if (avg === undefined || !dist) return null
-                                const a = AXES[ax]
-                                const total_items = dist.reduce((s, c) => s + c, 0)
+                        {/* Per-axis cards: 3 arriba, 2 abajo, centrados */}
+                        <div className="grid gap-3">
+                            <div className="grid gap-3 md:grid-cols-3">
+                                {AXIS_ORDER.slice(0, 3).map(ax => {
+                                    const avg = globalAvg[ax]
+                                    const dist = distribution[ax]
+                                    if (avg === undefined || !dist) return null
+                                    const a = AXES[ax]
+                                    const total_items = dist.reduce((s, c) => s + c, 0)
 
-                                return (
-                                    <div key={ax} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xl">{a.emoji}</span>
-                                                <div>
-                                                    <p className="text-sm font-bold text-slate-800">{a.label}</p>
-                                                    <p className="text-xs text-slate-400">{scoreLabel(avg)}</p>
+                                    return (
+                                        <div key={ax} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xl">{a.emoji}</span>
+                                                    <div>
+                                                        <p className="text-sm font-bold text-slate-800">{a.label}</p>
+                                                        <p className="text-xs text-slate-400">{scoreLabel(avg)}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-xl font-extrabold" style={{ color: a.color }}>{avg.toFixed(1)}</p>
+                                                    <p className="text-[10px] text-slate-400">de 5</p>
                                                 </div>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-2xl font-extrabold" style={{ color: a.color }}>{avg.toFixed(1)}</p>
-                                                <p className="text-[10px] text-slate-400">de 5</p>
+
+                                            <div className="h-2 bg-slate-100 rounded-full overflow-hidden mb-3">
+                                                <div className="h-full rounded-full transition-all" style={{ width: `${(avg / 5) * 100}%`, backgroundColor: a.color }} />
+                                            </div>
+
+                                            <div className="space-y-1.5">
+                                                {[
+                                                    { score: 5, label: "Lo hago excelente", color: "#22c55e" },
+                                                    { score: 4, label: "Lo hago bien",       color: "#3b82f6" },
+                                                    { score: 3, label: "A veces lo logro",   color: "#eab308" },
+                                                    { score: 2, label: "Me cuesta un poco",  color: "#f97316" },
+                                                    { score: 1, label: "Me cuesta mucho",    color: "#ef4444" },
+                                                ].map(opt => {
+                                                    const count = dist[opt.score - 1]
+                                                    const pct = total_items ? Math.round((count / total_items) * 100) : 0
+                                                    return (
+                                                        <div key={opt.score} className="flex items-center gap-2">
+                                                            <span className="text-[10px] text-slate-400 w-3 text-right shrink-0">{opt.score}</span>
+                                                            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                                <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: opt.color }} />
+                                                            </div>
+                                                            <span className="text-[10px] font-semibold text-slate-500 w-6 shrink-0">{count}</span>
+                                                        </div>
+                                                    )
+                                                })}
                                             </div>
                                         </div>
+                                    )
+                                })}
+                            </div>
+                            <div className="grid gap-3 md:grid-cols-3 justify-items-center">
+                                {AXIS_ORDER.slice(3).map(ax => {
+                                    const avg = globalAvg[ax]
+                                    const dist = distribution[ax]
+                                    if (avg === undefined || !dist) return null
+                                    const a = AXES[ax]
+                                    const total_items = dist.reduce((s, c) => s + c, 0)
 
-                                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden mb-3">
-                                            <div className="h-full rounded-full transition-all" style={{ width: `${(avg / 5) * 100}%`, backgroundColor: a.color }} />
-                                        </div>
-
-                                        <div className="space-y-1.5">
-                                            {[
-                                                { score: 5, label: "Lo hago excelente", color: "#22c55e" },
-                                                { score: 4, label: "Lo hago bien",       color: "#3b82f6" },
-                                                { score: 3, label: "A veces lo logro",   color: "#eab308" },
-                                                { score: 2, label: "Me cuesta un poco",  color: "#f97316" },
-                                                { score: 1, label: "Me cuesta mucho",    color: "#ef4444" },
-                                            ].map(opt => {
-                                                const count = dist[opt.score - 1]
-                                                const pct = total_items ? Math.round((count / total_items) * 100) : 0
-                                                return (
-                                                    <div key={opt.score} className="flex items-center gap-2">
-                                                        <span className="text-[10px] text-slate-400 w-3 text-right shrink-0">{opt.score}</span>
-                                                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                                            <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: opt.color }} />
-                                                        </div>
-                                                        <span className="text-[10px] font-semibold text-slate-500 w-6 shrink-0">{count}</span>
+                                    return (
+                                        <div key={ax} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 w-full md:w-auto">
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xl">{a.emoji}</span>
+                                                    <div>
+                                                        <p className="text-sm font-bold text-slate-800">{a.label}</p>
+                                                        <p className="text-xs text-slate-400">{scoreLabel(avg)}</p>
                                                     </div>
-                                                )
-                                            })}
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-xl font-extrabold" style={{ color: a.color }}>{avg.toFixed(1)}</p>
+                                                    <p className="text-[10px] text-slate-400">de 5</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="h-2 bg-slate-100 rounded-full overflow-hidden mb-3">
+                                                <div className="h-full rounded-full transition-all" style={{ width: `${(avg / 5) * 100}%`, backgroundColor: a.color }} />
+                                            </div>
+
+                                            <div className="space-y-1.5">
+                                                {[
+                                                    { score: 5, label: "Lo hago excelente", color: "#22c55e" },
+                                                    { score: 4, label: "Lo hago bien",       color: "#3b82f6" },
+                                                    { score: 3, label: "A veces lo logro",   color: "#eab308" },
+                                                    { score: 2, label: "Me cuesta un poco",  color: "#f97316" },
+                                                    { score: 1, label: "Me cuesta mucho",    color: "#ef4444" },
+                                                ].map(opt => {
+                                                    const count = dist[opt.score - 1]
+                                                    const pct = total_items ? Math.round((count / total_items) * 100) : 0
+                                                    return (
+                                                        <div key={opt.score} className="flex items-center gap-2">
+                                                            <span className="text-[10px] text-slate-400 w-3 text-right shrink-0">{opt.score}</span>
+                                                            <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                                                <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: opt.color }} />
+                                                            </div>
+                                                            <span className="text-[10px] font-semibold text-slate-500 w-6 shrink-0">{count}</span>
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
                                         </div>
-                                    </div>
-                                )
-                            })}
+                                    )
+                                })}
+                            </div>
                         </div>
                     </div>
                 )}
