@@ -70,7 +70,7 @@ export default async function EstudiantesDocentePage() {
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {data.courses.map((courseData: any) => (
                         <Link key={courseData.course_id} href={`/docente/estudiantes/curso/${courseData.course_id}`}>
-                            <Card className="cursor-pointer hover:border-indigo-200 hover:shadow-md transition-all h-full">
+                            <Card className="cursor-pointer border border-sky-200 bg-white/80 hover:shadow-lg hover:bg-sky-50/60 transition-all rounded-2xl h-full">
                                 <CardContent className="flex flex-col justify-center p-6 h-full">
                                     <div className="flex items-start justify-between gap-2">
                                         <div>

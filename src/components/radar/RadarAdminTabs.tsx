@@ -79,21 +79,64 @@ const AXES_META: Record<string, { label: string; emoji: string; color: string }>
 }
 const AXIS_ORDER = ["ac", "ag", "cs", "hr", "td"] as const
 
-export function RadarAdminTabs({ courses, institutionId, role, globalAvg, distribution, courseStats, atRiskStudents }: Props) {
-    const [selectedCourseId, setSelectedCourseId] = useState<string | "todos">(
-        courses[0]?.id ?? "todos"
-    )
+function getAxisAlertClasses(avg: number | undefined) {
+    if (avg === undefined || Number.isNaN(avg)) {
+        return {
+            card: "bg-slate-50 border-slate-200",
+            pill: "bg-slate-200 text-slate-700",
+            text: "text-slate-800",
+            bar: "#64748b",
+        }
+    }
+    if (avg < 2.5) {
+        return {
+            card: "bg-rose-50 border-rose-200",
+            pill: "bg-rose-100 text-rose-800",
+            text: "text-rose-800",
+            bar: "#ef4444",
+        }
+    }
+    if (avg < 3.5) {
+        return {
+            card: "bg-amber-50 border-amber-200",
+            pill: "bg-amber-100 text-amber-800",
+            text: "text-amber-800",
+            bar: "#f59e0b",
+        }
+    }
+    return {
+        card: "bg-emerald-50 border-emerald-200",
+        pill: "bg-emerald-100 text-emerald-800",
+        text: "text-emerald-800",
+        bar: "#10b981",
+    }
+}
+function getCourseShortCode(name: string, section: string | null | undefined): { code: string; isMedia: boolean } {
+    const isMedia = /medio|media|1°m|2°m|3°m|4°m|i°|ii°|iii°|iv°/i.test(name)
+    const numMatch = name.match(/\d+/)
+    const grade = numMatch ? numMatch[0] : name.trim().split(/\s+/)[0]?.[0] ?? ""
+    const secRaw = (section ?? "").trim()
+    const sec = secRaw ? secRaw[0] : (name.match(/[A-D]/i)?.[0] ?? "")
+    const cycle = isMedia ? "M" : "B"
+    const base = `${grade}${cycle}${sec}`.toUpperCase()
+    return { code: base || name.slice(0, 3).toUpperCase(), isMedia }
+}
 
-    // Mapa simple de fechas de activación por curso (YYYY-MM-DD)
-    const datesByCourse = useMemo(() => {
-        const map: Record<string, Set<string>> = {}
+export function RadarAdminTabs({ courses, institutionId, role, globalAvg, distribution, courseStats, atRiskStudents }: Props) {
+    // Mapa de fechas → cursos que aplicaron radar ese día (YYYY-MM-DD)
+    const datesByDay = useMemo(() => {
+        const map: Record<string, { code: string; isMedia: boolean }[]> = {}
         for (const c of courses) {
+            const { code, isMedia } = getCourseShortCode(c.name, c.section ?? null)
             for (const s of c.sessions) {
                 if (!s.activated_at) continue
                 const d = new Date(s.activated_at)
                 const key = d.toISOString().slice(0, 10)
-                if (!map[c.id]) map[c.id] = new Set()
-                map[c.id].add(key)
+                if (!map[key]) map[key] = []
+                // evitar duplicados por curso en el mismo día
+                if (!map[key].some((item) => item.code === code)) {
+                    map[key].push({ code, isMedia })
+                }
             }
         }
         return map
@@ -106,25 +149,29 @@ export function RadarAdminTabs({ courses, institutionId, role, globalAvg, distri
     const calendarDays = useMemo(() => {
         const first = new Date(currentYear, currentMonth, 1)
         const last = new Date(currentYear, currentMonth + 1, 0)
-        const days: { day: number; key: string; hasApplication: boolean }[] = []
-        const filterIds = selectedCourseId === "todos" ? courses.map(c => c.id) : [selectedCourseId]
-        const selectedSets = filterIds.map(id => datesByCourse[id]).filter(Boolean) as Set<string>[]
+        const days: { day: number; key: string; applications: { code: string; isMedia: boolean }[] }[] = []
 
         for (let d = 1; d <= last.getDate(); d++) {
             const date = new Date(currentYear, currentMonth, d)
             const key = date.toISOString().slice(0, 10)
-            const has = selectedSets.some(set => set.has(key))
-            days.push({ day: d, key, hasApplication: has })
+            const applications = datesByDay[key] ?? []
+            days.push({ day: d, key, applications })
         }
         return { days, firstWeekday: first.getDay() || 7 } // 1-7, lunes=?
-    }, [currentYear, currentMonth, selectedCourseId, courses, datesByCourse])
+    }, [currentYear, currentMonth, datesByDay])
 
     return (
         <Tabs defaultValue="cuestionario" className="space-y-4">
             <TabsList className="grid grid-cols-3 w-full sm:w-auto">
-                <TabsTrigger value="cuestionario">Cuestionario</TabsTrigger>
-                <TabsTrigger value="aplicacion">Aplicación del cuestionario</TabsTrigger>
-                <TabsTrigger value="estadisticas">Estadísticas generales</TabsTrigger>
+                <TabsTrigger value="cuestionario" className="text-[11px] sm:text-xs px-1.5 sm:px-3">
+                    Cuestionario
+                </TabsTrigger>
+                <TabsTrigger value="aplicacion" className="text-[11px] sm:text-xs px-1.5 sm:px-3">
+                    Aplicación
+                </TabsTrigger>
+                <TabsTrigger value="estadisticas" className="text-[11px] sm:text-xs px-1.5 sm:px-3">
+                    Estadísticas
+                </TabsTrigger>
             </TabsList>
 
             <TabsContent value="cuestionario" className="space-y-4">
@@ -180,70 +227,89 @@ export function RadarAdminTabs({ courses, institutionId, role, globalAvg, distri
             <TabsContent value="aplicacion" className="space-y-4">
                 <Card>
                     <CardContent className="p-5 space-y-4">
-                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                            <div className="flex items-center gap-2">
-                                <div className="w-9 h-9 rounded-xl bg-sky-100 flex items-center justify-center">
-                                    <CalendarDays className="w-5 h-5 text-sky-600" />
-                                </div>
-                                <div>
-                                    <h2 className="text-base font-semibold text-slate-900">Aplicación del cuestionario</h2>
-                                    <p className="text-xs text-slate-500">
-                                        Selecciona curso(s) y visualiza en qué fechas se ha aplicado el Radar de Competencias.
-                                    </p>
-                                </div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-9 h-9 rounded-xl bg-sky-100 flex items-center justify-center">
+                                <CalendarDays className="w-5 h-5 text-sky-600" />
                             </div>
-
-                            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-                                <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
-                                    Curso
-                                </label>
-                                <select
-                                    value={selectedCourseId}
-                                    onChange={(e) => setSelectedCourseId(e.target.value as string | "todos")}
-                                    className="h-9 rounded-md border border-slate-300 bg-white px-2 text-xs text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                                >
-                                    <option value="todos">Todos los cursos con radar</option>
-                                    {courses.map((c) => (
-                                        <option key={c.id} value={c.id}>
-                                            {c.name}{c.section ? ` ${c.section}` : ""}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Calendario simple del mes actual */}
-                            <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/70">
-                                <p className="text-[11px] font-semibold text-slate-600 mb-2 flex items-center gap-1.5">
-                                    <CalendarDays className="w-3.5 h-3.5 text-slate-500" />
-                                    Calendario de aplicación (mes actual)
+                            <div className="min-w-0">
+                                <h2 className="text-sm sm:text-base font-semibold text-slate-900 leading-snug break-words">
+                                    Aplicación del cuestionario
+                                </h2>
+                                <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
+                                    Visualiza en qué fechas se ha aplicado el Radar de Competencias para todos los cursos.
                                 </p>
-                                <div className="grid grid-cols-7 gap-1 text-[10px] text-slate-500 mb-1">
-                                    {["L", "M", "M", "J", "V", "S", "D"].map((d, idx) => (
-                                        <span key={`${d}-${idx}`} className="text-center font-semibold">
-                                            {d}
-                                        </span>
-                                    ))}
-                                </div>
-                                <div className="grid grid-cols-7 gap-1 text-[10px]">
-                                    {Array.from({ length: calendarDays.firstWeekday === 1 ? 0 : (calendarDays.firstWeekday - 1) }).map((_, idx) => (
-                                        <span key={`empty-${idx}`} />
-                                    ))}
-                                    {calendarDays.days.map((d) => (
+                            </div>
+                        </div>
+
+                        {/* Calendario simple del mes actual */}
+                        <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/70">
+                            <p className="text-[11px] font-semibold text-slate-600 mb-2 flex items-center gap-1.5">
+                                <CalendarDays className="w-3.5 h-3.5 text-slate-500" />
+                                Calendario de aplicación (mes actual)
+                            </p>
+                            <div className="grid grid-cols-7 gap-1 text-[10px] text-slate-500 mb-1">
+                                {["L", "M", "M", "J", "V", "S", "D"].map((d, idx) => (
+                                    <span key={`${d}-${idx}`} className="text-center font-semibold">
+                                        {d}
+                                    </span>
+                                ))}
+                            </div>
+                            <div className="grid grid-cols-7 gap-1 text-[10px]">
+                                {Array.from({
+                                    length: calendarDays.firstWeekday === 1 ? 0 : calendarDays.firstWeekday - 1,
+                                }).map((_, idx) => (
+                                    <span key={`empty-${idx}`} />
+                                ))}
+                                {calendarDays.days.map((d) => {
+                                    const hasAny = d.applications.length > 0
+                                    const codesToShow = d.applications.slice(0, 3)
+                                    const overflow = d.applications.length > 3 ? d.applications.length - 3 : 0
+                                    return (
                                         <div
                                             key={d.key}
-                                            className={`h-6 flex items-center justify-center rounded-md border text-[10px] ${
-                                                d.hasApplication
-                                                    ? "bg-emerald-100 border-emerald-300 text-emerald-800 font-semibold"
+                                            className={`min-h-[2.25rem] flex flex-col items-center justify-start rounded-md border px-0.5 py-0.5 ${
+                                                hasAny
+                                                    ? "bg-white border-slate-300"
                                                     : "bg-white border-slate-200 text-slate-500"
                                             }`}
                                         >
-                                            {d.day}
+                                            <span className="text-[10px] font-semibold mb-0.5 text-slate-600">
+                                                {d.day}
+                                            </span>
+                                            {hasAny && (
+                                                <div className="flex flex-wrap gap-[1px] justify-center">
+                                                    {codesToShow.map((app) => (
+                                                        <span
+                                                            key={app.code}
+                                                            className={`px-1.5 py-[1px] rounded-full border text-[9px] font-semibold ${
+                                                                app.isMedia
+                                                                    ? "bg-violet-100 border-violet-200 text-violet-800"
+                                                                    : "bg-sky-100 border-sky-200 text-sky-800"
+                                                            }`}
+                                                        >
+                                                            {app.code}
+                                                        </span>
+                                                    ))}
+                                                    {overflow > 0 && (
+                                                        <span className="px-1 py-[1px] rounded-full bg-slate-100 text-slate-600 text-[9px] font-semibold">
+                                                            +{overflow}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
-                                    ))}
-                                </div>
-                                <p className="mt-2 text-[10px] text-slate-400">
-                                    En verde se marcan los días en que hubo al menos una sesión de radar activa para el curso seleccionado.
-                                </p>
+                                    )
+                                })}
+                            </div>
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
+                                <span className="inline-flex items-center gap-1">
+                                    <span className="w-3 h-3 rounded-full bg-sky-200 border border-sky-300" />
+                                    Básica (ej: 3BB, 2BA)
+                                </span>
+                                <span className="inline-flex items-center gap-1">
+                                    <span className="w-3 h-3 rounded-full bg-violet-200 border border-violet-300" />
+                                    Media (ej: 4MB, 3MA)
+                                </span>
                             </div>
                         </div>
                     </CardContent>
@@ -261,9 +327,11 @@ export function RadarAdminTabs({ courses, institutionId, role, globalAvg, distri
                 <Card>
                     <CardContent className="p-5 space-y-4">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                            <div>
-                                <h2 className="text-base font-semibold text-slate-900">Estadísticas generales por eje</h2>
-                                <p className="text-xs text-slate-500">
+                            <div className="min-w-0">
+                                <h2 className="text-sm sm:text-base font-semibold text-slate-900 leading-snug break-words">
+                                    Estadísticas generales por eje
+                                </h2>
+                                <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
                                     Promedios y distribución de respuestas considerando todos los cursos que han respondido el Radar.
                                 </p>
                             </div>
@@ -557,56 +625,62 @@ export function RadarAdminTabs({ courses, institutionId, role, globalAvg, distri
                                     </div>
 
                                     <div className="grid gap-3">
-                                        <div className="grid gap-3 md:grid-cols-3">
+                                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                             {AXIS_ORDER.slice(0, 3).map(ax => {
                                                 const avg = globalAvg[ax]
                                                 const dist = distribution?.[ax]
                                                 if (avg === undefined || !dist) return null
                                                 const meta = AXES_META[ax]
-                                                const total = dist.reduce((s, c) => s + c, 0)
+                                                const classes = getAxisAlertClasses(avg)
                                                 return (
-                                                    <div key={ax} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
-                                                        <div className="flex items-center justify-between mb-2">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-xl">{meta.emoji}</span>
-                                                                <p className="text-sm font-bold text-slate-800">{meta.label}</p>
+                                                    <div key={ax} className={`rounded-2xl border shadow-sm p-4 ${classes.card}`}>
+                                                        <div className="flex items-center justify-between mb-2 gap-2">
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                                <span className="text-xl shrink-0">{meta.emoji}</span>
+                                                                <p className={`text-xs sm:text-sm font-bold truncate ${classes.text}`}>
+                                                                    {meta.label}
+                                                                </p>
                                                             </div>
-                                                            <p className="text-lg font-extrabold" style={{ color: meta.color }}>
-                                                                {avg.toFixed(1)}<span className="text-[10px] text-slate-400">/5</span>
+                                                            <p className={`text-sm sm:text-lg font-extrabold ${classes.text}`}>
+                                                                {avg.toFixed(1)}
+                                                                <span className="text-[10px] text-slate-400">/5</span>
                                                             </p>
                                                         </div>
-                                                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-2">
+                                                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                                             <div
                                                                 className="h-full rounded-full"
-                                                                style={{ width: `${(avg / 5) * 100}%`, backgroundColor: meta.color }}
+                                                                style={{ width: `${(avg / 5) * 100}%`, backgroundColor: classes.bar }}
                                                             />
                                                         </div>
                                                     </div>
                                                 )
                                             })}
                                         </div>
-                                        <div className="grid gap-3 md:grid-cols-3 justify-items-center">
+                                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                             {AXIS_ORDER.slice(3).map(ax => {
                                                 const avg = globalAvg[ax]
                                                 const dist = distribution?.[ax]
                                                 if (avg === undefined || !dist) return null
                                                 const meta = AXES_META[ax]
-                                                const total = dist.reduce((s, c) => s + c, 0)
+                                                const classes = getAxisAlertClasses(avg)
                                                 return (
-                                                    <div key={ax} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 w-full md:w-auto">
-                                                        <div className="flex items-center justify-between mb-2">
-                                                            <div className="flex items-center gap-2">
-                                                                <span className="text-xl">{meta.emoji}</span>
-                                                                <p className="text-sm font-bold text-slate-800">{meta.label}</p>
+                                                    <div key={ax} className={`rounded-2xl border shadow-sm p-4 w-full ${classes.card}`}>
+                                                        <div className="flex items-center justify-between mb-2 gap-2">
+                                                            <div className="flex items-center gap-2 min-w-0">
+                                                                <span className="text-xl shrink-0">{meta.emoji}</span>
+                                                                <p className={`text-xs sm:text-sm font-bold truncate ${classes.text}`}>
+                                                                    {meta.label}
+                                                                </p>
                                                             </div>
-                                                            <p className="text-lg font-extrabold" style={{ color: meta.color }}>
-                                                                {avg.toFixed(1)}<span className="text-[10px] text-slate-400">/5</span>
+                                                            <p className={`text-sm sm:text-lg font-extrabold ${classes.text}`}>
+                                                                {avg.toFixed(1)}
+                                                                <span className="text-[10px] text-slate-400">/5</span>
                                                             </p>
                                                         </div>
-                                                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-2">
+                                                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                                                             <div
                                                                 className="h-full rounded-full"
-                                                                style={{ width: `${(avg / 5) * 100}%`, backgroundColor: meta.color }}
+                                                                style={{ width: `${(avg / 5) * 100}%`, backgroundColor: classes.bar }}
                                                             />
                                                         </div>
                                                     </div>

@@ -77,13 +77,13 @@ export default async function DuplaEstudiantesPage() {
                 <div className="space-y-6">
                     {basicCourses.length > 0 && (
                         <section className="space-y-3">
-                            <h2 className="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase">
+                            <h2 className="inline-flex items-center rounded-full border border-indigo-100 bg-indigo-50/70 px-4 py-1.5 text-[11px] font-semibold tracking-[0.18em] text-indigo-700 uppercase shadow-sm">
                                 Educación básica
                             </h2>
                             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                                 {basicCourses.map(course => (
                                     <Link key={course.id} href={`/dupla/estudiantes/curso/${course.id}`}>
-                                        <Card className="cursor-pointer hover:border-indigo-200 hover:shadow-md transition-all h-full">
+                                        <Card className="cursor-pointer border border-indigo-200 bg-white/80 hover:shadow-lg hover:bg-indigo-50/60 transition-all rounded-2xl h-full">
                                             <CardContent className="flex flex-col justify-between p-5 h-full">
                                                 <div className="flex items-start justify-between gap-2">
                                                     <div>
@@ -108,13 +108,13 @@ export default async function DuplaEstudiantesPage() {
 
                     {highCourses.length > 0 && (
                         <section className="space-y-3">
-                            <h2 className="text-xs font-semibold tracking-[0.18em] text-slate-500 uppercase">
+                            <h2 className="inline-flex items-center rounded-full border border-violet-100 bg-violet-50/70 px-4 py-1.5 text-[11px] font-semibold tracking-[0.18em] text-violet-700 uppercase shadow-sm">
                                 Educación media
                             </h2>
                             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                                 {highCourses.map(course => (
                                     <Link key={course.id} href={`/dupla/estudiantes/curso/${course.id}`}>
-                                        <Card className="cursor-pointer hover:border-indigo-200 hover:shadow-md transition-all h-full">
+                                        <Card className="cursor-pointer border border-violet-200 bg-white/80 hover:shadow-lg hover:bg-violet-50/60 transition-all rounded-2xl h-full">
                                             <CardContent className="flex flex-col justify-between p-5 h-full">
                                                 <div className="flex items-start justify-between gap-2">
                                                     <div>

@@ -14,7 +14,7 @@ import {
 
 interface Course { id: string; name: string; level: string; section: string | null; year: number; active: boolean }
 interface Teacher { id: string; name: string; last_name: string | null; role: string }
-interface Assignment { course_id: string; teacher_id: string }
+interface Assignment { course_id: string; teacher_id: string; is_head_teacher?: boolean }
 interface Student { id: string; name: string; last_name: string; course_id: string | null }
 
 const LEVELS = ["Pre-Kínder", "Kínder", "1°", "2°", "3°", "4°", "5°", "6°", "7°", "8°", "I°", "II°", "III°", "IV°"]
@@ -41,6 +41,8 @@ export function CoursesClient({ courses: initial, teachers, assignments: initial
     const [loading, setLoading] = useState(false)
     const [expandedId, setExpandedId] = useState<string | null>(null)
     const [yearFilter, setYearFilter] = useState<number>(CURRENT_YEAR)
+    // Por curso: { teacherId, isHeadTeacher } para el formulario "Asignar docente"
+    const [assignForm, setAssignForm] = useState<Record<string, { teacherId: string; isHeadTeacher: boolean }>>({})
 
     // All unique years present in data
     const allYears = useMemo(() =>
@@ -58,11 +60,14 @@ export function CoursesClient({ courses: initial, teachers, assignments: initial
     const isEdit = !!form.id
 
 
-    const getTeachersForCourse = (courseId: string) =>
+    const getTeachersForCourse = (courseId: string): { teacher: Teacher; is_head_teacher: boolean }[] =>
         assignments
             .filter(a => a.course_id === courseId)
-            .map(a => teachers.find(t => t.id === a.teacher_id))
-            .filter(Boolean) as Teacher[]
+            .map(a => {
+                const teacher = teachers.find(t => t.id === a.teacher_id)
+                return teacher ? { teacher, is_head_teacher: !!a.is_head_teacher } : null
+            })
+            .filter((x): x is { teacher: Teacher; is_head_teacher: boolean } => x !== null)
 
     const openCreate = () => { setForm(EMPTY_FORM); setShowForm(true) }
     const openEdit = (c: Course) => {
@@ -152,26 +157,44 @@ export function CoursesClient({ courses: initial, teachers, assignments: initial
         setConfirmToggle(null)
     }
 
-    const assignTeacher = async (courseId: string, teacherId: string) => {
+    const assignTeacher = async (courseId: string, teacherId: string, isHeadTeacher: boolean) => {
         const alreadyAssigned = assignments.some(a => a.course_id === courseId && a.teacher_id === teacherId)
         if (alreadyAssigned) return
 
         const { error } = await supabase
-            .from("course_teachers").insert({ course_id: courseId, teacher_id: teacherId })
+            .from("course_teachers")
+            .insert({ course_id: courseId, teacher_id: teacherId, is_head_teacher: isHeadTeacher })
         if (!error) {
-            setAssignments(prev => [...prev, { course_id: courseId, teacher_id: teacherId }])
+            setAssignments(prev => [...prev, { course_id: courseId, teacher_id: teacherId, is_head_teacher: isHeadTeacher }])
             const teacher = teachers.find(t => t.id === teacherId)
             const course = courses.find(c => c.id === courseId)
+            const roleLabel = isHeadTeacher ? " (profesor jefe)" : ""
             await logAdminAction({
                 action: "assign_teacher_to_course",
                 entityType: "course",
                 entityId: courseId,
-                entityDescription: `${course?.name ?? courseId} → ${teacher?.name ?? ""} ${teacher?.last_name ?? ""}`.trim(),
-                afterData: { courseId, teacherId },
+                entityDescription: `${course?.name ?? courseId} → ${teacher?.name ?? ""} ${teacher?.last_name ?? ""}${roleLabel}`.trim(),
+                afterData: { courseId, teacherId, is_head_teacher: isHeadTeacher },
             })
-            toast.success("Docente asignado.")
+            toast.success(isHeadTeacher ? "Docente asignado como profesor jefe." : "Docente asignado.")
         } else {
             toast.error("No se pudo asignar.")
+        }
+    }
+
+    const updateTeacherRole = async (courseId: string, teacherId: string, isHeadTeacher: boolean) => {
+        const { error } = await supabase
+            .from("course_teachers")
+            .update({ is_head_teacher: isHeadTeacher })
+            .eq("course_id", courseId)
+            .eq("teacher_id", teacherId)
+        if (!error) {
+            setAssignments(prev => prev.map(a =>
+                a.course_id === courseId && a.teacher_id === teacherId ? { ...a, is_head_teacher: isHeadTeacher } : a
+            ))
+            toast.success(isHeadTeacher ? "Rol actualizado a profesor jefe." : "Rol actualizado a profesor.")
+        } else {
+            toast.error("No se pudo actualizar el rol.")
         }
     }
 
@@ -356,12 +379,21 @@ export function CoursesClient({ courses: initial, teachers, assignments: initial
                                                     <p className="text-xs text-slate-400">Sin docentes asignados</p>
                                                 ) : (
                                                     <div className="flex flex-wrap gap-2">
-                                                        {assignedTeachers.map(t => (
+                                                        {assignedTeachers.map(({ teacher: t, is_head_teacher }) => (
                                                             <div key={t.id} className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-full pl-3 pr-1 py-1">
                                                                 <span className="text-xs font-medium text-slate-700">
                                                                     {t.name} {t.last_name ?? ""}
                                                                 </span>
                                                                 <span className="text-[10px] text-slate-400">({t.role})</span>
+                                                                <select
+                                                                    value={is_head_teacher ? "jefe" : "profesor"}
+                                                                    onChange={e => updateTeacherRole(c.id, t.id, e.target.value === "jefe")}
+                                                                    className="text-[10px] rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-200"
+                                                                    title="Rol en el curso"
+                                                                >
+                                                                    <option value="profesor">Profesor</option>
+                                                                    <option value="jefe">Profesor jefe</option>
+                                                                </select>
                                                                 <button onClick={() => removeTeacher(c.id, t.id)}
                                                                     className="ml-1 p-0.5 rounded-full hover:bg-red-50 hover:text-red-500 text-slate-400 transition-colors">
                                                                     <X className="w-3 h-3" />
@@ -371,18 +403,49 @@ export function CoursesClient({ courses: initial, teachers, assignments: initial
                                                     </div>
                                                 )}
                                                 {unassigned.length > 0 && (
-                                                    <select
-                                                        defaultValue=""
-                                                        onChange={e => { if (e.target.value) assignTeacher(c.id, e.target.value); e.target.value = "" }}
-                                                        className="mt-2 rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 max-w-xs"
-                                                    >
-                                                        <option value="" disabled>+ Asignar docente...</option>
-                                                        {unassigned.map(t => (
-                                                            <option key={t.id} value={t.id}>
-                                                                {t.name} {t.last_name ?? ""} ({t.role})
-                                                            </option>
-                                                        ))}
-                                                    </select>
+                                                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                                                        <select
+                                                            value={assignForm[c.id]?.teacherId ?? ""}
+                                                            onChange={e => setAssignForm(prev => ({
+                                                                ...prev,
+                                                                [c.id]: { teacherId: e.target.value, isHeadTeacher: prev[c.id]?.isHeadTeacher ?? false }
+                                                            }))}
+                                                            className="rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200 min-w-[180px]"
+                                                        >
+                                                            <option value="">Seleccionar docente...</option>
+                                                            {unassigned.map(t => (
+                                                                <option key={t.id} value={t.id}>
+                                                                    {t.name} {t.last_name ?? ""} ({t.role})
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                        <select
+                                                            value={assignForm[c.id]?.isHeadTeacher ? "jefe" : "profesor"}
+                                                            onChange={e => setAssignForm(prev => ({
+                                                                ...prev,
+                                                                [c.id]: { teacherId: prev[c.id]?.teacherId ?? "", isHeadTeacher: e.target.value === "jefe" }
+                                                            }))}
+                                                            className="rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                                                        >
+                                                            <option value="profesor">Solo profesor</option>
+                                                            <option value="jefe">Profesor jefe</option>
+                                                        </select>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="shrink-0"
+                                                            disabled={!assignForm[c.id]?.teacherId}
+                                                            onClick={() => {
+                                                                const teacherId = assignForm[c.id]?.teacherId
+                                                                if (teacherId) {
+                                                                    assignTeacher(c.id, teacherId, assignForm[c.id]?.isHeadTeacher ?? false)
+                                                                    setAssignForm(prev => { const next = { ...prev }; delete next[c.id]; return next })
+                                                                }
+                                                            }}
+                                                        >
+                                                            Asignar
+                                                        </Button>
+                                                    </div>
                                                 )}
                                             </div>
 

@@ -12,7 +12,7 @@ export interface ConvivenciaStats {
     activeAlerts: number
     activeConvivenciaRecords: number
     lowestClimateCourse: { courseName: string; score: number; label: string } | null
-    decSummary: { total: number; resolved: number }
+    decSummary: { total: number; resolved: number; lastMonth: number }
     convivenciaSummary: { total: number; closed: number }
     climateSummary: { coursesWithData: number }
     monthlyConvivenciaCounts: { monthKey: string; label: string; count: number }[]
@@ -38,6 +38,7 @@ export function ConvivenciaDashboardClient({ stats }: { stats: ConvivenciaStats 
                 {[
                     { value: activeAlerts, label: "Alertas activas", sub: "Requieren atención", icon: AlertTriangle, color: openDecs > 3 ? "bg-orange-500" : "bg-amber-500", href: undefined },
                     { value: activeConvivenciaRecords, label: "Registros de convivencia activos", sub: "Reg. abiertos", icon: FileText, color: "bg-violet-500", href: "/registros-convivencia" },
+                    { value: decSummary.lastMonth, label: "DEC último mes", sub: "Casos DEC en los últimos 30 días", icon: ShieldAlert, color: "bg-rose-500", href: "/convivencia/dec" },
                     { value: 0, label: "Curso con clima más bajo", sub: lowestClimateCourse ? `${lowestClimateCourse.courseName} · ${lowestClimateCourse.label}` : "Sin datos", icon: TrendingUp, color: "bg-indigo-500", href: "/convivencia/heatmap", isLowestClimateCard: true, lowestClimateScore: lowestClimateCourse?.score ?? null },
                 ].map((item) => {
                     const { value, label, sub, icon: Icon, color, href, isLowestClimateCard, lowestClimateScore } = item

@@ -55,12 +55,12 @@ export default async function AdminCursosPage() {
         if (s.course_id) countMap[s.course_id] = (countMap[s.course_id] ?? 0) + 1
     })
 
-    // Obtener asignaciones docente-curso
+    // Obtener asignaciones docente-curso (incl. si es profesor jefe)
     const courseIds = (courses ?? []).map(c => c.id)
     const { data: assignments } = courseIds.length > 0
         ? await supabase
             .from("course_teachers")
-            .select("course_id, teacher_id")
+            .select("course_id, teacher_id, is_head_teacher")
             .in("course_id", courseIds)
         : { data: [] }
 

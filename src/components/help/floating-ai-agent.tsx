@@ -22,6 +22,8 @@ type ChatMessage = {
 
 export function FloatingHelpAgent() {
   const [open, setOpen] = useState(false);
+  const [hideBubble, setHideBubble] = useState(false);
+  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [userProfile, setUserProfile] = useState<{ name: string; role: string } | null>(null);
@@ -31,12 +33,21 @@ export function FloatingHelpAgent() {
   const router = useRouter();
 
   useEffect(() => {
-    if (open) return;
+    if (open || hideBubble) return;
     const t = setInterval(() => {
       setPhraseIndex((i) => (i + 1) % ROTATING_PHRASES.length);
     }, 15000);
     return () => clearInterval(t);
-  }, [open]);
+  }, [open, hideBubble]);
+
+  // Limpiar timeout al desmontar
+  useEffect(() => {
+    return () => {
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -159,7 +170,7 @@ export function FloatingHelpAgent() {
     <div className="fixed bottom-6 right-24 z-40 flex flex-col items-end gap-1 transition-all duration-300">
       {/* Mensaje rotativo cerca del bot, con animación de diálogo (abajo → arriba) */}
       <AnimatePresence mode="wait">
-        {!open && (
+        {!open && !hideBubble && (
           <motion.div
             key="phrase"
             initial={{ opacity: 0, y: 6 }}
@@ -169,9 +180,25 @@ export function FloatingHelpAgent() {
             className="absolute right-4 bottom-full mb-1 w-max"
           >
             {/* Bocadillo de diálogo: cola desde la esquina inferior derecha hacia el bot */}
-            <div className="relative bg-white text-indigo-700 text-xs font-medium pl-4 pr-4 pt-3 pb-4 rounded-2xl rounded-br-md shadow-xl shadow-indigo-500/10 border border-indigo-100 flex items-center gap-2">
+            <div className="relative bg-white text-indigo-700 text-xs font-medium pl-3 pr-2 pt-2.5 pb-2.5 rounded-2xl rounded-br-md shadow-xl shadow-indigo-500/10 border border-indigo-100 flex items-center gap-2">
               <HelpCircle className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-              <span>{ROTATING_PHRASES[phraseIndex]}</span>
+              <span className="max-w-[190px] sm:max-w-xs">{ROTATING_PHRASES[phraseIndex]}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setHideBubble(true);
+                  if (hideTimeoutRef.current) {
+                    clearTimeout(hideTimeoutRef.current);
+                  }
+                  hideTimeoutRef.current = setTimeout(() => {
+                    setHideBubble(false);
+                  }, 5 * 60 * 1000); // 5 minutos
+                }}
+                className="ml-1 p-0.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors shrink-0"
+                aria-label="Cerrar mensaje de ayuda"
+              >
+                <X className="w-3 h-3" />
+              </button>
               {/* Cola del bocadillo: triángulo abajo a la derecha apuntando al bot */}
               <span
                 className="absolute -right-1 -bottom-2 w-4 h-4 rotate-45 bg-white border-r border-b border-indigo-100"

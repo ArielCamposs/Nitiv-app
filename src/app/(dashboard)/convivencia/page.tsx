@@ -28,6 +28,10 @@ export default async function ConvivenciaPage() {
     monthsAgo12.setMonth(now.getMonth() - 11)
     monthsAgo12.setDate(1)
     monthsAgo12.setHours(0, 0, 0, 0)
+
+    const oneMonthAgo = new Date(now)
+    oneMonthAgo.setMonth(now.getMonth() - 1)
+    oneMonthAgo.setHours(0, 0, 0, 0)
     // Parallel fetch (incidents solo para contar DECs abiertos; estadísticas DEC están en /convivencia/dec → Estadísticas)
     const [
         alerts,
@@ -35,7 +39,7 @@ export default async function ConvivenciaPage() {
         { data: convivenciaRecords },
     ] = await Promise.all([
         getActiveAlerts(),
-        supabase.from("incidents").select("id, resolved").eq("institution_id", iid).gte("incident_date", monthsAgo12.toISOString().split("T")[0]),
+        supabase.from("incidents").select("id, resolved, incident_date").eq("institution_id", iid).gte("incident_date", monthsAgo12.toISOString().split("T")[0]),
         supabase.from("convivencia_records").select("id, resolved, incident_date").eq("institution_id", iid).gte("incident_date", monthsAgo12.toISOString().split("T")[0]),
     ])
 
@@ -65,10 +69,15 @@ export default async function ConvivenciaPage() {
 
     const activeAlerts = filteredAlerts.length
 
-    const allIncidents = incidents ?? []
-    const openDecsCount = allIncidents.filter((i: { resolved: boolean }) => !i.resolved).length
+    const allIncidents = (incidents ?? []) as { resolved: boolean; incident_date: string }[]
+    const openDecsCount = allIncidents.filter((i) => !i.resolved).length
     const totalDecs12m = allIncidents.length
-    const resolvedDecs12m = allIncidents.filter((i: { resolved: boolean }) => i.resolved).length
+    const resolvedDecs12m = allIncidents.filter((i) => i.resolved).length
+
+    const decLastMonth = allIncidents.filter((i) => {
+        const d = new Date(i.incident_date)
+        return d >= oneMonthAgo
+    }).length
 
     // ── Curso con clima de aula más bajo + cursos con registro (getHeatmapData) ──
     let lowestClimateCourse: { courseName: string; score: number; label: string } | null = null
@@ -106,7 +115,7 @@ export default async function ConvivenciaPage() {
         activeAlerts,
         activeConvivenciaRecords,
         lowestClimateCourse,
-        decSummary: { total: totalDecs12m, resolved: resolvedDecs12m },
+        decSummary: { total: totalDecs12m, resolved: resolvedDecs12m, lastMonth: decLastMonth },
         convivenciaSummary: { total: totalConvivencia12m, closed: closedConvivencia12m },
         climateSummary: { coursesWithData: coursesWithClimateCount },
         monthlyConvivenciaCounts,

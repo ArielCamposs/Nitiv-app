@@ -297,7 +297,7 @@ export function DecForm({ students, headTeacherByCourse = {}, professionals = []
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 pb-10">
 
             {/* Indicador de pasos */}
             <div className="flex gap-2">
@@ -754,7 +754,7 @@ export function DecForm({ students, headTeacherByCourse = {}, professionals = []
             )}
 
             {/* Navegación entre pasos */}
-            <div className="flex justify-between gap-3">
+            <div className="mt-4 flex items-center justify-between gap-3">
                 {step > 1 && (
                     <Button variant="outline" onClick={() => setStep((s) => s - 1)}>
                         ← Anterior

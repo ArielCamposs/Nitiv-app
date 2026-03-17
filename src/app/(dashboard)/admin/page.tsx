@@ -229,7 +229,7 @@ export default async function AdminDashboardPage() {
                         {
                             href: "/admin/cursos",
                             label: "Gestionar cursos",
-                            desc: "Crear cursos y asignar estudiantes",
+                            desc: "Crear cursos, asignar docentes y estudiantes",
                             icon: BookOpen,
                             color: "text-blue-600 bg-blue-50",
                         },

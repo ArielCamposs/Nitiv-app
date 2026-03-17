@@ -45,7 +45,7 @@ const ADMIN_GROUPS: NavGroup[] = [
         label: "Gestión de Personas",
         items: [
             { title: "Usuarios", href: "/admin/usuarios", icon: UserCog },
-            { title: "Cursos", href: "/admin/estudiantes", icon: GraduationCap },
+            { title: "Estudiantes", href: "/admin/estudiantes", icon: GraduationCap },
             { title: "Cursos", href: "/admin/cursos", icon: School },
         ],
     },
