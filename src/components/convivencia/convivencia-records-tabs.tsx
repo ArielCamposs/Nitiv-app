@@ -1607,7 +1607,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                 <div className="space-y-6">
 
                     {/* List */}
-                    <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+                    <div className="bg-white rounded-2xl border shadow-sm overflow-visible">
                         <div className="px-6 py-4 border-b">
                             <h3 className="font-semibold text-slate-800">Todos los registros</h3>
                             <p className="text-xs text-slate-400 mt-0.5">
@@ -1679,6 +1679,11 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                 {filteredRecords.map(r => {
                                     const typeLabel = (r.type === "Otro" || r.type.startsWith("Otro:")) ? r.type : (RECORD_TYPES.find(t => t.value === r.type || t.label === r.type)?.label ?? r.type)
                                     const statusMeta = STATUS_LABELS[effectiveStatus(r)]
+                                    const involvedList: any[] = (r.convivencia_record_students ?? [])
+                                        .map((rs: any) => rs?.students)
+                                        .filter(Boolean)
+                                    const visibleStudents = involvedList.slice(0, 3)
+                                    const extraStudents = Math.max(involvedList.length - visibleStudents.length, 0)
                                     return (
                                         <div
                                             key={r.id}
@@ -1692,6 +1697,51 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${statusMeta.class}`}>{statusMeta.label}</span>
                                                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${SEVERITY_COLORS[r.severity] ?? "bg-slate-100 text-slate-600"}`}>{SEVERITY_LABELS[r.severity] ?? r.severity}</span>
                                                 {r.location && <span className="text-xs text-slate-500 truncate max-w-[120px]" title={r.location}>📍 {r.location}</span>}
+                                                {involvedList.length > 0 && (
+                                                    <div className="flex flex-wrap items-center gap-1 shrink-0">
+                                                        {visibleStudents.map((s: any) => {
+                                                            const name = `${s?.last_name ?? ""}, ${s?.name ?? ""}`.trim().replace(/^,|,$/g, "").trim()
+                                                            const getInitial = (val: unknown) => {
+                                                                const str = (val ?? "").toString().trim()
+                                                                if (!str) return ""
+                                                                // Quita tildes para que se vea como en la foto (A-Z).
+                                                                return str
+                                                                    .charAt(0)
+                                                                    .normalize("NFD")
+                                                                    .replace(/[\u0300-\u036f]/g, "")
+                                                                    .toUpperCase()
+                                                            }
+                                                            const initials = `${getInitial(s?.name)}${getInitial(s?.last_name)}`.replace(/[^A-Z]/g, "")
+                                                            const courseData = s?.courses ?? s?.course ?? students.find((st: Student) => st.id === s?.id)?.courses
+                                                            const courseLabel = courseData?.name
+                                                                ? `${courseData.name}${courseData.section ? " " + courseData.section : ""}`
+                                                                : "Sin curso"
+                                                            return (
+                                                                <span
+                                                                    key={s?.id}
+                                                                    className="group relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold shrink-0 cursor-default"
+                                                                    title={`${name} — ${courseLabel}`}
+                                                                >
+                                                                    {initials || "?"}
+                                                                        <span className="pointer-events-none absolute left-1/2 bottom-full z-20 mb-2 -translate-x-1/2 opacity-0 translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-y-0">
+                                                                        <span className="block w-max max-w-[220px] rounded-lg bg-slate-900 px-3 py-2 text-white shadow-lg">
+                                                                            <span className="block text-xs font-semibold text-white leading-tight">{name || "Estudiante"}</span>
+                                                                            <span className="block text-[11px] text-white/80 mt-0.5 leading-snug">{courseLabel}</span>
+                                                                        </span>
+                                                                    </span>
+                                                                </span>
+                                                            )
+                                                        })}
+                                                        {extraStudents > 0 && (
+                                                            <span
+                                                                className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-50 border border-slate-200 text-slate-600 text-xs font-bold shrink-0"
+                                                                title={`${extraStudents} estudiante(s) más`}
+                                                            >
+                                                                +{extraStudents}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                             <button
                                                 type="button"

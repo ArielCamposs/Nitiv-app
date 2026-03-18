@@ -20,6 +20,91 @@ const EMOTIONS = [
 type EmotionId = typeof EMOTIONS[number]["id"]
 const RISK_EMOTIONS: EmotionId[] = ["mal", "muy_mal"]
 
+type EmotionTagId =
+    | "cansancio"
+    | "melancolia"
+    | "nervios"
+    | "confusion"
+    | "esperanza"
+    | "frustracion"
+    | "verguenza"
+    | "impaciencia"
+    | "serenidad"
+    | "amor_carinio"
+    | "apatia"
+    | "orgullo"
+    | "ansiedad"
+    | "tristeza"
+    | "enfado"
+    | "calma"
+    | "tranquilidad"
+    | "emocionado"
+    | "felicidad"
+    | "gratitud"
+    | "miedo"
+    | "soledad"
+    | "aburrimiento"
+    | "motivacion"
+    | "esperanza2"
+    | "celos"
+    | "alivio"
+    | "satisfaccion"
+    | "decepcion"
+    | "culpa"
+    | "recelo"
+    | "sorpresa"
+    | "optimismo"
+
+type EmotionTag = {
+    id: EmotionTagId
+    label: string
+    emoji: string
+    suggested?: boolean
+    // Estilo para el chip seleccionado (no cambia lógica).
+    selectedBgClass: string
+    selectedTextClass: string
+}
+
+const EMOTION_TAGS_PRIMARY: EmotionTag[] = [
+    { id: "cansancio", label: "Cansancio", emoji: "😴", suggested: true, selectedBgClass: "bg-amber-50", selectedTextClass: "text-amber-700" },
+    { id: "melancolia", label: "Melancolía", emoji: "🌧️", suggested: true, selectedBgClass: "bg-indigo-50", selectedTextClass: "text-indigo-700" },
+    { id: "nervios", label: "Nervios", emoji: "😬", suggested: true, selectedBgClass: "bg-orange-50", selectedTextClass: "text-orange-700" },
+    { id: "confusion", label: "Confusión", emoji: "🤯", suggested: true, selectedBgClass: "bg-fuchsia-50", selectedTextClass: "text-fuchsia-700" },
+    { id: "esperanza", label: "Esperanza", emoji: "🌟", suggested: true, selectedBgClass: "bg-yellow-50", selectedTextClass: "text-yellow-700" },
+    { id: "frustracion", label: "Frustración", emoji: "😖", suggested: true, selectedBgClass: "bg-rose-50", selectedTextClass: "text-rose-700" },
+    { id: "verguenza", label: "Vergüenza", emoji: "😳", suggested: true, selectedBgClass: "bg-pink-50", selectedTextClass: "text-pink-700" },
+    { id: "impaciencia", label: "Impaciencia", emoji: "😤", suggested: true, selectedBgClass: "bg-red-50", selectedTextClass: "text-red-700" },
+    { id: "serenidad", label: "Serenidad", emoji: "🕊️", selectedBgClass: "bg-emerald-50", selectedTextClass: "text-emerald-700" },
+    { id: "amor_carinio", label: "Amor/Cariño", emoji: "💜", suggested: true, selectedBgClass: "bg-pink-50", selectedTextClass: "text-pink-700" },
+    { id: "apatia", label: "Apatía", emoji: "😒", selectedBgClass: "bg-slate-50", selectedTextClass: "text-slate-700" },
+    { id: "orgullo", label: "Orgullo", emoji: "💪", suggested: true, selectedBgClass: "bg-indigo-50", selectedTextClass: "text-indigo-700" },
+]
+
+// Lista extendida (32 en total). Incluye las de la imagen + adicionales.
+const EMOTION_TAGS_ALL: EmotionTag[] = [
+    ...EMOTION_TAGS_PRIMARY,
+    { id: "ansiedad", label: "Ansiedad", emoji: "😟", selectedBgClass: "bg-orange-50", selectedTextClass: "text-orange-700" },
+    { id: "tristeza", label: "Tristeza", emoji: "😔", selectedBgClass: "bg-blue-50", selectedTextClass: "text-blue-700" },
+    { id: "enfado", label: "Enfado", emoji: "😠", selectedBgClass: "bg-red-50", selectedTextClass: "text-red-700" },
+    { id: "calma", label: "Calma", emoji: "😌", selectedBgClass: "bg-green-50", selectedTextClass: "text-green-700" },
+    { id: "tranquilidad", label: "Tranquilidad", emoji: "🧘", selectedBgClass: "bg-emerald-50", selectedTextClass: "text-emerald-700" },
+    { id: "emocionado", label: "Emocionado/a", emoji: "🤩", selectedBgClass: "bg-violet-50", selectedTextClass: "text-violet-700" },
+    { id: "felicidad", label: "Felicidad", emoji: "😊", selectedBgClass: "bg-yellow-50", selectedTextClass: "text-yellow-700" },
+    { id: "gratitud", label: "Gratitud", emoji: "🙏", selectedBgClass: "bg-amber-50", selectedTextClass: "text-amber-700" },
+    { id: "miedo", label: "Miedo", emoji: "😰", selectedBgClass: "bg-sky-50", selectedTextClass: "text-sky-700" },
+    { id: "soledad", label: "Soledad", emoji: "😞", selectedBgClass: "bg-slate-50", selectedTextClass: "text-slate-700" },
+    { id: "aburrimiento", label: "Aburrimiento", emoji: "😑", selectedBgClass: "bg-neutral-50", selectedTextClass: "text-neutral-700" },
+    { id: "motivacion", label: "Motivación", emoji: "💪", selectedBgClass: "bg-indigo-50", selectedTextClass: "text-indigo-700" },
+    { id: "celos", label: "Celos", emoji: "😬", selectedBgClass: "bg-pink-50", selectedTextClass: "text-pink-700" },
+    { id: "alivio", label: "Alivio", emoji: "😮‍💨", selectedBgClass: "bg-emerald-50", selectedTextClass: "text-emerald-700" },
+    { id: "satisfaccion", label: "Satisfacción", emoji: "😃", selectedBgClass: "bg-emerald-50", selectedTextClass: "text-emerald-700" },
+    { id: "decepcion", label: "Decepción", emoji: "😞", selectedBgClass: "bg-slate-50", selectedTextClass: "text-slate-700" },
+    { id: "culpa", label: "Culpa", emoji: "😔", selectedBgClass: "bg-amber-50", selectedTextClass: "text-amber-700" },
+    { id: "recelo", label: "Recelo", emoji: "🤨", selectedBgClass: "bg-yellow-50", selectedTextClass: "text-yellow-700" },
+    { id: "sorpresa", label: "Sorpresa", emoji: "😮", selectedBgClass: "bg-violet-50", selectedTextClass: "text-violet-700" },
+    { id: "optimismo", label: "Optimismo", emoji: "🌞", selectedBgClass: "bg-yellow-50", selectedTextClass: "text-yellow-700" },
+]
+
 function getWeekNumber() {
     const now = new Date()
     const year = now.getFullYear()
@@ -63,6 +148,8 @@ export function EmotionSlider({ studentId, institutionId, alreadyLogged = false 
     const [anxietyValue, setAnxietyValue] = useState(3)
     const [saving, setSaving] = useState(false)
     const [submitted, setSubmitted] = useState(false)
+    const [selectedEmotionTags, setSelectedEmotionTags] = useState<EmotionTagId[]>([])
+    const [showAllEmotionTags, setShowAllEmotionTags] = useState(false)
     const router = useRouter()
     const supabase = createClient()
 
@@ -82,24 +169,50 @@ export function EmotionSlider({ studentId, institutionId, alreadyLogged = false 
     }
 
     const handleSubmit = async () => {
+        if (selectedEmotionTags.length < 3) {
+            toast.error("Selecciona 3 o 4 emociones antes de guardar.")
+            return
+        }
         setSaving(true)
         try {
             const { weekNumber, year } = getWeekNumber()
 
-            const { error } = await supabase.from("emotional_logs").insert({
+            const insertPayload = {
                 institution_id: institutionId,
                 student_id: studentId,
                 emotion: emotion.id,
                 stress_level: stressLevel,
                 anxiety_level: anxietyLevel,
+                emotion_tags: selectedEmotionTags,
                 type: "daily",
                 week_number: weekNumber,
                 year,
-            })
+            }
+
+            const { error } = await supabase.from("emotional_logs").insert(insertPayload)
             if (error) {
-                console.error("Supabase error:", error.message, error.details)
-                toast.error("No se pudo guardar tu registro. Intenta nuevamente.")
-                return
+                const msg = String(error.message || "")
+                // Caso típico: se desplegó el código pero aún no existe la columna en la BD
+                // o la "schema cache" del cliente está desactualizada.
+                if (msg.toLowerCase().includes("emotion_tags")) {
+                    // Retry sin emotion_tags para no bloquear el check-in.
+                    const { error: retryError } = await supabase.from("emotional_logs").insert({
+                        ...insertPayload,
+                        emotion_tags: undefined,
+                    })
+
+                    if (retryError) {
+                        console.error("Supabase error (retry):", retryError.message, retryError.details)
+                        toast.error("No se pudo guardar tu registro. Intenta nuevamente.")
+                        return
+                    }
+
+                    toast.info("Guardado sin emociones secundarias. Vuelve a recargar cuando la migración esté aplicada.")
+                } else {
+                    console.error("Supabase error:", error.message, error.details)
+                    toast.error("No se pudo guardar tu registro. Intenta nuevamente.")
+                    return
+                }
             }
 
             await supabase.from("points").insert({
@@ -140,6 +253,19 @@ export function EmotionSlider({ studentId, institutionId, alreadyLogged = false 
         } finally {
             setSaving(false)
         }
+    }
+
+    const toggleEmotionTag = (tagId: EmotionTagId) => {
+        setSelectedEmotionTags((prev) => {
+            if (prev.includes(tagId)) {
+                return prev.filter((t) => t !== tagId)
+            }
+            if (prev.length >= 4) {
+                toast.info("Máximo 4 emociones. Si quieres, quita una para seleccionar otra.")
+                return prev
+            }
+            return [...prev, tagId]
+        })
     }
 
     if (alreadyLogged || submitted) {
@@ -316,6 +442,60 @@ export function EmotionSlider({ studentId, institutionId, alreadyLogged = false 
                         <div className="flex justify-between text-xs text-gray-400">
                             <span>Muy poco</span>
                             <span>Muy alto</span>
+                        </div>
+                    </div>
+
+                    {/* Emociones secundarias (tags) - al final */}
+                    <div className="space-y-3 px-1 pt-1">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <label className="text-sm font-medium text-slate-700">
+                                    Selecciona 3 o 4 emociones
+                                </label>
+                                <p className="text-[11px] text-slate-400 mt-1">
+                                    <span className="mr-1">✨</span>Las emociones con <span className="mr-1">✨</span> son sugerencias basadas en tu bienestar. Puedes elegir cualquiera.
+                                </p>
+                            </div>
+                            <div className="shrink-0 text-xs font-semibold text-slate-500 bg-slate-50 border border-slate-200 rounded-full px-2.5 py-1">
+                                {selectedEmotionTags.length}/4
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            {(showAllEmotionTags ? EMOTION_TAGS_ALL : EMOTION_TAGS_PRIMARY).map((tag) => {
+                                const selected = selectedEmotionTags.includes(tag.id)
+                                return (
+                                    <button
+                                        key={tag.id}
+                                        type="button"
+                                        onClick={() => toggleEmotionTag(tag.id)}
+                                        className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-all ${
+                                            selected
+                                                ? `border-indigo-200 ${tag.selectedBgClass} ${tag.selectedTextClass}`
+                                                : "border-slate-200 bg-white/70 text-slate-700 hover:border-indigo-200"
+                                        }`}
+                                        title={tag.label}
+                                    >
+                                        <span className="text-base">{tag.emoji}</span>
+                                        <span className="truncate">{tag.label}</span>
+                                        {tag.suggested && (
+                                            <span className="ml-auto text-[14px] opacity-70">
+                                                ✨
+                                            </span>
+                                        )}
+                                    </button>
+                                )
+                            })}
+                        </div>
+
+                        <div className="flex justify-center">
+                            <button
+                                type="button"
+                                onClick={() => setShowAllEmotionTags((v) => !v)}
+                                className="text-xs font-medium text-indigo-600 hover:underline"
+                            >
+                                {showAllEmotionTags ? "Ver menos emociones" : "Ver todas las emociones (32)"}
+                            </button>
                         </div>
                     </div>
 

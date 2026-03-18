@@ -127,6 +127,9 @@ export async function submitRadarResponse(
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { success: false, error: "No autenticado" }
 
+    let responseId: string | null = null
+    let createdResponse = false
+
     const { data: response, error: respError } = await supabase
         .from("radar_responses")
         .insert({ session_id: sessionId, student_id: studentId, institution_id: institutionId })
@@ -134,22 +137,69 @@ export async function submitRadarResponse(
         .single()
 
     if (respError) {
-        if (respError.code === "23505") return { success: false, error: "Ya completaste este cuestionario." }
-        return { success: false, error: respError.message }
+        // Si el estudiante hace submit muy rápido, puede dispararse más de una request.
+        // En ese caso, la segunda suele chocar con el constraint único.
+        if (respError.code === "23505") {
+            const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+            let existingId: string | null = null
+            let lastErr: any = null
+
+            // Reintenta porque la segunda request puede llegar antes de que la primera se refleje.
+            for (let i = 0; i < 3; i++) {
+                const { data: existing, error: existingError } = await supabase
+                    .from("radar_responses")
+                    .select("id")
+                    .eq("session_id", sessionId)
+                    .eq("student_id", studentId)
+                    .eq("institution_id", institutionId)
+                    .maybeSingle()
+
+                lastErr = existingError
+                if (existing?.id) {
+                    existingId = existing.id
+                    break
+                }
+                await sleep(150)
+            }
+
+            if (!existingId) {
+                return { success: false, error: "Ya completaste este cuestionario." }
+            }
+
+            responseId = existingId
+        } else {
+            return { success: false, error: respError.message }
+        }
+    } else {
+        responseId = response?.id ?? null
+        createdResponse = true
+    }
+
+    if (!responseId) {
+        return { success: false, error: "No se pudo generar la respuesta del Radar." }
     }
 
     const { error: itemsError } = await supabase
         .from("radar_response_items")
         .insert(answers.map(a => ({
-            response_id: response.id,
+            response_id: responseId,
             question_key: a.question_key,
             casel_axis: a.casel_axis,
             score: a.score,
         })))
 
     if (itemsError) {
-        // Limpiar la fila huérfana para que el estudiante pueda reintentar
-        await supabase.from("radar_responses").delete().eq("id", response.id)
+        // Si las items ya existen (submit duplicado), no tratemos esto como error bloqueante.
+        if (itemsError.code === "23505") {
+            return { success: true }
+        }
+
+        // Solo limpiar la respuesta si nosotros la creamos y el guardado de items falló.
+        // Si la respuesta ya existía (request duplicada), borrar podría eliminar datos del otro request.
+        if (createdResponse) {
+            await supabase.from("radar_responses").delete().eq("id", responseId)
+        }
         return { success: false, error: "Error al guardar las respuestas. Por favor intenta de nuevo." }
     }
 

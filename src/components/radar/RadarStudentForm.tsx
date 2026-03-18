@@ -71,8 +71,20 @@ export function RadarStudentForm({ sessionId, studentId, institutionId, period }
             const result = await submitRadarResponse(sessionId, studentId, institutionId,
                 QUESTIONS.map(q => ({ question_key: q.key, casel_axis: q.axis, score: finalAnswers[q.key]! }))
             )
-            if (result.success) setStep(total)
+            if (result.success) {
+                toast.success("¡Radar enviado correctamente! Gracias por tu respuesta.")
+                setStep(total)
+                return
+            }
             else {
+                // Si por condición de carrera ya existía la respuesta,
+                // igual mostramos una confirmación en vez de un error bloqueante.
+                if ((result.error ?? "").toLowerCase().includes("ya completaste")) {
+                    toast.info("Tu respuesta ya estaba registrada. Gracias.")
+                    setStep(total)
+                    return
+                }
+
                 toast.error(result.error ?? "Error al enviar el cuestionario.")
                 submittingRef.current = false
             }
@@ -190,11 +202,12 @@ export function RadarStudentForm({ sessionId, studentId, institutionId, period }
                                 onClick={() => {
                                     const newAnswers = { ...answers, [q.key]: opt.score }
                                     setAnswers(newAnswers)
+                                    // Importante: en la última pregunta NO enviamos automáticamente.
+                                    // El estudiante debe apretar sí o sí el botón "Finalizar".
+                                    if (step === total - 1) return
+
                                     // Auto-avanzar con las respuestas actualizadas (evita stale closure)
-                                    setTimeout(() => {
-                                        if (step === total - 1) handleSubmit(newAnswers)
-                                        else setStep(s => s + 1)
-                                    }, 380)
+                                    setTimeout(() => setStep(s => s + 1), 380)
                                 }}
                                 className="flex flex-col items-center gap-2 py-4 rounded-xl border-2 transition-all text-center"
                                 style={isSelected
