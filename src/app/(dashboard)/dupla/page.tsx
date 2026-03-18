@@ -118,9 +118,9 @@ export default async function DuplaPage() {
         alertTypeCounts[a.type] = (alertTypeCounts[a.type] ?? 0) + 1
     }
     const typeLabels: Record<string, string> = {
-        registros_negativos: "Emoc. negativa",
-        discrepancia_docente: "Discrepancia",
-        sin_registro: "Sin registro",
+        registros_negativos: "Emoción negativa",
+        discrepancia_docente: "Discrepancia docente",
+        sin_registro: "Sin check-in",
         comportamiento: "Conducta",
         otro: "Otro",
     }

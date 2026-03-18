@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import {
     BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -40,9 +40,9 @@ const EMOTION_LABELS: Record<string, string> = {
 }
 
 const ALERT_TYPE_LABELS: Record<string, string> = {
-    registros_negativos: "Emoc. negativa",
-    discrepancia_docente: "Discrepancia",
-    sin_registro: "Sin registro",
+    registros_negativos: "Emoción negativa",
+    discrepancia_docente: "Discrepancia docente",
+    sin_registro: "Sin check-in",
     comportamiento: "Conducta",
     otro: "Otro",
 }
@@ -101,6 +101,21 @@ export function DuplaDashboardClient({ stats }: { stats: DuplaStats }) {
                     : "text-rose-600"
 
     const alertTypesSorted = [...alertsByType].sort((a, b) => b.count - a.count)
+
+    // Ajuste responsive para etiquetas del eje Y (nombres de cursos largos).
+    // En tablet el ancho disponible baja y los ticks se recortan si mantenemos un width fijo.
+    const [viewportWidth, setViewportWidth] = useState<number>(0)
+    useEffect(() => {
+        const update = () => setViewportWidth(window.innerWidth)
+        update()
+        window.addEventListener("resize", update)
+        return () => window.removeEventListener("resize", update)
+    }, [])
+
+    const isTablet = viewportWidth > 0 && viewportWidth <= 768
+    const yAxisWidth = isTablet ? 160 : 120
+    const yAxisFontSize = isTablet ? 7 : 8
+    const yAxisTickDy = isTablet ? 9 : 10
 
     return (
         <div className="space-y-6">
@@ -205,8 +220,71 @@ export function DuplaDashboardClient({ stats }: { stats: DuplaStats }) {
             </div>
 
             {/* ── Row 3: Tendencia semanal + Clima de aula ── */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {/* Tendencia 7 días */}
+            {/* En tablet conviene que "Clima por curso" ocupe todo el ancho
+               (en lugar de partir a 2 columnas en `sm`), para que las etiquetas
+               no queden recortadas. */}
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                {/* Clima por curso (primero en tablet) */}
+                <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Clima de aula por curso — últimos 28 días</p>
+                    {climatePorCurso.length > 0 ? (
+                        <ResponsiveContainer
+                            width="100%"
+                            height={
+                                // En tablet el alto real disponible es menor; si el chart no crece,
+                                // Recharts termina recortando ticks/etiquetas del eje Y.
+                                Math.max(
+                                    isTablet ? 220 : 160,
+                                    climatePorCurso.length * (isTablet ? 42 : 36),
+                                )
+                            }
+                        >
+                            <BarChart
+                                data={climatePorCurso}
+                                layout="vertical"
+                                margin={{ top: 4, right: 16, bottom: 4, left: 8 }}
+                            >
+                                <XAxis type="number" domain={[0, 4]} tick={{ fontSize: 10, fill: "#94a3b8" }} />
+                                <YAxis
+                                    type="category"
+                                    dataKey="curso"
+                                    width={yAxisWidth}
+                                    interval={0}
+                                    tickMargin={yAxisFontSize === 8 ? 6 : 8}
+                                    // Render personalizado para “wrap” en 2 líneas.
+                                    tick={(props: any) => {
+                                        const { x, y, payload } = props
+                                        const fullText: string = String(payload?.value ?? "")
+                                        const parts = fullText.split(" ")
+                                        const line1 = parts.slice(0, Math.max(1, Math.ceil(parts.length / 2))).join(" ")
+                                        const line2 = parts.slice(Math.max(1, Math.ceil(parts.length / 2))).join(" ")
+
+                                        return (
+                                            <text x={x} y={y} textAnchor="end" fill="#64748b" fontSize={yAxisFontSize}>
+                                                <tspan x={x} dy={0}>{line1}</tspan>
+                                                {line2 ? <tspan x={x} dy={yAxisTickDy}>{line2}</tspan> : null}
+                                            </text>
+                                        )
+                                    }}
+                                />
+                                <Tooltip content={<ChartTooltip />} />
+                                <Bar dataKey="score" name="Prom. clima" radius={[0, 4, 4, 0]}>
+                                    {climatePorCurso.map((entry, i) => (
+                                        <Cell key={i}
+                                            fill={entry.score >= 3.5 ? "#10b981"
+                                                : entry.score >= 2.5 ? "#f59e0b"
+                                                    : "#ef4444"}
+                                        />
+                                    ))}
+                                </Bar>
+                            </BarChart>
+                        </ResponsiveContainer>
+                    ) : (
+                        <div className="flex h-36 items-center justify-center text-xs text-slate-400">Sin registros de docentes</div>
+                    )}
+                </div>
+
+                {/* Tendencia 7 días (segunda tarjeta en tablet) */}
                 <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
                     <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Tendencia check-ins — últimas 4 semanas</p>
                     <ResponsiveContainer width="100%" height={160}>
@@ -239,35 +317,6 @@ export function DuplaDashboardClient({ stats }: { stats: DuplaStats }) {
                             <div className="w-2.5 h-2.5 rounded-full bg-[#ef4444]" /> Muy Mal
                         </div>
                     </div>
-                </div>
-
-                {/* Clima por curso */}
-                <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Clima de aula por curso — últimos 28 días</p>
-                    {climatePorCurso.length > 0 ? (
-                        <ResponsiveContainer width="100%" height={Math.max(160, climatePorCurso.length * 28)}>
-                            <BarChart
-                                data={climatePorCurso}
-                                layout="vertical"
-                                margin={{ top: 0, right: 16, bottom: 0, left: 0 }}
-                            >
-                                <XAxis type="number" domain={[0, 4]} tick={{ fontSize: 10, fill: "#94a3b8" }} />
-                                <YAxis type="category" dataKey="curso" tick={{ fontSize: 9, fill: "#64748b" }} width={52} />
-                                <Tooltip content={<ChartTooltip />} />
-                                <Bar dataKey="score" name="Prom. clima" radius={[0, 4, 4, 0]}>
-                                    {climatePorCurso.map((entry, i) => (
-                                        <Cell key={i}
-                                            fill={entry.score >= 3.5 ? "#10b981"
-                                                : entry.score >= 2.5 ? "#f59e0b"
-                                                    : "#ef4444"}
-                                        />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
-                    ) : (
-                        <div className="flex h-36 items-center justify-center text-xs text-slate-400">Sin registros de docentes</div>
-                    )}
                 </div>
             </div>
 

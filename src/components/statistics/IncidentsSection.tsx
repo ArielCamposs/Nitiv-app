@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
     BarChart,
@@ -16,7 +17,7 @@ import {
     Cell,
     Legend,
 } from "recharts"
-import { ShieldAlert, AlertTriangle, TrendingUp, Users, FileWarning, Calendar, ChartPie, BarChart3, ListOrdered } from "lucide-react"
+import { ShieldAlert, AlertTriangle, TrendingUp, Users, FileWarning, Calendar, ChartPie, BarChart3, ListOrdered, ExternalLink } from "lucide-react"
 
 type CountByLabel = { label: string; count: number }
 type IncidentByMonth = { month: string; count: number }
@@ -68,6 +69,7 @@ function formatMonth(key: string) {
 }
 
 export function IncidentsSection({ incidents, days }: Props) {
+    const router = useRouter()
     const total = incidents.byMonth.reduce((s, m) => s + m.count, 0)
         || incidents.bySeverity.reduce((s, x) => s + x.count, 0)
         || incidents.byType.reduce((s, x) => s + x.count, 0)
@@ -346,12 +348,17 @@ export function IncidentsSection({ incidents, days }: Props) {
                                         <th className="pb-2 pr-2">Severidad</th>
                                         <th className="pb-2 pr-2">Curso</th>
                                         <th className="pb-2">Fecha</th>
+                                        <th className="pb-2" />
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {incidents.recent.map((inc) => (
-                                        <tr key={inc.id} className="border-b border-slate-100">
-                                            <td className="py-2 pr-2 font-mono text-xs text-slate-600">
+                                        <tr
+                                            key={inc.id}
+                                            onClick={() => router.push(`/dec/${inc.id}`)}
+                                            className="border-b border-slate-100 cursor-pointer hover:bg-indigo-50/60 transition-colors group"
+                                        >
+                                            <td className="py-2 pr-2 font-mono text-xs text-indigo-600 font-semibold group-hover:underline">
                                                 {inc.folio ?? inc.id.slice(0, 8)}
                                             </td>
                                             <td className="py-2 pr-2 text-slate-700">
@@ -375,6 +382,9 @@ export function IncidentsSection({ incidents, days }: Props) {
                                                     month: "short",
                                                     year: "2-digit",
                                                 })}
+                                            </td>
+                                            <td className="py-2 pl-2">
+                                                <ExternalLink className="h-3.5 w-3.5 text-slate-300 group-hover:text-indigo-500 transition-colors" />
                                             </td>
                                         </tr>
                                     ))}

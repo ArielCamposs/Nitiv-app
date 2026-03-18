@@ -54,6 +54,69 @@ export async function toggleRadarSession(
     return { success: true }
 }
 
+export async function getRadarSessionSummary(sessionId: string): Promise<{
+    success: boolean
+    data?: {
+        activatedAt: string
+        responseCount: number
+        avgByAxis: Partial<Record<string, number>>
+        courseName: string
+        period: string
+    }
+    error?: string
+}> {
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { success: false, error: "No autenticado" }
+
+    const { data: session } = await supabase
+        .from("radar_sessions")
+        .select("id, period, activated_at, course_id, courses(name, section)")
+        .eq("id", sessionId)
+        .single()
+
+    if (!session) return { success: false, error: "Sesión no encontrada" }
+
+    const course = (session as any).courses
+    const courseName = course
+        ? `${course.name}${course.section ? " " + course.section : ""}`
+        : "Curso"
+
+    const { data: responses } = await supabase
+        .from("radar_responses")
+        .select("id")
+        .eq("session_id", sessionId)
+
+    const responseIds = (responses ?? []).map(r => r.id)
+
+    const { data: items } = responseIds.length > 0
+        ? await supabase
+            .from("radar_response_items")
+            .select("casel_axis, score")
+            .in("response_id", responseIds)
+        : { data: [] as { casel_axis: string; score: number }[] }
+
+    const AXES = ["ac", "ag", "cs", "hr", "td"]
+    const avgByAxis: Partial<Record<string, number>> = {}
+    for (const ax of AXES) {
+        const vals = (items ?? []).filter(i => i.casel_axis === ax).map(i => i.score)
+        if (vals.length) {
+            avgByAxis[ax] = Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10
+        }
+    }
+
+    return {
+        success: true,
+        data: {
+            activatedAt: session.activated_at,
+            responseCount: responseIds.length,
+            avgByAxis,
+            courseName,
+            period: session.period,
+        },
+    }
+}
+
 export async function submitRadarResponse(
     sessionId: string,
     studentId: string,

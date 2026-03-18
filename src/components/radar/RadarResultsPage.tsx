@@ -131,7 +131,7 @@ export async function RadarResultsPage({ params, role }: Props) {
     return (
         <main className="min-h-screen bg-slate-50">
             <div className="mx-auto max-w-2xl px-4 py-8 space-y-5">
-                <Link href={`/${role}/radar`} className="flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors w-fit">
+                <Link href={`/${role}/radar?tab=aplicacion`} className="flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-800 transition-colors w-fit">
                     <ArrowLeft className="w-4 h-4" /> Volver a Radar
                 </Link>
 
