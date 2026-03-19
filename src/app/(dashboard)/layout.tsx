@@ -8,6 +8,7 @@ import { DecBadgeProvider } from "@/context/dec-badge-context"
 import { ChatUnreadProvider } from "@/context/chat-unread-context"
 import { FloatingChat } from "@/components/chat/floating-chat"
 import { FloatingHelpAgent } from "@/components/help/floating-ai-agent"
+import { PresenceProvider } from "@/context/presence-context"
 
 export const dynamic = "force-dynamic"
 
@@ -53,8 +54,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
     return (
         <DecBadgeProvider>
             <ChatUnreadProvider userId={user.id}>
-                <div className="min-h-screen bg-white">
-                    {/* Sidebar condicional — oculto al imprimir */}
+                <PresenceProvider userId={user.id} institutionId={profile?.institution_id || ""}>
+                    <div className="min-h-screen bg-white">
+                        {/* Sidebar condicional — oculto al imprimir */}
                     <div className="print:hidden">
                         {isAdmin
                             ? <AdminSidebar userId={user.id} institutionName={institutionName} institutionLogoUrl={institutionLogoUrl} />
@@ -88,7 +90,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
                     {/* Chat flotante — oculto al imprimir */}
                     {!isStudent && <div className="print:hidden"><FloatingChat userId={user.id} /></div>}
                     {!isStudent && <div className="print:hidden"><FloatingHelpAgent /></div>}
-                </div>
+                    </div>
+                </PresenceProvider>
             </ChatUnreadProvider>
         </DecBadgeProvider>
     )

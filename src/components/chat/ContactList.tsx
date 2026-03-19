@@ -45,14 +45,16 @@ interface ContactListProps {
     onOpenChat: (contactId: string) => void
     unreadMap: Record<string, number>
     isOnline: (id: string) => boolean
+    activeConversationId?: string
     onOpenMailboxThreadModal?: (role: string, roleLabel: string) => void
 }
 
-function ContactItem({ contact, onOpenChat, unread, isOnline }: {
+function ContactItem({ contact, onOpenChat, unread, isOnline, isActive }: {
     contact: Contact
     onOpenChat: (id: string) => void
     unread: number
     isOnline: boolean
+    isActive: boolean
 }) {
     const fullName = contact.last_name ? `${contact.name} ${contact.last_name}` : contact.name
     const initials = `${contact.name[0] ?? ""}${contact.last_name?.[0] ?? ""}`.toUpperCase()
@@ -71,7 +73,10 @@ function ContactItem({ contact, onOpenChat, unread, isOnline }: {
     return (
         <button
             onClick={() => onOpenChat(contact.id)}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 transition-colors text-left"
+            className={cn(
+                "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-left",
+                isActive ? "bg-primary/5 border border-primary/20" : "hover:bg-slate-50"
+            )}
         >
             <div className="relative shrink-0">
                 <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
@@ -108,13 +113,14 @@ function ContactItem({ contact, onOpenChat, unread, isOnline }: {
     )
 }
 
-function RoleGroup({ group, contacts, onOpenChat, unreadMap, isOnline, defaultOpen = false, onOpenMailboxThreadModal }: {
+function RoleGroup({ group, contacts, onOpenChat, unreadMap, isOnline, defaultOpen = false, activeConversationId, onOpenMailboxThreadModal }: {
     group: typeof ROLE_GROUPS[0]
     contacts: Contact[]
     onOpenChat: (id: string) => void
     unreadMap: Record<string, number>
     isOnline: (id: string) => boolean
     defaultOpen?: boolean
+    activeConversationId?: string
     onOpenMailboxThreadModal?: (role: string, roleLabel: string) => void
 }) {
     const [open, setOpen] = useState(defaultOpen)
@@ -122,6 +128,7 @@ function RoleGroup({ group, contacts, onOpenChat, unreadMap, isOnline, defaultOp
     const groupUnread = contacts.reduce(
         (acc, c) => acc + (unreadMap[c.conversationId ?? ""] ?? 0), 0
     )
+    const onlineCount = contacts.filter(c => isOnline(c.id)).length
 
     return (
         <div className="border-b border-slate-100 last:border-b-0">
@@ -134,14 +141,16 @@ function RoleGroup({ group, contacts, onOpenChat, unreadMap, isOnline, defaultOp
                 <span className="flex-1 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
                     {group.label}
                 </span>
-                <span className="text-xs text-slate-400">{contacts.length}</span>
+                <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 rounded-md whitespace-nowrap">
+                    {onlineCount}/{contacts.length} en línea
+                </span>
                 {groupUnread > 0 && !open && (
-                    <span className="bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+                    <span className="bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center ml-1">
                         {groupUnread}
                     </span>
                 )}
                 <ChevronDown className={cn(
-                    "w-3.5 h-3.5 text-slate-400 transition-transform shrink-0",
+                    "w-3.5 h-3.5 text-slate-400 transition-transform shrink-0 ml-1",
                     open ? "rotate-180" : ""
                 )} />
             </button>
@@ -168,6 +177,7 @@ function RoleGroup({ group, contacts, onOpenChat, unreadMap, isOnline, defaultOp
                             onOpenChat={onOpenChat}
                             unread={unreadMap[c.conversationId ?? ""] ?? 0}
                             isOnline={isOnline(c.id)}
+                            isActive={c.conversationId === activeConversationId}
                         />
                     ))}
                 </div>
@@ -176,7 +186,7 @@ function RoleGroup({ group, contacts, onOpenChat, unreadMap, isOnline, defaultOp
     )
 }
 
-export function ContactList({ contacts, currentUserId, onOpenChat, unreadMap, isOnline, onOpenMailboxThreadModal }: ContactListProps) {
+export function ContactList({ contacts, currentUserId, onOpenChat, unreadMap, isOnline, activeConversationId, onOpenMailboxThreadModal }: ContactListProps) {
     if (contacts.length === 0) {
         return (
             <div className="py-12 text-center text-slate-400">
@@ -208,6 +218,7 @@ export function ContactList({ contacts, currentUserId, onOpenChat, unreadMap, is
                     onOpenChat={onOpenChat}
                     unreadMap={unreadMap}
                     isOnline={isOnline}
+                    activeConversationId={activeConversationId}
                     onOpenMailboxThreadModal={onOpenMailboxThreadModal}
                     defaultOpen={
                         firstWithUnread?.group.role === group.role ||
@@ -223,6 +234,7 @@ export function ContactList({ contacts, currentUserId, onOpenChat, unreadMap, is
                     onOpenChat={onOpenChat}
                     unreadMap={unreadMap}
                     isOnline={isOnline}
+                    activeConversationId={activeConversationId}
                     defaultOpen={false}
                 />
             )}

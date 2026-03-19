@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useChat } from "@/hooks/useChat"
 import { useChatUnread } from "@/context/chat-unread-context"
 import { ChatWindow } from "@/components/chat/ChatWindow"
+import { usePresence } from "@/context/presence-context"
 import { ArrowLeft, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -13,6 +14,10 @@ import { formatTimeAgo } from "@/lib/time-utils"
 const AVAILABILITY_DOT: Record<string, string> = {
     disponible: "bg-green-500", en_clase: "bg-blue-500",
     en_reunion: "bg-yellow-500", ausente: "bg-slate-400",
+}
+const AVAILABILITY_LABEL: Record<string, string> = {
+    disponible: "Disponible", en_clase: "En clase",
+    en_reunion: "En reunión", ausente: "Ausente",
 }
 const ROLE_LABEL: Record<string, string> = {
     admin: "Administrador", director: "Director", inspector: "Inspector",
@@ -32,6 +37,7 @@ export default function ConversationPage() {
     const inputRef = useRef<HTMLInputElement>(null)
     const { messages, loading, sendMessage } = useChat(conversationId)
     const { markAsRead } = useChatUnread()
+    const { isOnline } = usePresence()
 
     useEffect(() => {
         const init = async () => {
@@ -98,7 +104,15 @@ export default function ConversationPage() {
     const otherName = otherUser
         ? otherUser.last_name ? `${otherUser.name} ${otherUser.last_name}` : otherUser.name
         : "Chat"
-    const dotColor = availability ? AVAILABILITY_DOT[availability.status] : null
+
+    const isOtherOnline = otherUser ? isOnline(otherUser.id) : false
+    const dotColor = isOtherOnline 
+        ? (availability?.status ? AVAILABILITY_DOT[availability.status] : "bg-green-500") 
+        : "bg-slate-300"
+    
+    const presenceLabel = isOtherOnline
+        ? (availability?.status ? AVAILABILITY_LABEL[availability.status] : "En línea")
+        : "Desconectado"
 
     // For relative time updates
     const [, setTick] = useState(0)
@@ -108,10 +122,10 @@ export default function ConversationPage() {
     }, [])
 
     return (
-        <div className="flex flex-col h-[calc(100vh-0px)] md:h-screen max-w-2xl mx-auto">
+        <div className="flex flex-col h-full w-full bg-slate-50 relative">
             <div className="flex items-center gap-3 px-4 py-3 border-b bg-white shrink-0 shadow-sm">
                 <button onClick={() => router.push("/chat")}
-                    className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors">
+                    className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors md:hidden">
                     <ArrowLeft className="w-4 h-4 text-slate-600" />
                 </button>
                 <div className="relative shrink-0">
@@ -127,7 +141,9 @@ export default function ConversationPage() {
                     {otherUser && (
                         <div className="text-xs text-slate-400 flex items-center gap-1">
                             <span>{ROLE_LABEL[otherUser.role] ?? otherUser.role}</span>
-                            {availability?.updated_at && (
+                            <span>•</span>
+                            <span>{presenceLabel}</span>
+                            {availability?.updated_at && !isOtherOnline && (
                                 <>
                                     <span>•</span>
                                     <span>{formatTimeAgo(availability.updated_at)}</span>
