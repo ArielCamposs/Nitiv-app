@@ -1,9 +1,8 @@
 import { createClient } from "@/lib/supabase/server"
 import { notFound, redirect } from "next/navigation"
 import { CasoDetailClient } from "@/components/casos/caso-detail-client"
-import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { BackButton } from "@/components/ui/back-button"
+import { CloseCaseButton } from "@/components/casos/close-case-button"
 
 export default async function MonitoreoDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
@@ -43,35 +42,48 @@ export default async function MonitoreoDetailPage({ params }: { params: Promise<
         return notFound()
     }
 
-    const { data: actions, error: actError } = await supabase
-        .from("student_case_actions")
-        .select(`
-            id, action_type, description, created_at,
-            users (name, last_name, role)
-        `)
-        .eq("case_id", id)
-        .order("created_at", { ascending: false })
-    
-    if (actError) console.error("ERROR FETCHING ACTIONS", actError)
+    // Regla docente: solo puede ver casos que él/ella derivó.
+    if (profile.role === "docente" && caso.created_by !== user.id) {
+        return notFound()
+    }
+
+    let actions: any[] = []
+    if (profile.role !== "docente") {
+        const { data: loadedActions, error: actError } = await supabase
+            .from("student_case_actions")
+            .select(`
+                id, action_type, description, created_at,
+                users (name, last_name, role)
+            `)
+            .eq("case_id", id)
+            .order("created_at", { ascending: false })
+
+        if (actError) console.error("ERROR FETCHING ACTIONS", actError)
+        actions = loadedActions ?? []
+    }
 
     return (
         <main className="min-h-screen bg-slate-50">
             <div className="mx-auto max-w-4xl px-4 py-8 space-y-6">
                 <div>
-                    <Link href="/monitoreo">
-                        <Button variant="ghost" size="sm" className="mb-4 -ml-3 text-slate-500 hover:text-slate-900">
-                            <ArrowLeft className="mr-2 h-4 w-4" />
-                            Volver a bandeja
-                        </Button>
-                    </Link>
-                    <h1 className="text-2xl font-semibold text-slate-900">
-                        Detalle de Derivación
-                    </h1>
+                    <BackButton
+                        fallbackHref="/monitoreo"
+                        label="Atrás"
+                        className="mb-4 -ml-3 text-slate-500 hover:text-slate-900"
+                    />
+                    <div className="flex items-center justify-between gap-3">
+                        <h1 className="text-2xl font-semibold text-slate-900">
+                            Detalle de Derivación
+                        </h1>
+                        {profile.role !== "docente" && caso.status !== "cerrado" && (
+                            <CloseCaseButton caseId={caso.id} userId={user.id} />
+                        )}
+                    </div>
                 </div>
 
                 <CasoDetailClient 
                     caso={caso} 
-                    initialActions={actions ?? []} 
+                    initialActions={actions} 
                     userId={user.id} 
                     userRole={profile.role} 
                 />

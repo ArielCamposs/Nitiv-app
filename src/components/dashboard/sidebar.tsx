@@ -89,7 +89,7 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
         gestionCasos.push({ title: "Registro DEC", href: decHref, icon: Shield, badge: true })
         gestionCasos.push({ title: "PAEC", href: "/paec", icon: LifeBuoy })
         gestionCasos.push({ title: "Reg. Convivencia", href: "/registros-convivencia", icon: ClipboardList })
-        gestionCasos.push({ title: "Derivación y monitoreo", href: "/monitoreo", icon: ClipboardList })
+        gestionCasos.push({ title: "Gestión de casos", href: "/monitoreo", icon: ClipboardList })
     }
 
     if (hasDeepAccess) {
@@ -136,7 +136,7 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
     // ── Armar grupos (omitir si está vacío) ───────────────────────────────────
     const groups: NavGroup[] = [
         { label: "Centro de Acción", items: centroAccion },
-        ...(gestionCasos.length > 0 ? [{ label: "Gestión de Casos", items: gestionCasos }] : []),
+        ...(gestionCasos.length > 0 ? [{ label: "Gestión", items: gestionCasos }] : []),
         { label: "Biblioteca y Comunidad", items: biblioteca },
         ...(analisis.length > 0 ? [{ label: "Análisis", items: analisis }] : []),
     ]
@@ -325,7 +325,7 @@ export function SidebarContent({ userId, showBell = true, institutionName, insti
                                             className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 cursor-not-allowed select-none"
                                         >
                                             <item.icon className="h-4 w-4 shrink-0" />
-                                            <span className="flex-1">{item.title}</span>
+                                            <span className="min-w-0 flex-1 whitespace-nowrap">{item.title}</span>
                                             <Lock className="h-3 w-3 shrink-0" />
                                         </span>
                                     )
@@ -346,7 +346,7 @@ export function SidebarContent({ userId, showBell = true, institutionName, insti
                                         )}
                                     >
                                         <item.icon className="h-4 w-4 shrink-0" />
-                                        <span className="flex-1">{item.title}</span>
+                                        <span className="min-w-0 flex-1 whitespace-nowrap">{item.title}</span>
                                         {/* @ts-ignore */}
                                         {item.badge && <DecBadge />}
                                         {/* @ts-ignore */}
@@ -364,7 +364,7 @@ export function SidebarContent({ userId, showBell = true, institutionName, insti
                     if (isStudent) {
                         return (
                             <div key={group.label} className="pt-4 first:pt-0">
-                                <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                                <p className="px-3 mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400 whitespace-nowrap">
                                     {group.label}
                                 </p>
                                 {renderItems()}
@@ -378,13 +378,15 @@ export function SidebarContent({ userId, showBell = true, institutionName, insti
                                 type="button"
                                 onClick={() => toggleGroup(group.label)}
                                 className={cn(
-                                    "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-[10px] font-semibold uppercase tracking-widest transition-colors",
+                                    "flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-xs font-semibold uppercase tracking-wide transition-colors",
                                     isOpen
                                         ? "bg-indigo-200/80 text-indigo-800 hover:bg-indigo-300/80"
                                         : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
                                 )}
                             >
-                                <span>{group.label}</span>
+                                <span className="min-w-0 flex-1 text-left leading-snug whitespace-nowrap">
+                                    {group.label}
+                                </span>
                                 <ChevronDown
                                     className={cn(
                                         "h-3.5 w-3.5 shrink-0 transition-transform duration-300 ease-out",
@@ -449,7 +451,7 @@ export function SidebarContent({ userId, showBell = true, institutionName, insti
 
 export function Sidebar({ userId, institutionName, institutionLogoUrl, initialRole, initialFullName, studentCourseLabel }: { userId: string; institutionName?: string; institutionLogoUrl?: string; initialRole?: string; initialFullName?: string; studentCourseLabel?: string }) {
     return (
-        <aside className="fixed left-0 top-0 hidden h-screen w-64 border-r bg-slate-50/50 p-6 md:flex md:flex-col">
+        <aside className="fixed left-0 top-0 hidden h-screen w-80 border-r bg-slate-50/50 p-6 md:flex md:flex-col">
             <SidebarContent userId={userId} institutionName={institutionName} institutionLogoUrl={institutionLogoUrl} initialRole={initialRole} initialFullName={initialFullName} studentCourseLabel={studentCourseLabel} />
         </aside>
     )

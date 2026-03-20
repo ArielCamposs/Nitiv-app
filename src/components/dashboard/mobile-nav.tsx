@@ -57,7 +57,7 @@ export function MobileNav({ userId, institutionName, institutionLogoUrl, initial
             </SheetTrigger>
             <SheetContent
                 side="left"
-                className="w-64 p-0 flex flex-col h-full overflow-hidden"
+                className="w-80 max-w-[min(20rem,100vw)] p-0 flex flex-col h-full overflow-hidden"
             >
                 <SheetHeader className="sr-only">
                     <SheetTitle>Menú de navegación</SheetTitle>

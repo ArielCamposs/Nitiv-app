@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BackButton } from "@/components/ui/back-button"
 import { PerceptionForm } from "@/components/teacher/perception-form"
 import { StudentEmotionChart } from "@/components/student/student-emotion-chart"
+import Link from "next/link"
 
 const EMOTION_MAP: Record<string, { label: string; color: string }> = {
     muy_bien: { label: "😄 Muy bien", color: "text-emerald-600" },
@@ -131,12 +132,38 @@ async function getStudentForTeacher(studentId: string) {
         .map((l: any) => l.convivencia_records)
         .filter(Boolean)
 
+    // Casos de derivación y monitoreo del estudiante
+    let casosDerivacionQuery = supabase
+        .from("student_cases")
+        .select(`
+            id,
+            reason,
+            initial_state,
+            status,
+            created_at,
+            created_by,
+            responsable_id,
+            creador:users!created_by (name, last_name, role),
+            responsable:users!responsable_id (name, last_name, role)
+        `)
+        .eq("student_id", studentId)
+        .eq("institution_id", profile.institution_id)
+
+    // Docente: solo ve casos que él/ella derivó.
+    if (profile.role === "docente") {
+        casosDerivacionQuery = casosDerivacionQuery.eq("created_by", user.id)
+    }
+
+    const { data: casosDerivacion } = await casosDerivacionQuery
+        .order("created_at", { ascending: false })
+
     return {
         student,
         recentLogs: (recentLogs as any[]) ?? [],
         paec,
         decRecords: decRecords ?? [],
         convivenciaRecords: convivenciaRecords ?? [],
+        casosDerivacion: casosDerivacion ?? [],
         teacherId: profile.id,
         institutionId: profile.institution_id,
         role: profile.role,
@@ -153,7 +180,7 @@ export default async function StudentProfilePage({
 
     if (!data) return notFound()
 
-    const { student, recentLogs, paec, decRecords, convivenciaRecords, teacherId, institutionId } = data
+    const { student, recentLogs, paec, decRecords, convivenciaRecords, casosDerivacion, teacherId, institutionId } = data
 
     // Calcular edad
     let ageText = "No registrada"
@@ -187,12 +214,13 @@ export default async function StudentProfilePage({
                 </div>
 
                 <Tabs defaultValue="perfil" className="w-full">
-                    <TabsList className={`grid w-full ${data.role === 'docente' ? 'grid-cols-6' : 'grid-cols-5'}`}>
+                    <TabsList className={`grid w-full ${data.role === 'docente' ? 'grid-cols-7' : 'grid-cols-6'}`}>
                         <TabsTrigger value="perfil">Perfil</TabsTrigger>
                         <TabsTrigger value="emocional">Emocional</TabsTrigger>
                         <TabsTrigger value="paec">PAEC</TabsTrigger>
                         <TabsTrigger value="dec">Historial DEC</TabsTrigger>
                         <TabsTrigger value="convivencia">Convivencia</TabsTrigger>
+                        <TabsTrigger value="derivacion">Derivación</TabsTrigger>
                         {data.role === "docente" && (
                             <TabsTrigger value="docente">Docente</TabsTrigger>
                         )}
@@ -511,6 +539,97 @@ export default async function StudentProfilePage({
                                                             <p className="text-xs text-slate-500">{rec.resolution_notes}</p>
                                                         </div>
                                                     )}
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
+
+                    <TabsContent value="derivacion" className="mt-6 space-y-6">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="text-base">Derivación y monitoreo</CardTitle>
+                                <CardDescription>Historial de casos del estudiante</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                {casosDerivacion.length === 0 ? (
+                                    <p className="text-sm text-slate-400 py-4 text-center">
+                                        Este estudiante no tiene casos de derivación registrados.
+                                    </p>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {casosDerivacion.map((caso: any) => {
+                                            const estado = (caso.status ?? "").toString().toLowerCase()
+                                            const estadoLabel =
+                                                estado === "en_proceso"
+                                                    ? "En proceso"
+                                                    : estado === "atendido"
+                                                        ? "Atendido"
+                                                        : estado === "pendiente"
+                                                            ? "Pendiente"
+                                                            : estado === "cerrado"
+                                                                ? "Cerrado"
+                                                                : caso.status
+                                            const estadoClass =
+                                                estado === "cerrado"
+                                                    ? "bg-slate-100 text-slate-700 border-slate-200"
+                                                    : estado === "en_proceso"
+                                                        ? "bg-indigo-100 text-indigo-700 border-indigo-200"
+                                                        : estado === "atendido"
+                                                            ? "bg-blue-100 text-blue-700 border-blue-200"
+                                                            : "bg-amber-100 text-amber-700 border-amber-200"
+
+                                            const urgencia = (caso.initial_state ?? "").toString().toLowerCase()
+                                            const urgenciaLabel =
+                                                urgencia === "urgente"
+                                                    ? "Urgente"
+                                                    : urgencia === "observacion"
+                                                        ? "Media"
+                                                        : "Baja"
+                                            const urgenciaClass =
+                                                urgencia === "urgente"
+                                                    ? "bg-rose-100 text-rose-700 border-rose-200"
+                                                    : urgencia === "observacion"
+                                                        ? "bg-amber-100 text-amber-700 border-amber-200"
+                                                        : "bg-emerald-100 text-emerald-700 border-emerald-200"
+
+                                            return (
+                                                <div key={caso.id} className="border rounded-xl p-4 space-y-2">
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="space-y-1">
+                                                            <div className="flex items-center gap-2 flex-wrap">
+                                                                <Badge variant="outline" className={`text-[10px] ${estadoClass}`}>
+                                                                    {estadoLabel}
+                                                                </Badge>
+                                                                <Badge variant="outline" className={`text-[10px] ${urgenciaClass}`}>
+                                                                    {urgenciaLabel}
+                                                                </Badge>
+                                                            </div>
+                                                            <p className="text-xs text-slate-500">
+                                                                Abierto el {new Date(caso.created_at).toLocaleDateString("es-CL", {
+                                                                    day: "2-digit",
+                                                                    month: "short",
+                                                                    year: "numeric",
+                                                                })}
+                                                                {" · "}
+                                                                Por {caso.creador?.name} {caso.creador?.last_name}
+                                                            </p>
+                                                            <p className="text-xs text-slate-500">
+                                                                Responsable: {caso.responsable ? `${caso.responsable.name} ${caso.responsable.last_name}` : "Sin asignar"}
+                                                            </p>
+                                                        </div>
+                                                        <Link href={`/monitoreo/${caso.id}`} className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 shrink-0">
+                                                            Ver detalle →
+                                                        </Link>
+                                                    </div>
+                                                    <p className="text-sm text-slate-700">
+                                                        {data.role === "docente"
+                                                            ? "Información confidencial reservada."
+                                                            : caso.reason}
+                                                    </p>
                                                 </div>
                                             )
                                         })}

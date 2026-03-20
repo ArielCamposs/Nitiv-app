@@ -83,7 +83,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
                         <NotificationBell userId={user.id} />
                     </div>
 
-                    <main className="min-h-screen pt-14 md:ml-64 md:pt-0 print:ml-0 print:pt-0">
+                    <main className="min-h-screen pt-14 md:ml-80 md:pt-0 print:ml-0 print:pt-0">
                         {children}
                     </main>
 

@@ -14,6 +14,11 @@ const TO_ROLES = [
     { value: "director", label: "Dirección" },
 ]
 
+const ROLE_LABELS: Record<string, string> = TO_ROLES.reduce((acc, role) => {
+    acc[role.value] = role.label
+    return acc
+}, {} as Record<string, string>)
+
 interface Props {
     studentId: string
     institutionId: string
@@ -35,12 +40,16 @@ export function DerivacionModal({ studentId, institutionId, fromUserId, studentN
         }
         setLoading(true)
         try {
-            const { error } = await supabase.from("case_derivations").insert({
+            const reasonWithContext = `[Derivación a ${ROLE_LABELS[toRole] ?? toRole}] ${reason.trim()}`
+
+            const { error } = await supabase.from("student_cases").insert({
                 institution_id: institutionId,
                 student_id: studentId,
-                from_user_id: fromUserId,
-                to_role: toRole,
-                reason: reason.trim(),
+                created_by: fromUserId,
+                reason: reasonWithContext,
+                initial_state: "observacion",
+                status: "pendiente",
+                responsable_id: null,
             })
             if (error) throw error
             toast.success(`Caso derivado a ${TO_ROLES.find(r => r.value === toRole)?.label}.`)

@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { notFound } from "next/navigation"
 import Link from "next/link"
-import { Pencil, ArrowLeft } from "lucide-react"
+import { Pencil } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import {
     Card,
@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { DecDeleteButton } from "@/components/dec/dec-delete-button"
 import { DecPrintPdf } from "@/components/dec/dec-print-pdf"
+import { BackButton } from "@/components/ui/back-button"
 
 const SEVERITY_META = {
     moderada: { label: "Etapa 2 — Moderada", color: "bg-amber-100 text-amber-700" },
@@ -196,13 +197,11 @@ export default async function DecDetailPage({
 
                 {/* Botón Atrás — volver al historial (oculto al imprimir) */}
                 <div className="print:hidden">
-                    <Link
-                        href={backHref}
-                        className="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
-                    >
-                        <ArrowLeft className="h-4 w-4" />
-                        Volver al historial
-                    </Link>
+                    <BackButton
+                        fallbackHref={backHref}
+                        label="Atrás"
+                        className="-ml-3 text-slate-600 hover:text-slate-900"
+                    />
                 </div>
 
                 {/* Encabezado con acciones Imprimir / PDF */}

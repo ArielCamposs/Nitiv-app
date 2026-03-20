@@ -28,24 +28,72 @@ export default async function MonitoreoPage() {
         .eq("active", true)
         .order("last_name")
 
-    // Obtener los casos existentes
-    const { data: casos } = await supabase
+    // Obtener los casos existentes (consulta base sin joins anidados para evitar fallos silenciosos)
+    let baseCasesQuery = supabase
         .from("student_cases")
-        .select(`
-            id,
-            reason,
-            initial_state,
-            next_step,
-            next_step_date,
-            status,
-            created_at,
-            students (id, name, last_name, courses(name, section)),
-            creador:users!created_by (id, name, last_name, role),
-            responsable:users!responsable_id (id, name, last_name, role),
-            actions: student_case_actions (action_type)
-        `)
+        .select("id, student_id, created_by, reason, initial_state, next_step, next_step_date, status, responsable_id, created_at")
         .eq("institution_id", profile.institution_id)
+
+    // Docente: solo ve los casos que él/ella derivó.
+    if (profile.role === "docente") {
+        baseCasesQuery = baseCasesQuery.eq("created_by", user.id)
+    }
+
+    const { data: baseCases, error: baseCasesError } = await baseCasesQuery
         .order("created_at", { ascending: false })
+
+    if (baseCasesError) {
+        console.error("Error cargando casos en monitoreo:", baseCasesError)
+    }
+
+    const studentIds = Array.from(new Set((baseCases ?? []).map((c) => c.student_id).filter(Boolean)))
+    const userIds = Array.from(
+        new Set(
+            (baseCases ?? [])
+                .flatMap((c) => [c.created_by, c.responsable_id])
+                .filter(Boolean)
+        )
+    )
+    const caseIds = (baseCases ?? []).map((c) => c.id)
+
+    const { data: caseStudents } = studentIds.length
+        ? await supabase
+            .from("students")
+            .select("id, name, last_name, courses(name, section)")
+            .in("id", studentIds)
+        : { data: [] as any[] }
+
+    const { data: caseUsers } = userIds.length
+        ? await supabase
+            .from("users")
+            .select("id, name, last_name, role")
+            .in("id", userIds)
+        : { data: [] as any[] }
+
+    const { data: caseActions } = caseIds.length
+        ? await supabase
+            .from("student_case_actions")
+            .select("case_id, action_type")
+            .in("case_id", caseIds)
+        : { data: [] as any[] }
+
+    const studentsById = new Map((caseStudents ?? []).map((s: any) => [s.id, s]))
+    const usersById = new Map((caseUsers ?? []).map((u: any) => [u.id, u]))
+    const actionsByCaseId = new Map<string, any[]>()
+
+    for (const action of caseActions ?? []) {
+        const list = actionsByCaseId.get(action.case_id) ?? []
+        list.push(action)
+        actionsByCaseId.set(action.case_id, list)
+    }
+
+    const casos = (baseCases ?? []).map((c: any) => ({
+        ...c,
+        students: studentsById.get(c.student_id) ?? null,
+        creador: usersById.get(c.created_by) ?? null,
+        responsable: c.responsable_id ? usersById.get(c.responsable_id) ?? null : null,
+        actions: actionsByCaseId.get(c.id) ?? [],
+    }))
 
     // Obtener profesionales para asignar como responsable
     const { data: professionals } = await supabase

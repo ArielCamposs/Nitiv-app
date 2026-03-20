@@ -27,7 +27,7 @@ const REASON_CHIPS = [
 ]
 
 const WHEN_CHIPS = [
-    "En clases", "En recreo", "Al inicio de la jornada", "Al salir", "Siempre", "No sé / variable"
+    "En clases", "En recreo", "Al inicio de la jornada", "Al salir", "Siempre", "Otro"
 ]
 
 const FREQ_CHIPS = [
@@ -35,8 +35,16 @@ const FREQ_CHIPS = [
 ]
 
 const DERIVE_CHIPS = [
-    "Psicóloga/o", "Orientador/a", "Encargado/a convivencia", "Dupla psicosocial completa"
+    { value: "dupla", label: "Dupla psicosocial" },
+    { value: "convivencia", label: "Convivencia" },
+    { value: "inspector", label: "Inspectoría" },
+    { value: "utp", label: "UTP" },
+    { value: "director", label: "Dirección" },
 ]
+
+const OTHER_REASON_MAX = 500
+const OTHER_WHEN_MAX = 500
+const OBSERVATION_MAX = 1000
 
 export function NuevoCasoDialog({ 
     isOpen, 
@@ -50,12 +58,35 @@ export function NuevoCasoDialog({
     const [loading, setLoading] = useState(false)
 
     const [studentId, setStudentId] = useState("")
+    const [selectedCourse, setSelectedCourse] = useState("")
     const [selectedReasons, setSelectedReasons] = useState<string[]>([])
+    const [otherReason, setOtherReason] = useState("")
     const [whenOccurs, setWhenOccurs] = useState<string>("")
+    const [otherWhenOccurs, setOtherWhenOccurs] = useState("")
     const [frequency, setFrequency] = useState<string>("")
     const [urgency, setUrgency] = useState<string>("") // 'baja', 'media', 'alta'
-    const [deriveTo, setDeriveTo] = useState<string>("")
+    const [deriveTo, setDeriveTo] = useState<string[]>([])
     const [observation, setObservation] = useState("")
+
+    const courseOptions = Array.from(
+        new Set(
+            students
+                .map((s) => {
+                    const courseName = s.courses?.name
+                    const courseSection = s.courses?.section
+                    return courseName ? `${courseName}${courseSection ? ` ${courseSection}` : ""}` : null
+                })
+                .filter(Boolean) as string[]
+        )
+    ).sort((a, b) => a.localeCompare(b, "es"))
+
+    const filteredStudents = students.filter((s) => {
+        if (!selectedCourse) return false
+        const courseName = s.courses?.name
+        const courseSection = s.courses?.section
+        const studentCourse = courseName ? `${courseName}${courseSection ? ` ${courseSection}` : ""}` : ""
+        return studentCourse === selectedCourse
+    })
 
     const toggleArrayChip = (chip: string, current: string[], setter: (v: string[]) => void) => {
         if (current.includes(chip)) setter(current.filter(c => c !== chip))
@@ -63,8 +94,20 @@ export function NuevoCasoDialog({
     }
 
     const handleSubmit = async () => {
-        if (!studentId || selectedReasons.length === 0 || !whenOccurs || !frequency || !urgency || !deriveTo) {
+        const hasOtherReasonSelected = selectedReasons.includes("Otro")
+        const hasValidOtherReason = otherReason.trim().length > 0
+        const finalWhenOccurs = whenOccurs === "Otro" ? otherWhenOccurs.trim() : whenOccurs
+
+        if (!studentId || selectedReasons.length === 0 || !whenOccurs || !frequency || !urgency || deriveTo.length === 0) {
             toast.error("Por favor completa los campos principales.")
+            return
+        }
+        if (hasOtherReasonSelected && !hasValidOtherReason) {
+            toast.error("Especifica el motivo en 'Otro'.")
+            return
+        }
+        if (whenOccurs === "Otro" && !finalWhenOccurs) {
+            toast.error("Especifica cuándo ocurre en 'Otro'.")
             return
         }
 
@@ -75,16 +118,20 @@ export function NuevoCasoDialog({
             if (urgency === 'media') mappedState = 'observacion'
             if (urgency === 'alta') mappedState = 'urgente'
 
+            const finalReasons = selectedReasons.map((reason) =>
+                reason === "Otro" ? `Otro: ${otherReason.trim()}` : reason
+            )
+
             const { error } = await supabase
                 .from("student_cases")
                 .insert({
                     institution_id: institutionId,
                     student_id: studentId,
                     created_by: userId,
-                    reason: selectedReasons.join(" • ") + (observation ? `\n\nObs: ${observation}` : ""),
-                    when_occurs: whenOccurs,
+                    reason: finalReasons.join(" • ") + (observation ? `\n\nObs: ${observation}` : ""),
+                    when_occurs: finalWhenOccurs,
                     frequency: frequency,
-                    derived_to: deriveTo,
+                    derived_to: JSON.stringify(deriveTo),
                     initial_state: mappedState,
                     status: 'pendiente', 
                     responsable_id: null
@@ -95,11 +142,14 @@ export function NuevoCasoDialog({
             toast.success("Derivación enviada correctamente")
             
             setStudentId("")
+            setSelectedCourse("")
             setSelectedReasons([])
+            setOtherReason("")
             setWhenOccurs("")
+            setOtherWhenOccurs("")
             setFrequency("")
             setUrgency("")
-            setDeriveTo("")
+            setDeriveTo([])
             setObservation("")
             onClose()
             
@@ -113,7 +163,7 @@ export function NuevoCasoDialog({
 
     return (
         <Dialog open={isOpen} onOpenChange={(o) => (!loading && !o && onClose())}>
-            <DialogContent className="sm:max-w-3xl bg-white p-0 overflow-hidden flex flex-col max-h-[90vh]">
+            <DialogContent className="sm:max-w-3xl bg-white p-0 overflow-hidden flex flex-col max-h-[90vh] rounded-[28px]">
                 
                 <DialogHeader className="px-6 py-4 border-b border-slate-100 flex-shrink-0 flex flex-row items-center justify-between">
                     <div>
@@ -127,21 +177,44 @@ export function NuevoCasoDialog({
 
                 <div className="px-6 py-5 overflow-y-auto space-y-8 flex-1">
                     
-                    {/* Estudiante */}
-                    <div className="space-y-3">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Estudiante <span className="text-rose-500">*</span></label>
-                        <Select value={studentId} onValueChange={setStudentId}>
-                            <SelectTrigger className="w-full">
-                                <SelectValue placeholder="Buscar estudiante del curso..." />
-                            </SelectTrigger>
-                            <SelectContent className="max-h-60">
-                                {students.map((s) => (
-                                    <SelectItem key={s.id} value={s.id}>
-                                        {s.name} {s.last_name} {s.courses ? `- ${s.courses.name} ${s.courses.section}` : ''}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-3">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Curso <span className="text-rose-500">*</span></label>
+                            <Select
+                                value={selectedCourse}
+                                onValueChange={(value) => {
+                                    setSelectedCourse(value)
+                                    setStudentId("")
+                                }}
+                            >
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Selecciona un curso..." />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-60">
+                                    {courseOptions.map((course) => (
+                                        <SelectItem key={course} value={course}>
+                                            {course}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="space-y-3">
+                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Estudiante <span className="text-rose-500">*</span></label>
+                            <Select value={studentId} onValueChange={setStudentId} disabled={!selectedCourse}>
+                                <SelectTrigger className="w-full">
+                                    <SelectValue placeholder={selectedCourse ? "Selecciona estudiante..." : "Primero selecciona un curso..."} />
+                                </SelectTrigger>
+                                <SelectContent className="max-h-60">
+                                    {filteredStudents.map((s) => (
+                                        <SelectItem key={s.id} value={s.id}>
+                                            {s.name} {s.last_name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
 
                     {/* Motivo */}
@@ -168,6 +241,18 @@ export function NuevoCasoDialog({
                                 )
                             })}
                         </div>
+                        {selectedReasons.includes("Otro") && (
+                            <div className="space-y-1">
+                                <Textarea
+                                    placeholder="Escribe el motivo específico..."
+                                    value={otherReason}
+                                    maxLength={OTHER_REASON_MAX}
+                                    onChange={(e) => setOtherReason(e.target.value)}
+                                    className="min-h-[110px] resize-none break-words whitespace-pre-wrap"
+                                />
+                                <p className="text-right text-xs text-slate-400">{otherReason.length}/{OTHER_REASON_MAX}</p>
+                            </div>
+                        )}
                     </div>
 
                     {/* Cuando ocurre */}
@@ -194,6 +279,18 @@ export function NuevoCasoDialog({
                                 )
                             })}
                         </div>
+                        {whenOccurs === "Otro" && (
+                            <div className="space-y-1">
+                                <Textarea
+                                    placeholder="Especifica cuándo ocurre..."
+                                    value={otherWhenOccurs}
+                                    maxLength={OTHER_WHEN_MAX}
+                                    onChange={(e) => setOtherWhenOccurs(e.target.value)}
+                                    className="min-h-[110px] resize-none break-words whitespace-pre-wrap"
+                                />
+                                <p className="text-right text-xs text-slate-400">{otherWhenOccurs.length}/{OTHER_WHEN_MAX}</p>
+                            </div>
+                        )}
                     </div>
 
                     {/* Frecuencia observada */}
@@ -274,19 +371,19 @@ export function NuevoCasoDialog({
                         </label>
                         <div className="flex flex-wrap gap-2">
                             {DERIVE_CHIPS.map(chip => {
-                                const active = deriveTo === chip
+                                const active = deriveTo.includes(chip.value)
                                 return (
                                     <button
                                         type="button"
-                                        key={chip}
-                                        onClick={() => setDeriveTo(chip)}
+                                        key={chip.value}
+                                        onClick={() => toggleArrayChip(chip.value, deriveTo, setDeriveTo)}
                                         className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors border ${
                                             active 
                                             ? "bg-slate-800 border-slate-800 text-white" 
                                             : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
                                         }`}
                                     >
-                                        {chip}
+                                        {chip.label}
                                     </button>
                                 )
                             })}
@@ -301,9 +398,11 @@ export function NuevoCasoDialog({
                         <Textarea 
                             placeholder="Algo que quieras agregar que no quede en las opciones anteriores..." 
                             value={observation}
+                            maxLength={OBSERVATION_MAX}
                             onChange={(e) => setObservation(e.target.value)}
-                            className="min-h-[100px] resize-none"
+                            className="min-h-[120px] resize-none break-words whitespace-pre-wrap"
                         />
+                        <p className="text-right text-xs text-slate-400">{observation.length}/{OBSERVATION_MAX}</p>
                     </div>
                 </div>
 

@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { rememberPendingCaseStatus } from "@/lib/case-status-pending"
 import { toast } from "sonner"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -24,6 +25,91 @@ import {
 type Caso = any
 type Action = any
 
+function ExpandableText({
+    text,
+    maxLength = 260,
+    className = "",
+}: {
+    text?: string | null
+    maxLength?: number
+    className?: string
+}) {
+    const value = (text ?? "").trim()
+    const [expanded, setExpanded] = useState(false)
+
+    if (!value) return <p className={`text-sm text-slate-700 ${className}`}>No registrado</p>
+
+    const needsCollapse = value.length > maxLength
+    const visible = needsCollapse && !expanded ? `${value.slice(0, maxLength)}...` : value
+
+    return (
+        <div className="space-y-1">
+            <p className={`text-sm text-slate-700 whitespace-pre-wrap break-all [overflow-wrap:anywhere] max-w-full ${className}`}>{visible}</p>
+            {needsCollapse && (
+                <button
+                    type="button"
+                    onClick={(e) => {
+                        e.stopPropagation()
+                        setExpanded((prev) => !prev)
+                    }}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                >
+                    {expanded ? "Leer menos" : "Leer más"}
+                </button>
+            )}
+        </div>
+    )
+}
+
+function TruncatedText({
+    text,
+    maxLength = 260,
+    className = "",
+}: {
+    text?: string | null
+    maxLength?: number
+    className?: string
+}) {
+    const value = (text ?? "").trim()
+    if (!value) return <p className={`text-sm text-slate-700 ${className}`}>No registrado</p>
+    const visible = value.length > maxLength ? `${value.slice(0, maxLength)}...` : value
+    return <p className={`text-sm text-slate-700 whitespace-pre-wrap break-all [overflow-wrap:anywhere] max-w-full ${className}`}>{visible}</p>
+}
+
+function splitReasonAndObservation(rawReason?: string | null): {
+    reasons: string[]
+    observation: string | null
+} {
+    const value = (rawReason ?? "").trim()
+    if (!value) return { reasons: [], observation: null }
+
+    const marker = "\n\nObs:"
+    const markerIndex = value.indexOf(marker)
+
+    const reasonsPart = markerIndex >= 0 ? value.slice(0, markerIndex).trim() : value
+    const observationPart = markerIndex >= 0 ? value.slice(markerIndex + marker.length).trim() : ""
+
+    const reasons = reasonsPart
+        .split(" • ")
+        .map((item) => item.trim())
+        .filter(Boolean)
+
+    return {
+        reasons,
+        observation: observationPart || null,
+    }
+}
+
+const ROLE_LABELS: Record<string, string> = {
+    docente: "Docente",
+    dupla: "Dupla",
+    convivencia: "Convivencia",
+    inspector: "Inspectoría",
+    utp: "UTP",
+    director: "Dirección",
+    admin: "Admin",
+}
+
 export function CasoDetailClient({ caso, initialActions, userId, userRole }: { caso: Caso, initialActions: Action[], userId: string, userRole: string }) {
     const supabase = createClient()
     const router = useRouter()
@@ -37,11 +123,75 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
     
     // UI state
     const [isActionModalOpen, setIsActionModalOpen] = useState(false)
+    const [selectedIntervention, setSelectedIntervention] = useState<Action | null>(null)
     const [actionType, setActionType] = useState("")
     const [actionDesc, setActionDesc] = useState("")
     const [loading, setLoading] = useState(false)
 
+    useEffect(() => {
+        const onCaseClosed = (event: Event) => {
+            const customEvent = event as CustomEvent<{ caseId: string }>
+            if (customEvent.detail?.caseId === caso.id) {
+                setStatus("cerrado")
+                setIsActionModalOpen(false)
+            }
+        }
+
+        window.addEventListener("student-case-closed", onCaseClosed)
+        return () => window.removeEventListener("student-case-closed", onCaseClosed)
+    }, [caso.id])
+
+    const parseAllowedRoles = (derivedTo: unknown): string[] => {
+        if (!derivedTo) return []
+
+        if (Array.isArray(derivedTo)) {
+            return derivedTo.map((v) => String(v).trim().toLowerCase()).filter(Boolean)
+        }
+
+        const raw = String(derivedTo).trim()
+        if (!raw) return []
+
+        try {
+            const parsed = JSON.parse(raw)
+            if (Array.isArray(parsed)) {
+                return parsed.map((v) => String(v).trim().toLowerCase()).filter(Boolean)
+            }
+        } catch {
+            // Sigue con parsing flexible si no era JSON.
+        }
+
+        return raw
+            .split(/[|,]/g)
+            .map((v) => v.trim().toLowerCase())
+            .map((v) => {
+                if (v.includes("conviv")) return "convivencia"
+                if (v.includes("dupla") || v.includes("psicolog")) return "dupla"
+                if (v.includes("inspector")) return "inspector"
+                if (v.includes("utp") || v.includes("orientador")) return "utp"
+                if (v.includes("director") || v.includes("direccion")) return "director"
+                return v
+            })
+            .filter(Boolean)
+    }
+
+    const allowedRoles = parseAllowedRoles(caso.derived_to)
+    const canTakeCaseByRole = allowedRoles.length === 0 || allowedRoles.includes(userRole)
+    const { reasons: parsedReasons, observation: parsedObservation } = splitReasonAndObservation(caso.reason)
+    const DERIVED_ROLE_LABELS: Record<string, string> = {
+        dupla: "Dupla psicosocial",
+        convivencia: "Convivencia",
+        inspector: "Inspectoría",
+        utp: "UTP",
+        director: "Dirección",
+    }
+    const derivedToLabels = allowedRoles.map((role) => DERIVED_ROLE_LABELS[role] ?? role)
+
     const handleAssignMe = async () => {
+        if (!canTakeCaseByRole) {
+            toast.error("Tu rol no está autorizado para tomar este caso.")
+            return
+        }
+
         try {
             const { error } = await supabase
                 .from("student_cases")
@@ -72,6 +222,20 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
 
         try {
             setLoading(true)
+            const { data: currentCase, error: currentCaseError } = await supabase
+                .from("student_cases")
+                .select("status")
+                .eq("id", caso.id)
+                .maybeSingle()
+
+            if (currentCaseError) throw currentCaseError
+            if (currentCase?.status === "cerrado") {
+                setStatus("cerrado")
+                setIsActionModalOpen(false)
+                toast.error("El caso ya está cerrado. No se pueden agregar intervenciones.")
+                return
+            }
+
             const type = isClosing ? 'cierre' : actionType
             const newStatus = isClosing ? 'cerrado' : 'en_proceso'
 
@@ -94,7 +258,15 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
             if (isClosing) setStatus('cerrado')
             setActions([actData, ...actions])
             toast.success(isClosing ? "Caso cerrado exitosamente." : "Intervención guardada.")
-            
+
+            if (isClosing && typeof window !== "undefined") {
+                rememberPendingCaseStatus(caso.id, "cerrado")
+                window.dispatchEvent(
+                    new CustomEvent("student-case-closed", { detail: { caseId: caso.id } })
+                )
+                router.refresh()
+            }
+
             setIsActionModalOpen(false)
             setActionType("")
             setActionDesc("")
@@ -175,10 +347,51 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
 
                         <div className="pt-2 border-t">
                             <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Motivo de apertura</p>
-                            <p className="text-sm text-slate-700">{isDocente ? "Información reservada por privacidad." : caso.reason}</p>
+                            {isDocente ? (
+                                <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">
+                                    Información reservada por privacidad.
+                                </p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {parsedReasons.length > 0 ? (
+                                        parsedReasons.map((item, idx) => (
+                                            <div key={`reason-${idx}`} className="rounded-md bg-slate-50 border border-slate-200 px-3 py-2">
+                                                <ExpandableText text={item} maxLength={180} />
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <ExpandableText text={caso.reason} maxLength={320} />
+                                    )}
+
+                                    {parsedObservation && (
+                                        <div className="rounded-md bg-indigo-50/40 border border-indigo-100 px-3 py-2">
+                                            <p className="text-xs text-indigo-600 font-semibold mb-1">Observación</p>
+                                            <ExpandableText text={parsedObservation} maxLength={220} />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                             <p className="text-xs text-slate-400 mt-2">
                                 Abierto por: {caso.creador?.name} {caso.creador?.last_name} ({format(new Date(caso.created_at), "d MMM yyyy", { locale: es })})
                             </p>
+                        </div>
+
+                        <div className="pt-2 border-t space-y-2">
+                            <p className="text-xs text-slate-500 uppercase font-semibold">Datos de la derivación</p>
+                            <div>
+                                <p className="text-xs text-slate-400">Cuándo ocurre</p>
+                                <ExpandableText text={caso.when_occurs} maxLength={180} />
+                            </div>
+                            <div>
+                                <p className="text-xs text-slate-400">Frecuencia</p>
+                                <ExpandableText text={caso.frequency} maxLength={180} />
+                            </div>
+                            <div>
+                                <p className="text-xs text-slate-400">Derivado a</p>
+                                <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">
+                                    {derivedToLabels.length > 0 ? derivedToLabels.join(", ") : "No definido"}
+                                </p>
+                            </div>
                         </div>
 
                         <div className="pt-2 border-t">
@@ -188,10 +401,15 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
                             ) : (
                                 <div className="space-y-2">
                                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">Sin asignar</span>
-                                    {!isDocente && !isClosed && (
+                                    {!isDocente && !isClosed && canTakeCaseByRole && (
                                         <Button size="sm" variant="outline" className="w-full text-xs" onClick={handleAssignMe}>
                                             <UserPlus className="w-3 h-3 mr-2" /> Asignarme el caso
                                         </Button>
+                                    )}
+                                    {!isDocente && !isClosed && !canTakeCaseByRole && (
+                                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1">
+                                            Solo roles derivados pueden tomar este caso.
+                                        </p>
                                     )}
                                 </div>
                             )}
@@ -228,16 +446,30 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
                                         <div className="absolute -left-2.5 bg-white p-1 rounded-full border border-slate-200">
                                             {getActionIcon(act.action_type)}
                                         </div>
-                                        <div>
+                                        <div className="min-w-0">
                                             <div className="flex items-baseline gap-2">
                                                 <h4 className="text-sm font-semibold text-slate-900">{getActionLabel(act.action_type)}</h4>
                                                 <span className="text-xs text-slate-400">
                                                     {format(new Date(act.created_at), "d MMM yyyy HH:mm", { locale: es })}
                                                 </span>
                                             </div>
-                                            <p className="text-sm mt-1 text-slate-700">{act.description}</p>
+                                            <div
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={() => setSelectedIntervention(act)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === "Enter" || e.key === " ") {
+                                                        e.preventDefault()
+                                                        setSelectedIntervention(act)
+                                                    }
+                                                }}
+                                                className="mt-1 text-left w-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-300 rounded-sm"
+                                            >
+                                                <TruncatedText text={act.description} maxLength={260} />
+                                            </div>
                                             <p className="text-xs text-slate-400 mt-2">
                                                 Registrado por: {act.users?.name} {act.users?.last_name}
+                                                {act.users?.role ? ` (${ROLE_LABELS[act.users.role] ?? act.users.role})` : ""}
                                             </p>
                                         </div>
                                     </div>
@@ -271,24 +503,17 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">Descripción y resultados</label>
+                            <label className="text-sm font-medium">Detalle de intervención</label>
                             <Textarea 
                                 placeholder="Escriba los detalles de la intervención..." 
                                 value={actionDesc}
                                 onChange={(e) => setActionDesc(e.target.value)}
-                                rows={4}
+                                rows={8}
+                                className="resize-y min-h-[140px] max-h-[420px] overflow-y-auto whitespace-pre-wrap break-all [overflow-wrap:anywhere] overflow-x-hidden"
                             />
                         </div>
                     </div>
                     <DialogFooter className="flex-row items-center justify-between sm:justify-between w-full">
-                        <Button 
-                            variant="ghost" 
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                            onClick={() => handleAddAction(true)}
-                            disabled={loading}
-                        >
-                            Cerrar Caso Definitivamente
-                        </Button>
                         <div className="flex gap-2">
                             <Button variant="outline" onClick={() => setIsActionModalOpen(false)} disabled={loading}>
                                 Cancelar
@@ -297,6 +522,43 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
                                 Guardar Intervención
                             </Button>
                         </div>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog
+                open={!!selectedIntervention}
+                onOpenChange={(open) => {
+                    if (!open) setSelectedIntervention(null)
+                }}
+            >
+                <DialogContent className="sm:max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>
+                            {selectedIntervention ? getActionLabel(selectedIntervention.action_type) : "Intervención"}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3 py-2">
+                        <p className="text-xs text-slate-500">
+                            {selectedIntervention?.created_at
+                                ? format(new Date(selectedIntervention.created_at), "d MMM yyyy HH:mm", { locale: es })
+                                : ""}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                            {selectedIntervention?.users
+                                ? `Registrado por: ${selectedIntervention.users?.name ?? ""} ${selectedIntervention.users?.last_name ?? ""}${selectedIntervention.users?.role ? ` (${ROLE_LABELS[selectedIntervention.users.role] ?? selectedIntervention.users.role})` : ""}`
+                                : ""}
+                        </p>
+                        <div className="max-h-[50vh] max-w-full overflow-y-auto overflow-x-hidden rounded-md border border-slate-200 bg-slate-50 p-3 min-w-0">
+                            <p className="text-sm text-slate-700 whitespace-pre-wrap break-all [overflow-wrap:anywhere] max-w-full">
+                                {selectedIntervention?.description}
+                            </p>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setSelectedIntervention(null)}>
+                            Cerrar
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
