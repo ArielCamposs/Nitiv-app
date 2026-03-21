@@ -98,7 +98,7 @@ export function NuevoCasoDialog({
         const hasValidOtherReason = otherReason.trim().length > 0
         const finalWhenOccurs = whenOccurs === "Otro" ? otherWhenOccurs.trim() : whenOccurs
 
-        if (!studentId || selectedReasons.length === 0 || !whenOccurs || !frequency || !urgency || deriveTo.length === 0) {
+        if (!studentId || selectedReasons.length === 0 || !whenOccurs || !frequency || !urgency) {
             toast.error("Por favor completa los campos principales.")
             return
         }
@@ -131,7 +131,7 @@ export function NuevoCasoDialog({
                     reason: finalReasons.join(" • ") + (observation ? `\n\nObs: ${observation}` : ""),
                     when_occurs: finalWhenOccurs,
                     frequency: frequency,
-                    derived_to: JSON.stringify(deriveTo),
+                    derived_to: JSON.stringify(["dupla", "convivencia"]),
                     initial_state: mappedState,
                     status: 'pendiente', 
                     responsable_id: null
@@ -361,32 +361,6 @@ export function NuevoCasoDialog({
                                 <span className="font-semibold">Alta</span>
                                 <span className="text-xs mt-1 opacity-80">Hoy si es posible</span>
                             </button>
-                        </div>
-                    </div>
-
-                    {/* Derivar A */}
-                    <div className="space-y-3">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-                            Derivar a <span className="text-rose-500">*</span>
-                        </label>
-                        <div className="flex flex-wrap gap-2">
-                            {DERIVE_CHIPS.map(chip => {
-                                const active = deriveTo.includes(chip.value)
-                                return (
-                                    <button
-                                        type="button"
-                                        key={chip.value}
-                                        onClick={() => toggleArrayChip(chip.value, deriveTo, setDeriveTo)}
-                                        className={`px-3.5 py-1.5 rounded-full text-sm font-medium transition-colors border ${
-                                            active 
-                                            ? "bg-slate-800 border-slate-800 text-white" 
-                                            : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
-                                        }`}
-                                    >
-                                        {chip.label}
-                                    </button>
-                                )
-                            })}
                         </div>
                     </div>
 

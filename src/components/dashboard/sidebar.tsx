@@ -88,7 +88,11 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
 
         gestionCasos.push({ title: "Registro DEC", href: decHref, icon: Shield, badge: true })
         gestionCasos.push({ title: "PAEC", href: "/paec", icon: LifeBuoy })
-        gestionCasos.push({ title: "Reg. Convivencia", href: "/registros-convivencia", icon: ClipboardList })
+        
+        if (!isDocente) {
+            gestionCasos.push({ title: "Reg. Convivencia", href: "/registros-convivencia", icon: ClipboardList })
+        }
+        
         gestionCasos.push({ title: "Gestión de casos", href: "/monitoreo", icon: ClipboardList })
     }
 

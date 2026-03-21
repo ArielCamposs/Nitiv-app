@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo, useRef } from "react"
 import Link from "next/link"
-import { createConvivenciaRecord, updateConvivenciaRecord, resolveConvivenciaRecord } from "@/app/(dashboard)/registros-convivencia/actions"
+import { createConvivenciaRecord, updateConvivenciaRecord } from "@/app/(dashboard)/registros-convivencia/actions"
 import { buildConvivenciaPdf, buildConvivenciaStatsPdf } from "@/lib/pdf/convivencia-pdf"
 import { loadInstitutionLogoForPdf, loadNitivLogoBase64 } from "@/lib/pdf/load-logos"
 import { toast } from "sonner"
@@ -25,6 +25,18 @@ const RECORD_TYPES: { value: string; label: string; color: string }[] = [
     { value: "otro", label: "Otro", color: "#94a3b8" }, // slate
 ]
 
+/** Valor guardado en `type` para entrevista con apoderado (incluye legado sin "con"). */
+const ENTREVISTA_APODERADO_LABEL = "Entrevista con el apoderado"
+const LEGACY_ENTREVISTA_APODERADO = "Entrevista apoderado"
+
+function isEntrevistaApoderadoType(t: string) {
+    return t === ENTREVISTA_APODERADO_LABEL || t === LEGACY_ENTREVISTA_APODERADO
+}
+
+function normalizeConvivenciaTypeForUi(t: string) {
+    return t === LEGACY_ENTREVISTA_APODERADO ? ENTREVISTA_APODERADO_LABEL : t
+}
+
 const SEVERITIES = [
     { value: "leve", label: "Leve", color: "bg-yellow-100 text-yellow-700 border-yellow-300" },
     { value: "moderada", label: "Mediano", color: "bg-orange-100 text-orange-700 border-orange-300" },
@@ -38,6 +50,7 @@ const SEVERITY_LABELS: Record<string, string> = {
     moderada: "Mediano",
     grave: "Grave",
     gravisimo: "Gravísimo",
+    "n/a": "No aplica",
 }
 
 const ACTIONS_OPTIONS = [
@@ -45,6 +58,7 @@ const ACTIONS_OPTIONS = [
     "Contención emocional",
     "Mediación / Resolución de conflictos",
     "Comunicación a apoderados (llamada/correo)",
+    "Entrevista con apoderado",
     "Derivación externa",
     "Aplicación de medida disciplinaria",
 ]
@@ -54,12 +68,17 @@ const SEVERITY_COLORS: { [key: string]: string } = {
     moderada: "bg-orange-100 text-orange-700",
     grave: "bg-red-100 text-red-700",
     gravisimo: "bg-red-200 text-red-800",
+    "n/a": "bg-slate-100 text-slate-500",
 }
 
 const STATUS_LABELS: Record<string, { label: string; class: string; cardBorder: string }> = {
-    abierto: { label: "Abierta", class: "bg-emerald-100 text-emerald-700 border-emerald-200", cardBorder: "border-l-4 border-l-emerald-500" },
     seguimiento: { label: "En seguimiento", class: "bg-orange-100 text-orange-700 border-orange-200", cardBorder: "border-l-4 border-l-orange-500" },
     cerrado: { label: "Cerrada", class: "bg-slate-200 text-slate-700 border-slate-300", cardBorder: "border-l-4 border-l-slate-400" },
+}
+
+const HISTORY_STATUS_LABELS: Record<string, { label: string; class: string; cardBorder: string }> = {
+    seguimiento: { label: "Derivado a Gestión de casos", class: "bg-orange-100 text-orange-700 border-orange-200", cardBorder: "border-l-4 border-l-orange-500" },
+    cerrado: STATUS_LABELS.cerrado,
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -78,6 +97,24 @@ interface StaffUser {
     role: string
 }
 
+/** Etiqueta en español para el rol en listados de profesionales */
+const STAFF_ROLE_LABELS: Record<string, string> = {
+    docente: "Docente",
+    director: "Director/a",
+    dupla: "Dupla",
+    convivencia: "Convivencia",
+    inspector: "Inspector/a",
+    utp: "UTP",
+    admin: "Administración",
+    centro_alumnos: "Centro de alumnos",
+}
+
+function staffSelectOptionLabel(u: StaffUser): string {
+    const key = (u.role || "").trim().toLowerCase()
+    const roleLabel = key ? (STAFF_ROLE_LABELS[key] ?? u.role) : ""
+    return roleLabel ? `${u.last_name}, ${u.name} (${roleLabel})` : `${u.last_name}, ${u.name}`
+}
+
 interface InvolvedStudent {
     student_id: string
     students: { id: string; name: string; last_name: string; courses?: { name: string; section?: string } | null; course?: { name: string; section?: string } | null } | null
@@ -86,6 +123,7 @@ interface InvolvedStudent {
 interface ConvivenciaRecord {
     id: string
     status: string
+    event_title?: string | null
     responsable_id: string | null
     apoyo_id: string | null
     agreements: string | null
@@ -99,6 +137,7 @@ interface ConvivenciaRecord {
     resolution_notes?: string | null
     incident_date: string
     convivencia_record_students?: InvolvedStudent[]
+    student_cases?: any[]
 }
 
 interface Props {
@@ -231,70 +270,37 @@ function StudentPicker({
     )
 }
 
-// ── Resolve Row ────────────────────────────────────────────────────────────────
-function ResolveRow({ record, onResolved }: {
-    record: ConvivenciaRecord
-    onResolved: (id: string, notes: string) => void
-}) {
-    const [open, setOpen] = useState(false)
-    const [notes, setNotes] = useState(record.resolution_notes ?? "")
-    const [pending, startTransition] = useTransition()
+// ── Historial / Derivación ────────────────────────────────────────────────────
+function HistoryCaseStatus({ record }: { record: ConvivenciaRecord }) {
+    const status = (record.status ?? "").toLowerCase()
+    const isDerivedToCases = status !== "cerrado" && status !== "cerrada"
 
-    if (record.resolved) {
+    if (isDerivedToCases) {
         return (
-            <div className="mt-2 pl-2 border-l-2 border-emerald-300">
-                <p className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
-                    <CheckCircle className="w-3.5 h-3.5" /> Resuelto
+            <div className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2">
+                <p className="text-xs font-semibold text-orange-800">Derivado a Gestión de casos</p>
+                <p className="text-xs text-orange-700 mt-1">
+                    El seguimiento, las intervenciones y las medidas continúan en Gestión de casos. Este registro queda como antecedente en convivencia.
                 </p>
-                {record.resolution_notes && (
-                    <p className="text-xs text-slate-500 mt-0.5">{record.resolution_notes}</p>
-                )}
+            </div>
+        )
+    }
+
+    if (record.resolution_notes) {
+        return (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <p className="text-xs font-semibold text-slate-700">Cierre en convivencia</p>
+                <p className="text-xs text-slate-600 mt-1 whitespace-pre-wrap">{record.resolution_notes}</p>
             </div>
         )
     }
 
     return (
-        <div className="mt-2">
-            <button
-                type="button"
-                onClick={() => setOpen(o => !o)}
-                className="flex items-center gap-1 text-xs text-slate-400 hover:text-indigo-600 transition-colors"
-            >
-                {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                {open ? "Cerrar" : "Registrar resolución / medidas tomadas"}
-            </button>
-
-            {open && (
-                <div className="mt-2 space-y-2">
-                    <textarea
-                        rows={3}
-                        value={notes}
-                        onChange={e => setNotes(e.target.value)}
-                        placeholder="Describe cómo se resolvió el caso, qué medidas se tomaron, acuerdos, sanciones, etc."
-                        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none"
-                    />
-                    <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() => {
-                            startTransition(async () => {
-                                const result = await resolveConvivenciaRecord(record.id, notes.trim())
-                                if (result?.error) {
-                                    toast.error(result.error)
-                                } else {
-                                    toast.success("Caso marcado como resuelto")
-                                    onResolved(record.id, notes.trim())
-                                    setOpen(false)
-                                }
-                            })
-                        }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50"
-                    >
-                        <CheckCircle className="w-3.5 h-3.5" />
-                        {pending ? "Guardando..." : "Marcar como resuelto"}
-                    </button>
-                </div>
-            )}
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="text-xs font-semibold text-slate-700">Cerrado en convivencia</p>
+            <p className="text-xs text-slate-500 mt-1">
+                Este registro fue cerrado desde convivencia y no requiere seguimiento en Gestión de casos.
+            </p>
         </div>
     )
 }
@@ -326,6 +332,23 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
     const [location, setLocation] = useState("")
     const [description, setDescription] = useState("")
     const [agreements, setAgreements] = useState("")
+    const [tituloDelEvento, setTituloDelEvento] = useState("")
+    const [nextStep, setNextStep] = useState("")
+    const [nextStepDate, setNextStepDate] = useState("")
+
+    const entrevistaApoderado = isEntrevistaApoderadoType(type)
+
+    function selectEventType(next: string) {
+        const wasInterview = isEntrevistaApoderadoType(type)
+        if (next !== "Otro") setTypeOther("")
+        if (isEntrevistaApoderadoType(next)) {
+            setSeverity("n/a")
+            setLocation("")
+        } else if (wasInterview && severity === "n/a") {
+            setSeverity("moderada")
+        }
+        setType(next)
+    }
 
     // Voice Dictation State
     const [isListening, setIsListening] = useState(false)
@@ -432,10 +455,13 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
             .map(x => ({ name: x[0], count: x[1] }))
     }, [records])
 
-    const resolutionRate = useMemo(() => {
+    const closureRate = useMemo(() => {
         if (records.length === 0) return 0
-        const resolved = records.filter(r => r.resolved).length
-        return Math.round((resolved / records.length) * 100)
+        const closed = records.filter(r => {
+            const s = (r.status || "").toLowerCase()
+            return s === "cerrado" || s === "cerrada" || r.resolved
+        }).length
+        return Math.round((closed / records.length) * 100)
     }, [records])
 
     const daysHeatmap = useMemo(() => {
@@ -487,18 +513,16 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
         ]
     }, [records])
 
-    // Estado de casos (abierta / en seguimiento / cerrada) — clave para dupla y convivencia
+    // Estado de casos (en seguimiento / cerrada); legacy "abierto" cuenta como seguimiento
     const statusCounts = useMemo(() => {
-        let abiertos = 0
         let seguimiento = 0
         let cerrados = 0
         for (const r of records) {
-            const s = (r.status || (r.resolved ? "cerrado" : "abierto")).toLowerCase()
-            if (s === "cerrado" || r.resolved) cerrados++
-            else if (s === "seguimiento") seguimiento++
-            else abiertos++
+            const s = (r.status || "").toLowerCase()
+            if (s === "cerrado" || s === "cerrada" || r.resolved) cerrados++
+            else seguimiento++
         }
-        return { abiertos, seguimiento, cerrados }
+        return { seguimiento, cerrados }
     }, [records])
 
     // Lugares donde ocurren más casos (prevención y foco)
@@ -624,10 +648,6 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
         recognition.start()
     }
 
-    function handleResolved(id: string, notes: string) {
-        setRecords(prev => prev.map(r => r.id === id ? { ...r, resolved: true, resolution_notes: notes, status: "cerrado" } : r))
-    }
-
     /** Enriquece el registro con cursos de la lista de estudiantes cuando faltan en el anidado. */
     function enrichRecordWithCourses(record: ConvivenciaRecord): ConvivenciaRecord {
         const studentsById = new Map(students.map(st => [st.id, st]))
@@ -674,15 +694,15 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
     function getStatsPdfData() {
         return {
             institutionName,
-            statusCounts: { abiertos: statusCounts.abiertos, seguimiento: statusCounts.seguimiento, cerrados: statusCounts.cerrados },
+            statusCounts: { seguimiento: statusCounts.seguimiento, cerrados: statusCounts.cerrados },
             last30: last30.length,
             lastWeek: lastWeek.length,
             weekPct: weekPct,
             weekDiff: weekDiff,
             topTypeLabel: topType?.label ?? null,
             gravesLast30: last30.filter(r => r.severity === "grave").length,
-            resolutionRate: resolutionRate,
-            resolvedCount: records.filter(r => r.resolved).length,
+            resolutionRate: closureRate,
+            resolvedCount: statusCounts.cerrados,
             totalRecords: records.length,
             trendVsPrev: trendVsPrev,
             severityDist: severityDist.map(s => ({ label: s.label, count: s.count })),
@@ -727,18 +747,24 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
 
     function handleEdit(record: ConvivenciaRecord) {
         setEditingRecordId(record.id)
-        setStatus(record.status || "abierto")
+        const s = (record.status || "").toLowerCase()
+        setStatus(s === "cerrado" || s === "cerrada" ? "cerrado" : "seguimiento")
         setResponsableId(record.responsable_id || "")
         setApoyoId(record.apoyo_id || "")
         if (record.type === "Otro" || record.type.startsWith("Otro:")) {
             setType("Otro")
             setTypeOther(record.type.startsWith("Otro:") ? record.type.slice(6).trim() : "")
         } else {
-            setType(record.type || "")
+            setType(normalizeConvivenciaTypeForUi(record.type || ""))
             setTypeOther("")
         }
         setSeverity(record.severity || "moderada")
         setLocation(record.location || "")
+        setTituloDelEvento(record.event_title ?? "")
+        if (!(record.type === "Otro" || record.type.startsWith("Otro:")) && isEntrevistaApoderadoType(normalizeConvivenciaTypeForUi(record.type || ""))) {
+            setSeverity("n/a")
+            setLocation("")
+        }
         setDescription(record.description || "")
         setAgreements(record.agreements || "")
 
@@ -772,6 +798,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
             const originalParsedDate = record.incident_date ? new Date(record.incident_date).toISOString() : null
             originalPayloadRef.current = {
                 status: record.status,
+                event_title: (record.event_title || "").trim(),
                 responsable_id: record.responsable_id || null,
                 apoyo_id: record.apoyo_id || null,
                 agreements: (record.agreements || "").trim(),
@@ -805,20 +832,30 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
 
         const allActions = [...actions, ...(otherAction.trim() ? [otherAction.trim()] : [])]
         const parsedDate = new Date(incidentDate).toISOString()
+        const statusToSave = status === "cerrado" ? "cerrado" : "seguimiento"
+        const interviewType = isEntrevistaApoderadoType(type)
+        const severityToSave = interviewType ? "n/a" : severity
+        const locationToSave = interviewType ? "" : location.trim()
 
         const payload = {
-            status,
+            status: statusToSave,
+            event_title: tituloDelEvento.trim(),
             responsable_id: responsableId || null,
             apoyo_id: apoyoId || null,
             agreements: agreements.trim(),
             type: (type === "Otro" && typeOther.trim()) ? `Otro: ${typeOther.trim()}` : type,
-            severity,
-            location: location.trim(),
+            severity: severityToSave,
+            location: locationToSave,
             description: description.trim(),
             involved_count: Math.max(involvedStudents.length, 1),
             student_ids: involvedStudents.map(s => s.id),
             actions_taken: allActions,
             incident_date: parsedDate,
+            ...(statusToSave === "seguimiento" && {
+                next_step: nextStep.trim() || null,
+                next_step_date: nextStepDate || null,
+                derived_to: ["dupla", "convivencia"],
+            }),
         }
 
         // Si está en edición y nada cambió, avisar y no guardar
@@ -860,6 +897,9 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                 toast.error(result.error)
             } else {
                 toast.success(editingRecordId ? "Registro actualizado correctamente" : "Registro creado correctamente")
+                if ((result as { warning?: string })?.warning) {
+                    toast.warning((result as { warning: string }).warning)
+                }
 
                 // limpiar snapshot después de guardar
                 originalPayloadRef.current = null
@@ -869,11 +909,14 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                 const newRecord: ConvivenciaRecord = {
                     id: editingRecordId || (result as any).id || crypto.randomUUID(),
                     type: typeToSave,
-                    severity,
-                    location: location.trim() || null,
+                    event_title: tituloDelEvento.trim() || null,
+                    severity: severityToSave,
+                    location: locationToSave || null,
                     description: description.trim(),
+                    agreements: agreements.trim() || null,
                     involved_count: Math.max(involvedStudents.length, 1),
                     actions_taken: allActions,
+                    status: statusToSave,
                     resolved: editingRecordId ? records.find(r => r.id === editingRecordId)?.resolved ?? false : false,
                     resolution_notes: editingRecordId ? records.find(r => r.id === editingRecordId)?.resolution_notes ?? null : null,
                     incident_date: parsedDate,
@@ -881,6 +924,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                         student_id: s.id,
                         students: { id: s.id, name: s.name, last_name: s.last_name },
                     })),
+                    student_cases: statusToSave === "seguimiento" ? [{ next_step: nextStep.trim() || null, next_step_date: nextStepDate || null }] : [],
                 } as any // using as any to ignore strict DB typing matching for optimistic updates
 
                 if (editingRecordId) {
@@ -888,8 +932,9 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                     setTab("historial")
                     setEditingRecordId(null)
                     // Reset
-                    setStatus("abierto"); setResponsableId(""); setApoyoId("")
+                    setStatus(""); setResponsableId(""); setApoyoId("")
                     setType(""); setTypeOther(""); setSeverity("moderada"); setLocation("")
+                    setTituloDelEvento("")
                     setDescription(""); setAgreements(""); setInvolvedStudents([])
                     setSelectedCourse(""); setActions([]); setOtherAction("")
                     setIncidentDate(new Date().toISOString().slice(0, 16))
@@ -956,6 +1001,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                 // Reset form para crear otro caso de inmediato
                                 setStatus(""); setResponsableId(""); setApoyoId("")
                                 setType(""); setTypeOther(""); setSeverity(""); setLocation("")
+                                setTituloDelEvento("")
                                 setDescription(""); setAgreements(""); setInvolvedStudents([])
                                 setSelectedCourse(""); setActions([]); setOtherAction("")
                                 setIncidentDate(new Date().toISOString().slice(0, 16))
@@ -972,6 +1018,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                 // Reset básico al volver al historial
                                 setStatus(""); setResponsableId(""); setApoyoId("")
                                 setType(""); setTypeOther(""); setSeverity(""); setLocation("")
+                                setTituloDelEvento("")
                                 setDescription(""); setAgreements(""); setInvolvedStudents([])
                                 setSelectedCourse(""); setActions([]); setOtherAction("")
                                 setIncidentDate(new Date().toISOString().slice(0, 16))
@@ -987,38 +1034,78 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
             {tab === "nuevo" && !createdRecord && (
                 <form onSubmit={handleSubmit} className="bg-white rounded-3xl border shadow-sm p-8 space-y-10">
 
-                    {/* Header: Estado y Fecha */}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div className="flex items-center gap-4">
-                            <span className="text-sm font-semibold text-slate-700">Estado del caso</span>
-                            <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-full border">
-                                {[
-                                    { value: "abierto", label: "Abierto", activeClass: "bg-emerald-500 text-white shadow-md ring-2 ring-emerald-200 border-emerald-500" },
-                                    { value: "seguimiento", label: "En seguimiento", activeClass: "bg-orange-500 text-white shadow-md ring-2 ring-orange-200 border-orange-500" },
-                                    { value: "cerrado", label: "Cerrado", activeClass: "bg-red-500 text-white shadow-md ring-2 ring-red-200 border-red-500" },
-                                ].map(s => (
-                                    <button
-                                        type="button"
-                                        key={s.value}
-                                        onClick={() => setStatus(prev => (prev === s.value ? "" : s.value))}
-                                        className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                                            status === s.value
-                                                ? s.activeClass
-                                                : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
-                                            }`}
-                                    >
-                                        {s.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
+                    {/* Fecha y hora del incidente */}
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-start w-full">
+                        <span className="text-sm font-semibold text-slate-700 shrink-0">Fecha y hora</span>
+                        <input type="datetime-local" value={incidentDate} onChange={e => setIncidentDate(e.target.value)}
+                            className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 w-full sm:w-auto"
+                        />
+                    </div>
 
-                        <div className="flex items-center gap-3">
-                            <span className="text-sm font-semibold text-slate-700">Fecha y hora</span>
-                            <input type="datetime-local" value={incidentDate} onChange={e => setIncidentDate(e.target.value)}
-                                className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                            />
+                    {/* Tipo de evento */}
+                    <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-200">
+                        <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Tipo de evento</h3>
+                        <div className="flex flex-col gap-4">
+                            <div className="flex flex-col sm:flex-row gap-4 sm:items-center">
+                                <select value={type} onChange={e => selectEventType(e.target.value)}
+                                    className="w-full sm:w-64 rounded-xl bg-white border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                                    <option value="">Seleccione tipo...</option>
+                                    {RECORD_TYPES.filter(t => t.value !== "otro").map(t => <option key={t.value} value={t.label}>{t.label}</option>)}
+                                    <option value="Apoyo emocional">Apoyo emocional</option>
+                                    <option value={ENTREVISTA_APODERADO_LABEL}>{ENTREVISTA_APODERADO_LABEL}</option>
+                                    <option value="Incumplimiento de normas">Incumplimiento de normas</option>
+                                    {RECORD_TYPES.filter(t => t.value === "otro").map(t => <option key={t.value} value={t.label}>{t.label}</option>)}
+                                </select>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-xs font-medium text-slate-400">Frecuentes:</span>
+                                    {[
+                                        { label: "Apoyo emocional" },
+                                        { label: ENTREVISTA_APODERADO_LABEL },
+                                        { label: "Incumplimiento de normas" },
+                                    ].map(shortcut => (
+                                        <button key={shortcut.label} type="button"
+                                            onClick={() => selectEventType(shortcut.label)}
+                                            className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
+                                                type === shortcut.label
+                                                    ? "bg-indigo-500 text-white border-indigo-500 shadow-sm ring-2 ring-indigo-200"
+                                                    : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
+                                                }`}
+                                        >{shortcut.label}</button>
+                                    ))}
+                                </div>
+                            </div>
+                            {type === "Otro" && (
+                                <div>
+                                    <label className="block text-xs font-medium text-slate-500 mb-1">Especifique el tipo de evento</label>
+                                    <input type="text" value={typeOther} onChange={e => setTypeOther(e.target.value)}
+                                        placeholder="Ej: Situación no categorizada..."
+                                        className="w-full sm:max-w-md rounded-xl bg-white border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                    />
+                                </div>
+                            )}
                         </div>
+                    </div>
+
+                    {/* Título del evento */}
+                    <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-200 relative z-20">
+                        <label htmlFor="convivencia-titulo-evento" className="block text-xs font-bold uppercase tracking-widest text-slate-500 mb-2">
+                            Título del evento
+                        </label>
+                        <p className="text-[11px] text-slate-400 mb-2">Texto breve para identificar el caso en el historial.</p>
+                        <input
+                            id="convivencia-titulo-evento"
+                            name="convivencia_titulo_evento"
+                            type="text"
+                            value={tituloDelEvento}
+                            onChange={e => setTituloDelEvento(e.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === "Enter") e.preventDefault()
+                            }}
+                            placeholder="Ej. Discusión en patio, mediación con apoderado..."
+                            maxLength={200}
+                            autoComplete="off"
+                            className="w-full rounded-xl bg-white border border-slate-200 px-3 py-2.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        />
                     </div>
 
                     {/* ── Row 1: Profesionales | Lugar | Gravedad ── */}
@@ -1032,7 +1119,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                 <select value={responsableId} onChange={e => setResponsableId(e.target.value)}
                                     className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400">
                                     <option value="">Seleccione...</option>
-                                    {staffUsers.map(u => <option key={u.id} value={u.id}>{u.last_name}, {u.name}</option>)}
+                                    {staffUsers.map(u => <option key={u.id} value={u.id}>{staffSelectOptionLabel(u)}</option>)}
                                 </select>
                             </div>
                             <div>
@@ -1040,7 +1127,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                 <select value={apoyoId} onChange={e => setApoyoId(e.target.value)}
                                     className="w-full text-sm bg-white border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400">
                                     <option value="">Ninguno</option>
-                                    {staffUsers.map(u => <option key={u.id} value={u.id}>{u.last_name}, {u.name}</option>)}
+                                    {staffUsers.map(u => <option key={u.id} value={u.id}>{staffSelectOptionLabel(u)}</option>)}
                                 </select>
                             </div>
                         </div>
@@ -1048,7 +1135,10 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                         {/* Lugar del evento */}
                         <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-200">
                             <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Lugar del evento</h3>
-                            <div className="flex flex-wrap gap-2">
+                            {entrevistaApoderado && (
+                                <p className="text-[11px] text-slate-500 mb-2">No aplica para entrevista con el apoderado.</p>
+                            )}
+                            <div className={`flex flex-wrap gap-2 ${entrevistaApoderado ? "pointer-events-none opacity-40" : ""}`}>
                                 {["Patio", "Aula", "Baño", "Comedor", "Redes sociales", "Fuera del colegio"].map(loc => (
                                     <button key={loc} type="button"
                                         onClick={() => setLocation(prev => prev === loc ? "" : loc)}
@@ -1064,7 +1154,10 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                         {/* Gravedad */}
                         <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-200">
                             <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Gravedad</h3>
-                            <div className="flex flex-wrap gap-2">
+                            {entrevistaApoderado && (
+                                <p className="text-[11px] text-slate-500 mb-2">No aplica para entrevista con el apoderado.</p>
+                            )}
+                            <div className={`flex flex-wrap gap-2 ${entrevistaApoderado ? "pointer-events-none opacity-40" : ""}`}>
                                 {[
                                     // Verde (baja intensidad)
                                     { value: "leve", label: "Leve", activeClass: "bg-emerald-500 text-white border-emerald-500 shadow-md ring-2 ring-emerald-200" },
@@ -1083,7 +1176,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                             severity === s.value
                                                 ? s.activeClass
                                                 : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
-                                        } ${type === "Entrevista apoderado" ? "opacity-40 grayscale pointer-events-none" : ""}`}
+                                        }`}
                                     >
                                         {s.label}
                                     </button>
@@ -1143,50 +1236,6 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                         </div>
                     </div>
 
-                    {/* ── Tipo de evento ── */}
-                    <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-200">
-                        <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Tipo de evento</h3>
-                        <div className="flex flex-col gap-4">
-                            <div className="flex flex-col sm:flex-row gap-4 sm:items-center">
-                                <select value={type} onChange={e => { setType(e.target.value); if (e.target.value !== "Otro") setTypeOther(""); if (e.target.value === "Entrevista apoderado") setSeverity("n/a") }}
-                                    className="w-full sm:w-64 rounded-xl bg-white border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                                    <option value="">Seleccione tipo...</option>
-                                    {RECORD_TYPES.filter(t => t.value !== "otro").map(t => <option key={t.value} value={t.label}>{t.label}</option>)}
-                                    <option value="Apoyo emocional">Apoyo emocional</option>
-                                    <option value="Entrevista apoderado">Entrevista apoderado</option>
-                                    <option value="Incumplimiento de normas">Incumplimiento de normas</option>
-                                    {RECORD_TYPES.filter(t => t.value === "otro").map(t => <option key={t.value} value={t.label}>{t.label}</option>)}
-                                </select>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="text-xs font-medium text-slate-400">Frecuentes:</span>
-                                    {[
-                                        { label: "Apoyo emocional" },
-                                        { label: "Entrevista apoderado" },
-                                        { label: "Incumplimiento de normas" },
-                                    ].map(shortcut => (
-                                        <button key={shortcut.label} type="button"
-                                            onClick={() => { setType(shortcut.label); setTypeOther(""); if (shortcut.label === "Entrevista apoderado") setSeverity("n/a") }}
-                                            className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
-                                                type === shortcut.label
-                                                    ? "bg-indigo-500 text-white border-indigo-500 shadow-sm ring-2 ring-indigo-200"
-                                                    : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
-                                                }`}
-                                        >{shortcut.label}</button>
-                                    ))}
-                                </div>
-                            </div>
-                            {type === "Otro" && (
-                                <div>
-                                    <label className="block text-xs font-medium text-slate-500 mb-1">Especifique el tipo de evento</label>
-                                    <input type="text" value={typeOther} onChange={e => setTypeOther(e.target.value)}
-                                        placeholder="Ej: Situación no categorizada..."
-                                        className="w-full sm:max-w-md rounded-xl bg-white border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
                     {/* ── Descripción + Acuerdos lado a lado ── */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
@@ -1198,8 +1247,12 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             <div className="relative">
                                 <textarea rows={6} value={description} onChange={e => setDescription(e.target.value)}
                                     placeholder="Describe detalladamente qué ocurrió, quiénes participaron y el contexto..."
+                                    maxLength={5000}
                                     className="w-full rounded-xl bg-white border border-slate-200 p-3 pb-12 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none shadow-sm"
                                 />
+                                <div className="absolute bottom-3 left-3 text-[10px] text-slate-400">
+                                    {description.length} / 5000
+                                </div>
                                 <button type="button" onClick={() => toggleDictation("description")}
                                     className={`absolute bottom-3 right-3 p-2.5 rounded-full transition-all ${isListening && listeningField === "description"
                                         ? "bg-red-500 text-white shadow-md animate-pulse"
@@ -1217,8 +1270,12 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             <div className="relative">
                                 <textarea rows={6} value={agreements} onChange={e => setAgreements(e.target.value)}
                                     placeholder="Enumere los acuerdos o decisiones tomadas si aplica..."
+                                    maxLength={3000}
                                     className="w-full rounded-xl bg-white border border-slate-200 p-3 pb-12 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none shadow-sm"
                                 />
+                                <div className="absolute bottom-3 left-3 text-[10px] text-slate-400">
+                                    {agreements.length} / 3000
+                                </div>
                                 <button type="button" onClick={() => toggleDictation("agreements")}
                                     className={`absolute bottom-3 right-3 p-2.5 rounded-full transition-all ${isListening && listeningField === "agreements"
                                         ? "bg-red-500 text-white shadow-md animate-pulse"
@@ -1245,6 +1302,66 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                         </div>
                     </div>
 
+                    {/* Estado del evento (al final del formulario) */}
+                    <div className="bg-slate-50/60 p-4 rounded-2xl border border-slate-200">
+                        <span className="text-sm font-semibold text-slate-700">Estado del evento</span>
+                        <p className="text-[11px] text-slate-500 mt-0.5 mb-3">
+                            Si eliges &quot;En seguimiento&quot;, se crearán casos en Gestión de casos para dar seguimiento.
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2 bg-white p-1.5 rounded-full border border-slate-200 w-fit">
+                            {[
+                                { value: "seguimiento", label: "En seguimiento", activeClass: "bg-orange-500 text-white shadow-md ring-2 ring-orange-200 border-orange-500" },
+                                { value: "cerrado", label: "Cerrado", activeClass: "bg-red-500 text-white shadow-md ring-2 ring-red-200 border-red-500" },
+                            ].map(s => (
+                                <button
+                                    type="button"
+                                    key={s.value}
+                                    onClick={() => setStatus(prev => (prev === s.value ? "" : s.value))}
+                                    className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                                        status === s.value
+                                            ? s.activeClass
+                                            : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
+                                        }`}
+                                >
+                                    {s.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {status === "seguimiento" && (
+                        <div className="bg-violet-50/80 p-5 rounded-2xl border-2 border-violet-200">
+                            <h3 className="text-sm font-bold text-violet-900 mb-1 flex items-center gap-2">
+                                <ClipboardList className="w-4 h-4" />
+                                Datos para Gestión de casos
+                            </h3>
+                            <p className="text-xs text-violet-700/90 mb-4">
+                                Este registro se enviará al historial de Gestión de casos. Completa los datos para el seguimiento.
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Próximo paso</label>
+                                    <input
+                                        type="text"
+                                        value={nextStep}
+                                        onChange={e => setNextStep(e.target.value)}
+                                        placeholder="Ej. Reunión con apoderado, seguimiento en 2 semanas..."
+                                        className="w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha del próximo paso</label>
+                                    <input
+                                        type="date"
+                                        value={nextStepDate}
+                                        onChange={e => setNextStepDate(e.target.value)}
+                                        className="w-full rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <div className="pt-2 flex flex-col sm:flex-row gap-3">
                         <button type="submit" disabled={pending}
                             className="flex-1 sm:flex-none px-8 py-3 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
@@ -1253,11 +1370,13 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                         {editingRecordId && (
                             <button type="button" disabled={pending} onClick={() => {
                                 setEditingRecordId(null)
-                                setStatus("abierto"); setResponsableId(""); setApoyoId("")
+                                setStatus(""); setResponsableId(""); setApoyoId("")
                                 setType(""); setTypeOther(""); setSeverity("moderada"); setLocation("")
+                                setTituloDelEvento("")
                                 setDescription(""); setAgreements(""); setInvolvedStudents([])
                                 setSelectedCourse(""); setActions([]); setOtherAction("")
                                 setIncidentDate(new Date().toISOString().slice(0, 16))
+                                setNextStep(""); setNextStepDate("")
                                 setTab("historial")
                             }} className="px-6 py-3 rounded-xl bg-slate-100 text-slate-700 text-sm font-semibold hover:bg-slate-200 transition-colors flex-1 sm:flex-none text-center">
                                 Cancelar
@@ -1293,17 +1412,12 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                         </div>
                     </div>
 
-                    {/* Estado de casos (abiertos / seguimiento / cerrados) — prioridad dupla y convivencia */}
+                    {/* Estado de casos (seguimiento / cerrados) */}
                     <div className="rounded-2xl border border-slate-200 bg-slate-50/50 p-4">
                         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                             <Inbox className="w-3.5 h-3.5" /> Estado de casos (período)
                         </p>
-                        <div className="grid grid-cols-3 gap-3">
-                            <div className="bg-white rounded-xl border border-amber-200/80 p-4 shadow-sm">
-                                <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide">Abiertos</p>
-                                <p className="text-2xl font-bold text-amber-700 mt-0.5">{statusCounts.abiertos}</p>
-                                <p className="text-xs text-slate-500 mt-0.5">Requieren atención</p>
-                            </div>
+                        <div className="grid grid-cols-2 gap-3">
                             <div className="bg-white rounded-xl border border-orange-200/80 p-4 shadow-sm">
                                 <p className="text-[10px] font-semibold text-orange-700 uppercase tracking-wide">En seguimiento</p>
                                 <p className="text-2xl font-bold text-orange-700 mt-0.5">{statusCounts.seguimiento}</p>
@@ -1424,9 +1538,9 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                     {/* Insights avanzados */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
-                        {/* 1. Tasa de Resolución */}
+                        {/* 1. Tasa de cierre */}
                         <div className="bg-white rounded-2xl border shadow-sm p-6 flex flex-col items-center justify-center text-center">
-                            <h3 className="text-sm font-semibold text-slate-700 mb-2">Tasa de Resolución</h3>
+                            <h3 className="text-sm font-semibold text-slate-700 mb-2">Tasa de cierre</h3>
                             <div className="relative w-28 h-28 flex items-center justify-center rounded-full border-8 border-slate-50">
                                 <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 36 36">
                                     <path
@@ -1439,7 +1553,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                     <path
                                         className="text-emerald-500"
                                         strokeWidth="3.8"
-                                        strokeDasharray={`${resolutionRate}, 100`}
+                                        strokeDasharray={`${closureRate}, 100`}
                                         strokeLinecap="round"
                                         stroke="currentColor"
                                         fill="none"
@@ -1447,11 +1561,11 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                     />
                                 </svg>
                                 <div className="absolute flex flex-col items-center justify-center">
-                                    <span className="text-2xl font-bold text-slate-800">{resolutionRate}%</span>
+                                    <span className="text-2xl font-bold text-slate-800">{closureRate}%</span>
                                 </div>
                             </div>
                             <p className="text-xs text-slate-400 mt-4">
-                                {records.filter(r => r.resolved).length} de {records.length} casos resueltos
+                                {statusCounts.cerrados} de {records.length} registros cerrados
                             </p>
                         </div>
 
@@ -1611,7 +1725,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                         <div className="px-6 py-4 border-b">
                             <h3 className="font-semibold text-slate-800">Todos los registros</h3>
                             <p className="text-xs text-slate-400 mt-0.5">
-                                {records.length} en total · {records.filter(r => r.resolved).length} resueltos
+                                {records.length} en total · {statusCounts.cerrados} cerrados
                             </p>
                             {/* Filtros por gravedad y estado */}
                             <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -1636,7 +1750,6 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                         className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-400"
                                     >
                                         <option value="">Todos</option>
-                                        <option value="abierto">Abierta</option>
                                         <option value="seguimiento">En seguimiento</option>
                                         <option value="cerrado">Cerrada</option>
                                     </select>
@@ -1645,13 +1758,11 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                         </div>
 
                         {(() => {
-                            // Estado efectivo igual que en la UI: si no hay status, usamos resolved para cerrado/abierto
+                            // Cerrado si resuelto o status cerrado; resto (incl. legacy abierto) → seguimiento
                             const effectiveStatus = (r: { status?: string | null; resolved?: boolean }) => {
                                 const s = (r.status || "").toLowerCase()
-                                if (s === "cerrado" || s === "cerrada") return "cerrado"
-                                if (s === "seguimiento") return "seguimiento"
-                                if (s === "abierto" || s === "abierta") return "abierto"
-                                return r.resolved ? "cerrado" : "abierto"
+                                if (s === "cerrado" || s === "cerrada" || r.resolved) return "cerrado"
+                                return "seguimiento"
                             }
                             const filteredRecords = records.filter(r => {
                                 const matchSeverity = !historialFilterSeverity || r.severity === historialFilterSeverity
@@ -1677,23 +1788,28 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             <>
                             <div className="p-4 space-y-2 bg-slate-50/50">
                                 {filteredRecords.map(r => {
-                                    const typeLabel = (r.type === "Otro" || r.type.startsWith("Otro:")) ? r.type : (RECORD_TYPES.find(t => t.value === r.type || t.label === r.type)?.label ?? r.type)
-                                    const statusMeta = STATUS_LABELS[effectiveStatus(r)]
+                                    const typeLabel = (r.type === "Otro" || r.type.startsWith("Otro:"))
+                                        ? r.type
+                                        : normalizeConvivenciaTypeForUi(
+                                            RECORD_TYPES.find(t => t.value === r.type || t.label === r.type)?.label ?? r.type
+                                        )
+                                    const statusMeta = HISTORY_STATUS_LABELS[effectiveStatus(r)]
                                     const involvedList: any[] = (r.convivencia_record_students ?? [])
                                         .map((rs: any) => rs?.students)
                                         .filter(Boolean)
                                     const visibleStudents = involvedList.slice(0, 3)
                                     const extraStudents = Math.max(involvedList.length - visibleStudents.length, 0)
+                                    const titleTrim = r.event_title?.trim() ?? ""
                                     return (
                                         <div
                                             key={r.id}
-                                            className={`flex flex-wrap items-center justify-between gap-3 bg-white rounded-xl border px-4 py-3 shadow-sm transition-all hover:border-slate-300 ${r.resolved ? "opacity-80" : ""} ${statusMeta.cardBorder}`}
+                                            className={`flex flex-wrap items-center justify-between gap-3 bg-white rounded-xl border px-4 py-3 shadow-sm transition-all hover:border-slate-300 ${statusMeta.cardBorder}`}
                                         >
-                                            <div className="flex flex-wrap items-center gap-2 min-w-0">
+                                            <div className="flex flex-1 flex-col gap-1 min-w-0">
+                                                <div className="flex flex-wrap items-center gap-2 min-w-0">
                                                 <span className="text-xs font-medium text-slate-500 shrink-0">
                                                     {new Date(r.incident_date).toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                                                 </span>
-                                                <span className="font-semibold text-slate-800 text-sm">{typeLabel}</span>
                                                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${statusMeta.class}`}>{statusMeta.label}</span>
                                                 <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${SEVERITY_COLORS[r.severity] ?? "bg-slate-100 text-slate-600"}`}>{SEVERITY_LABELS[r.severity] ?? r.severity}</span>
                                                 {r.location && <span className="text-xs text-slate-500 truncate max-w-[120px]" title={r.location}>📍 {r.location}</span>}
@@ -1719,11 +1835,11 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                                             return (
                                                                 <span
                                                                     key={s?.id}
-                                                                    className="group relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold shrink-0 cursor-default"
+                                                                    className="group relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold shrink-0 cursor-default hover:z-50"
                                                                     title={`${name} — ${courseLabel}`}
                                                                 >
                                                                     {initials || "?"}
-                                                                        <span className="pointer-events-none absolute left-1/2 bottom-full z-20 mb-2 -translate-x-1/2 opacity-0 translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-y-0">
+                                                                        <span className="pointer-events-none absolute left-1/2 bottom-full z-50 mb-2 -translate-x-1/2 opacity-0 translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-y-0">
                                                                         <span className="block w-max max-w-[220px] rounded-lg bg-slate-900 px-3 py-2 text-white shadow-lg">
                                                                             <span className="block text-xs font-semibold text-white leading-tight">{name || "Estudiante"}</span>
                                                                             <span className="block text-[11px] text-white/80 mt-0.5 leading-snug">{courseLabel}</span>
@@ -1733,15 +1849,32 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                                             )
                                                         })}
                                                         {extraStudents > 0 && (
-                                                            <span
-                                                                className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-50 border border-slate-200 text-slate-600 text-xs font-bold shrink-0"
-                                                                title={`${extraStudents} estudiante(s) más`}
-                                                            >
+                                                            <span className="group relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-50 border border-slate-200 text-slate-600 text-xs font-bold shrink-0 cursor-default hover:z-50">
                                                                 +{extraStudents}
+                                                                <span className="pointer-events-none absolute left-1/2 bottom-full z-50 mb-2 -translate-x-1/2 opacity-0 translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-y-0">
+                                                                    <span className="block w-max max-w-[220px] rounded-lg bg-slate-900 px-3 py-2 text-white shadow-lg space-y-2">
+                                                                        {involvedList.slice(3).map((s: any) => {
+                                                                            const n = `${s?.last_name ?? ""}, ${s?.name ?? ""}`.trim().replace(/^,|,$/g, "").trim()
+                                                                            const cData = s?.courses ?? s?.course ?? students.find((st: Student) => st.id === s?.id)?.courses
+                                                                            const cLabel = cData?.name ? `${cData.name}${cData.section ? " " + cData.section : ""}` : "Sin curso"
+                                                                            return (
+                                                                                <span key={s?.id} className="block text-left">
+                                                                                    <span className="block text-xs font-semibold text-white leading-tight">{n || "Estudiante"}</span>
+                                                                                    <span className="block text-[10px] text-white/80 leading-snug">{cLabel}</span>
+                                                                                </span>
+                                                                            )
+                                                                        })}
+                                                                    </span>
+                                                                </span>
                                                             </span>
                                                         )}
                                                     </div>
                                                 )}
+                                                </div>
+                                                {titleTrim ? (
+                                                    <p className="text-sm font-semibold text-slate-900 leading-snug truncate" title={titleTrim}>{titleTrim}</p>
+                                                ) : null}
+                                                <p className={`text-sm leading-snug truncate ${titleTrim ? "text-slate-600" : "font-semibold text-slate-800"}`} title={typeLabel}>{typeLabel}</p>
                                             </div>
                                             <button
                                                 type="button"
@@ -1765,11 +1898,18 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                 {(() => {
                                     const r = detailRecordId ? records.find(rec => rec.id === detailRecordId) : null
                                     if (!r) return null
-                                    const typeLabel = (r.type === "Otro" || r.type.startsWith("Otro:")) ? r.type : (RECORD_TYPES.find(t => t.value === r.type || t.label === r.type)?.label ?? r.type)
+                                    const typeLabel = (r.type === "Otro" || r.type.startsWith("Otro:"))
+                                        ? r.type
+                                        : normalizeConvivenciaTypeForUi(
+                                            RECORD_TYPES.find(t => t.value === r.type || t.label === r.type)?.label ?? r.type
+                                        )
                                     const involvedList = (r.convivencia_record_students ?? []).map(rs => rs.students).filter(Boolean)
-                                    const statusMeta = STATUS_LABELS[effectiveStatus(r)]
+                                    const statusMeta = HISTORY_STATUS_LABELS[effectiveStatus(r)]
                                     return (
                                         <div className="space-y-4 text-sm">
+                                            {r.event_title?.trim() && (
+                                                <p className="text-base font-semibold text-slate-900">{r.event_title.trim()}</p>
+                                            )}
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <span className="font-bold text-slate-800">{typeLabel}</span>
                                                 <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${statusMeta.class}`}>{statusMeta.label}</span>
@@ -1816,14 +1956,8 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                                     <p className="text-slate-700 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 border border-slate-100 text-xs">{r.agreements}</p>
                                                 </div>
                                             )}
-                                            {r.resolution_notes && (
-                                                <div>
-                                                    <p className="font-medium text-slate-500 mb-1">Notas de cierre</p>
-                                                    <p className="text-slate-700 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 border border-slate-100 text-xs">{r.resolution_notes}</p>
-                                                </div>
-                                            )}
                                             <div className="pt-4 border-t border-slate-200 space-y-3">
-                                                <ResolveRow record={r} onResolved={(id, notes) => { handleResolved(id, notes); setDetailRecordId(null) }} />
+                                                <HistoryCaseStatus record={r} />
                                                 <div className="flex flex-wrap gap-2">
                                                     <button type="button" onClick={() => handleDownloadPdf(r)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-medium hover:bg-indigo-100">
                                                         <Download className="w-3.5 h-3.5" /> Descargar PDF

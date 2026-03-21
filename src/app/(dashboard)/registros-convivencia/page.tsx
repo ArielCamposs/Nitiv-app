@@ -5,8 +5,8 @@ import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { ConvivenciaRecordsTabs } from "@/components/convivencia/convivencia-records-tabs"
 
-// Solo estudiantes (y centro_alumnos) no pueden ver registros de convivencia; el resto de roles sí.
-const BLOCKED_ROLES = ["estudiante", "centro_alumnos"]
+// Solo estudiantes, centro_alumnos y docentes no pueden ver registros de convivencia; el resto de roles sí.
+const BLOCKED_ROLES = ["estudiante", "centro_alumnos", "docente"]
 
 export default async function RegistrosConvivenciaPage() {
     const cookieStore = await cookies()
@@ -51,9 +51,10 @@ export default async function RegistrosConvivenciaPage() {
         supabase
             .from("convivencia_records")
             .select(`
-                id, type, severity, location, description,
+                id, type, event_title, severity, location, description,
                 involved_count, actions_taken, resolved, status,
                 agreements, resolution_notes, incident_date,
+                student_cases ( next_step, next_step_date ),
                 convivencia_record_students (
                     student_id,
                     students ( id, name, last_name, course_id, course:course_id ( name, section ) )

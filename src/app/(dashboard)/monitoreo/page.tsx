@@ -28,10 +28,9 @@ export default async function MonitoreoPage() {
         .eq("active", true)
         .order("last_name")
 
-    // Obtener los casos existentes (consulta base sin joins anidados para evitar fallos silenciosos)
     let baseCasesQuery = supabase
         .from("student_cases")
-        .select("id, student_id, created_by, reason, initial_state, next_step, next_step_date, status, responsable_id, created_at")
+        .select("id, student_id, created_by, reason, initial_state, next_step, next_step_date, status, responsable_id, created_at, convivencia_record_id")
         .eq("institution_id", profile.institution_id)
 
     // Docente: solo ve los casos que él/ella derivó.
@@ -87,12 +86,33 @@ export default async function MonitoreoPage() {
         actionsByCaseId.set(action.case_id, list)
     }
 
+    const convivenciaIds = [
+        ...new Set(
+            (baseCases ?? [])
+                .map((c: any) => c.convivencia_record_id)
+                .filter(Boolean)
+        ),
+    ]
+
+    const { data: convivenciaRecords } =
+        convivenciaIds.length > 0
+            ? await supabase
+                  .from("convivencia_records")
+                  .select(
+                      "id, type, event_title, severity, location, description, agreements, actions_taken, incident_date, status, convivencia_record_students(student_id, students(id, name, last_name, course_id, course:course_id(name, section)))"
+                  )
+                  .in("id", convivenciaIds)
+            : { data: [] as any[] }
+
+    const convivenciaById = new Map((convivenciaRecords ?? []).map((r: any) => [r.id, r]))
+
     const casos = (baseCases ?? []).map((c: any) => ({
         ...c,
         students: studentsById.get(c.student_id) ?? null,
         creador: usersById.get(c.created_by) ?? null,
         responsable: c.responsable_id ? usersById.get(c.responsable_id) ?? null : null,
         actions: actionsByCaseId.get(c.id) ?? [],
+        convivenciaRecord: c.convivencia_record_id ? convivenciaById.get(c.convivencia_record_id) ?? null : null,
     }))
 
     // Obtener profesionales para asignar como responsable

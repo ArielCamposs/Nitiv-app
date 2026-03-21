@@ -12,44 +12,13 @@ function getStatusBarColor(resolved: boolean, status?: string): [number, number,
     return [226, 232, 240]   // slate-200 gris
 }
 
-/** Dibuja una línea con etiqueta en negrita y valor en normal (si tiene "Etiqueta: valor"). */
-function drawLabelValueLine(
-    doc: jsPDF,
-    line: string,
-    x: number,
-    y: number,
-    innerW: number,
-    lineH: number
-): number {
-    const colonIdx = line.indexOf(": ")
-    if (colonIdx === -1) {
-        doc.setFont("helvetica", "normal")
-        doc.setFontSize(10)
-        doc.setTextColor(51, 65, 85)
-        const wrapped = doc.splitTextToSize(line, innerW)
-        doc.text(wrapped, x, y)
-        return y + wrapped.length * lineH
-    }
-    const label = line.slice(0, colonIdx + 2)
-    const value = line.slice(colonIdx + 2)
-    doc.setFont("helvetica", "bold")
-    doc.setFontSize(10)
-    doc.setTextColor(30, 41, 59)
-    doc.text(label, x, y)
-    const labelW = doc.getTextWidth(label)
-    const valueW = innerW - labelW
-    doc.setFont("helvetica", "normal")
-    doc.setFontSize(10)
-    doc.setTextColor(51, 65, 85)
-    const valueLines = value ? doc.splitTextToSize(value, valueW) : []
-    if (valueLines.length === 0) return y + lineH
-    doc.text(valueLines[0], x + labelW, y)
-    let currentY = y
-    for (let i = 1; i < valueLines.length; i++) {
-        currentY += lineH
-        doc.text(valueLines[i], x, currentY)
-    }
-    return currentY + lineH
+function formatConvivenciaRecordStatusLine(record: { resolved?: boolean; status?: string | null }): string {
+    if (record.resolved) return "Resuelto"
+    const s = (record.status || "").toLowerCase()
+    if (s === "cerrado" || s === "cerrada") return "Cerrado"
+    if (s === "seguimiento") return "En seguimiento"
+    if (s === "abierto" || s === "abierta") return "En seguimiento"
+    return "En seguimiento"
 }
 
 /** Cuadro con título en barra y contenido en líneas "Etiqueta: valor". titleBarColor: RGB opcional para la barra. */
@@ -66,49 +35,100 @@ function addBoxedSection(
     const innerW = pageWidth - margin * 2 - BOX_PAD * 2
     const x = margin + BOX_PAD
     doc.setFontSize(10)
-    let totalContentH = 0
-    for (const line of content) {
-        if (line.includes(": ")) {
-            const value = line.slice(line.indexOf(": ") + 2)
-            doc.setFont("helvetica", "normal")
-            const valueW = innerW - doc.getTextWidth(line.slice(0, line.indexOf(": ") + 2))
-            const valueLines = value ? doc.splitTextToSize(value, valueW) : []
-            totalContentH += Math.max(1, valueLines.length) * LINE_H
-        } else {
-            const wrapped = doc.splitTextToSize(line, innerW)
-            totalContentH += wrapped.length * LINE_H
-        }
-    }
-    const boxH = BOX_PAD + TITLE_BAR_H + BOX_PAD + totalContentH + BOX_PAD
-
-    if (y + boxH > pageHeight - margin) {
+    
+    let currentY = y
+    if (currentY + TITLE_BAR_H + BOX_PAD * 2 + LINE_H > pageHeight - margin) {
         doc.addPage()
-        y = margin
+        currentY = margin
     }
 
     const boxLeft = margin
     const boxW = pageWidth - margin * 2
 
+    // Draw title bar
+    doc.setFillColor(...(titleBarColor ?? [241, 245, 249]))
+    doc.rect(boxLeft, currentY, boxW, TITLE_BAR_H, "F")
+    
     doc.setDrawColor(203, 213, 225)
     doc.setLineWidth(0.3)
-    doc.rect(boxLeft, y, boxW, boxH)
-
-    doc.setFillColor(...(titleBarColor ?? [241, 245, 249]))
-    doc.rect(boxLeft, y, boxW, TITLE_BAR_H, "F")
+    doc.line(boxLeft, currentY, boxLeft + boxW, currentY)
+    doc.line(boxLeft, currentY, boxLeft, currentY + TITLE_BAR_H)
+    doc.line(boxLeft + boxW, currentY, boxLeft + boxW, currentY + TITLE_BAR_H)
     doc.setDrawColor(226, 232, 240)
-    doc.line(boxLeft, y + TITLE_BAR_H, boxLeft + boxW, y + TITLE_BAR_H)
+    doc.line(boxLeft, currentY + TITLE_BAR_H, boxLeft + boxW, currentY + TITLE_BAR_H)
 
     doc.setFont("helvetica", "bold")
     doc.setFontSize(10)
     doc.setTextColor(30, 41, 59)
-    doc.text(title, boxLeft + BOX_PAD, y + 6)
+    doc.text(title, boxLeft + BOX_PAD, currentY + 6)
 
-    let textY = y + BOX_PAD + TITLE_BAR_H + BOX_PAD
+    doc.setDrawColor(203, 213, 225)
+
+    let startYForBox = currentY + TITLE_BAR_H
+    let textY = startYForBox + BOX_PAD * 2
+
     for (const line of content) {
-        textY = drawLabelValueLine(doc, line, x, textY, innerW, LINE_H)
+        let label = ""
+        let value = ""
+        let isLabelValue = false
+        if (line.includes(": ")) {
+            isLabelValue = true
+            const colonIdx = line.indexOf(": ")
+            label = line.slice(0, colonIdx + 2)
+            value = line.slice(colonIdx + 2)
+        } else {
+            value = line
+        }
+
+        doc.setFont("helvetica", isLabelValue ? "bold" : "normal")
+        const labelW = isLabelValue ? doc.getTextWidth(label) : 0
+        const valueW = innerW - labelW
+        
+        doc.setFont("helvetica", "normal")
+        const valueLines = value ? doc.splitTextToSize(value, valueW) : []
+        const linesToDraw = Math.max(1, valueLines.length)
+
+        // Check if this whole block fits, if not, page break
+        // For simplicity, we break before the whole label-value pair if it doesn't fit
+        if (textY + linesToDraw * LINE_H > pageHeight - margin - BOX_PAD) {
+            const bottomY = textY - LINE_H + BOX_PAD
+            doc.line(boxLeft, startYForBox, boxLeft, bottomY)
+            doc.line(boxLeft + boxW, startYForBox, boxLeft + boxW, bottomY)
+            doc.line(boxLeft, bottomY, boxLeft + boxW, bottomY)
+            
+            doc.addPage()
+            currentY = margin
+            startYForBox = currentY
+            textY = currentY + BOX_PAD * 2
+            doc.line(boxLeft, currentY, boxLeft + boxW, currentY)
+        }
+
+        if (isLabelValue) {
+            doc.setFont("helvetica", "bold")
+            doc.setTextColor(30, 41, 59)
+            doc.text(label, x, textY)
+        }
+
+        doc.setFont("helvetica", "normal")
+        doc.setTextColor(51, 65, 85)
+        if (valueLines.length > 0) {
+            doc.text(valueLines[0], x + labelW, textY)
+            textY += LINE_H
+            for (let i = 1; i < valueLines.length; i++) {
+                doc.text(valueLines[i], x, textY)
+                textY += LINE_H
+            }
+        } else {
+            textY += LINE_H
+        }
     }
 
-    return y + boxH + BOX_GAP
+    const finalBottomY = textY - LINE_H + BOX_PAD * 2
+    doc.line(boxLeft, startYForBox, boxLeft, finalBottomY)
+    doc.line(boxLeft + boxW, startYForBox, boxLeft + boxW, finalBottomY)
+    doc.line(boxLeft, finalBottomY, boxLeft + boxW, finalBottomY)
+
+    return finalBottomY + BOX_GAP
 }
 
 /** Cuadro con título en barra y un párrafo de texto (sin etiquetas). titleBarColor: RGB opcional. */
@@ -128,41 +148,73 @@ function addBoxedParagraph(
     doc.setFontSize(10)
     doc.setTextColor(51, 65, 85)
     const lines = doc.splitTextToSize(paragraph || "Sin contenido", innerW)
-    const contentH = lines.length * LINE_H
-    const boxH = BOX_PAD + TITLE_BAR_H + BOX_PAD + contentH + BOX_PAD
-
-    if (y + boxH > pageHeight - margin) {
+    
+    let currentY = y
+    // Check if title + 1 line fits on current page
+    if (currentY + TITLE_BAR_H + BOX_PAD * 2 + LINE_H > pageHeight - margin) {
         doc.addPage()
-        y = margin
+        currentY = margin
     }
 
     const boxLeft = margin
     const boxW = pageWidth - margin * 2
 
+    // Draw title bar
+    doc.setFillColor(...(titleBarColor ?? [241, 245, 249]))
+    doc.rect(boxLeft, currentY, boxW, TITLE_BAR_H, "F")
+    
     doc.setDrawColor(203, 213, 225)
     doc.setLineWidth(0.3)
-    doc.rect(boxLeft, y, boxW, boxH)
-
-    doc.setFillColor(...(titleBarColor ?? [241, 245, 249]))
-    doc.rect(boxLeft, y, boxW, TITLE_BAR_H, "F")
+    // Top border
+    doc.line(boxLeft, currentY, boxLeft + boxW, currentY)
+    // Left and right borders for title
+    doc.line(boxLeft, currentY, boxLeft, currentY + TITLE_BAR_H)
+    doc.line(boxLeft + boxW, currentY, boxLeft + boxW, currentY + TITLE_BAR_H)
+    // Bottom border of title
     doc.setDrawColor(226, 232, 240)
-    doc.line(boxLeft, y + TITLE_BAR_H, boxLeft + boxW, y + TITLE_BAR_H)
+    doc.line(boxLeft, currentY + TITLE_BAR_H, boxLeft + boxW, currentY + TITLE_BAR_H)
 
     doc.setFont("helvetica", "bold")
     doc.setFontSize(10)
     doc.setTextColor(30, 41, 59)
-    doc.text(title, boxLeft + BOX_PAD, y + 6)
+    doc.text(title, boxLeft + BOX_PAD, currentY + 6)
 
-    let textY = y + BOX_PAD + TITLE_BAR_H + BOX_PAD
-    for (const line of lines) {
-        doc.setFont("helvetica", "normal")
-        doc.setFontSize(10)
-        doc.setTextColor(51, 65, 85)
-        doc.text(line, x, textY)
+    doc.setDrawColor(203, 213, 225)
+
+    let startYForBox = currentY + TITLE_BAR_H
+    let textY = startYForBox + BOX_PAD * 2
+
+    doc.setFont("helvetica", "normal")
+    doc.setFontSize(10)
+    doc.setTextColor(51, 65, 85)
+
+    for (let i = 0; i < lines.length; i++) {
+        if (textY > pageHeight - margin - BOX_PAD) {
+            // Close current box
+            const bottomY = textY - LINE_H + BOX_PAD
+            doc.line(boxLeft, startYForBox, boxLeft, bottomY)
+            doc.line(boxLeft + boxW, startYForBox, boxLeft + boxW, bottomY)
+            doc.line(boxLeft, bottomY, boxLeft + boxW, bottomY)
+            
+            doc.addPage()
+            currentY = margin
+            startYForBox = currentY
+            textY = currentY + BOX_PAD * 2
+            
+            // Top border for continued box
+            doc.line(boxLeft, currentY, boxLeft + boxW, currentY)
+        }
+        doc.text(lines[i], x, textY)
         textY += LINE_H
     }
+    
+    const finalBottomY = textY - LINE_H + BOX_PAD * 2
+    // Close final box
+    doc.line(boxLeft, startYForBox, boxLeft, finalBottomY)
+    doc.line(boxLeft + boxW, startYForBox, boxLeft + boxW, finalBottomY)
+    doc.line(boxLeft, finalBottomY, boxLeft + boxW, finalBottomY)
 
-    return y + boxH + BOX_GAP
+    return finalBottomY + BOX_GAP
 }
 
 export function buildConvivenciaPdf(
@@ -202,15 +254,21 @@ export function buildConvivenciaPdf(
         }).join(" | ")
     }
 
+    const severityPdf =
+        record.severity === "n/a" || record.severity === "N/A"
+            ? "No aplica"
+            : (record.severity?.toUpperCase() || "N/A")
+
     // Cuadro 1: Datos del registro
     const headerContent: string[] = []
     if (institutionName) headerContent.push(`Establecimiento: ${institutionName}`)
     headerContent.push(
         `Caso: ${record.type || "Sin clasificar"}`,
+        ...(record.event_title?.trim() ? [`Titulo del evento: ${record.event_title.trim()}`] : []),
         `Fecha y hora: ${incidentDate}`,
-        `Gravedad: ${record.severity?.toUpperCase() || "N/A"}`,
+        `Gravedad: ${severityPdf}`,
         `Lugar: ${record.location || "No especificado"}`,
-        `Estado: ${record.resolved ? "Resuelto" : record.status || "Abierto"}`,
+        `Estado: ${formatConvivenciaRecordStatusLine(record)}`,
         `Involucrados: ${studentsText}`,
         `Registrado por: ${reporterName}`
     )
@@ -225,15 +283,30 @@ export function buildConvivenciaPdf(
         yPos = addBoxedParagraph(doc, yPos, margin, pageHeight, pageWidth, "3. Acciones inmediatas tomadas", actionsText, statusBarColor)
     }
 
-    // Cuadro: Acuerdos / Resolución (si hay)
-    if (record.agreements?.trim()) {
-        const sectionTitle = record.actions_taken?.length ? "4. Acuerdos / Resolución" : "3. Acuerdos / Resolución"
-        yPos = addBoxedParagraph(doc, yPos, margin, pageHeight, pageWidth, sectionTitle, record.agreements.trim(), statusBarColor)
-    }
+    // Cuadro: Acuerdos / Resolución
+    const sectionTitle = record.actions_taken?.length ? "4. Acuerdos y Resolución" : "3. Acuerdos y Resolución"
+    yPos = addBoxedParagraph(doc, yPos, margin, pageHeight, pageWidth, sectionTitle, record.agreements?.trim() || "Sin acuerdos registrados", statusBarColor)
 
     // Cuadro: Notas de resolución (si hay)
     if (record.resolution_notes?.trim()) {
         yPos = addBoxedParagraph(doc, yPos, margin, pageHeight, pageWidth, "Notas de resolución de caso", record.resolution_notes.trim(), statusBarColor)
+    }
+
+    // Cuadro: Datos de derivación a Gestión de Casos (si está en seguimiento)
+    const isSeguimiento = (record.status || "").toLowerCase() === "seguimiento" || (record.status || "").toLowerCase() === "abierto"
+    if (isSeguimiento && record.student_cases && record.student_cases.length > 0) {
+        const firstCase = record.student_cases[0]
+        if (firstCase.next_step || firstCase.next_step_date) {
+            const caseContent: string[] = []
+            if (firstCase.next_step) {
+                caseContent.push(`Próximo paso: ${firstCase.next_step}`)
+            }
+            if (firstCase.next_step_date) {
+                const dateStr = new Date(firstCase.next_step_date).toLocaleDateString("es-CL", { timeZone: "UTC" })
+                caseContent.push(`Fecha del próximo paso: ${dateStr}`)
+            }
+            yPos = addBoxedSection(doc, yPos, margin, pageHeight, pageWidth, "Datos de Gestión de casos (Derivación)", caseContent, [254, 243, 199]) // amber-100 para destacar
+        }
     }
 
     // Footer
@@ -252,7 +325,7 @@ export function buildConvivenciaPdf(
 // Informe de estadisticas de registros de convivencia
 export interface ConvivenciaStatsPdfData {
     institutionName?: string
-    statusCounts: { abiertos: number; seguimiento: number; cerrados: number }
+    statusCounts: { seguimiento: number; cerrados: number }
     last30: number
     lastWeek: number
     weekPct: number | null
@@ -318,7 +391,6 @@ export function buildConvivenciaStatsPdf(
 
     // 1. ESTADO DE CASOS
     const estadoContent: string[] = [
-        `Abiertos (requieren atencion): ${data.statusCounts.abiertos}`,
         `En seguimiento: ${data.statusCounts.seguimiento}`,
         `Cerrados / Resueltos: ${data.statusCounts.cerrados}`,
     ]

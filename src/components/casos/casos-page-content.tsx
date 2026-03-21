@@ -158,14 +158,40 @@ export function CasosPageContent({ casos, students, professionals, institutionId
     const urgentes = localCasos.filter(
         (c) => statusIn(c.initial_state, ["urgente", "alta"]) && !isClosed(c.status)
     ).length
-    const enSeguimiento = localCasos.filter((c) =>
-        statusIn(c.status, ["en_proceso", "atendido", "en_seguimiento", "seguimiento"])
-    ).length
-    const sinAsignar = localCasos.filter((c) => !c.responsable_id && !isClosed(c.status)).length
+    const enSeguimiento = localCasos.filter((c) => {
+        if (isClosed(c.status)) return false
+        if (statusIn(c.status, ["en_proceso", "atendido", "en_seguimiento", "seguimiento"])) {
+            // Solo cuenta como en seguimiento si tiene al menos una intervención real
+            const hasRealActions = c.actions?.some((a: any) => 
+                a.action_type !== 'asignacion' && a.action_type !== 'nota'
+            )
+            return hasRealActions
+        }
+        return false
+    }).length
+    const sinAsignar = localCasos.filter((c) => {
+        if (isClosed(c.status)) return false
+        if (!c.responsable_id) return true
+        
+        // Si tiene responsable pero no tiene acciones reales (intervenciones)
+        const hasRealActions = c.actions?.some((a: any) => 
+            a.action_type !== 'asignacion' && a.action_type !== 'nota'
+        )
+        return !hasRealActions
+    }).length
     const totales = activeCases.length
 
-    const getUrgencyBadge = (initialState: string, responsable: any) => {
-        const respText = responsable ? `Ps. ${responsable.name} ${responsable.last_name}` : 'Sin asignar'
+    const getUrgencyBadge = (initialState: string, responsable: any, actions: any[]) => {
+        const hasRealActions = actions?.some((a: any) => 
+            a.action_type !== 'asignacion' && a.action_type !== 'nota'
+        )
+        const isAssigned = !!responsable
+        
+        let respText = 'Sin asignar'
+        if (isAssigned) {
+            respText = hasRealActions ? `Ps. ${responsable.name} ${responsable.last_name}` : 'Sin asignar'
+        }
+
         if (initialState === 'urgente') {
             return (
                 <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-100 text-rose-800">
@@ -430,23 +456,89 @@ export function CasosPageContent({ casos, students, professionals, institutionId
                                             Cerrado
                                         </span>
                                     ) : (
-                                        getUrgencyBadge(caso.initial_state, caso.responsable)
+                                        getUrgencyBadge(caso.initial_state, caso.responsable, caso.actions)
                                     )}
                                 </div>
 
                                 {/* Información Principal — nombre + curso + derivación + tiempo en una sola fila (wrap en móvil) */}
                                 <div className="pr-0 md:pr-48">
                                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                        <h3 className="font-bold text-lg text-slate-900 shrink-0">
-                                            {caso.students?.name ?? "Estudiante"} {caso.students?.last_name ?? ""}
-                                        </h3>
-                                        <span className="hidden sm:inline text-slate-300 select-none" aria-hidden>·</span>
-                                        <span className="text-xs font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded shrink-0">
-                                            {caso.students?.courses?.name ?? "Sin curso"} {caso.students?.courses?.section ?? ""}
-                                        </span>
+                                        {caso.convivenciaRecord ? (
+                                            <>
+                                                <h3 className="font-bold text-lg text-slate-900 shrink-0">
+                                                    {caso.convivenciaRecord.event_title?.trim() || caso.convivenciaRecord.type || "Registro de convivencia"}
+                                                </h3>
+                                                <span className="hidden sm:inline text-slate-300 select-none" aria-hidden>·</span>
+                                                <div className="flex -space-x-2 overflow-hidden">
+                                                    {(() => {
+                                                        const involved = caso.convivenciaRecord.convivencia_record_students?.map((rs: any) => rs.students).filter(Boolean) || []
+                                                        const visible = involved.slice(0, 3)
+                                                        const extra = Math.max(0, involved.length - visible.length)
+                                                        return (
+                                                            <>
+                                                                {visible.map((s: any) => {
+                                                                    const name = `${s.name} ${s.last_name}`
+                                                                    const initials = `${s.name?.charAt(0) || ""}${s.last_name?.charAt(0) || ""}`.toUpperCase()
+                                                                    const courseData = s.courses ?? s.course ?? students.find((st: any) => st.id === s.id)?.courses
+                                                                    const courseLabel = courseData?.name ? `${courseData.name}${courseData.section ? " " + courseData.section : ""}` : "Sin curso"
+                                                                    return (
+                                                                        <div key={s.id} className="group relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold shrink-0 cursor-default hover:z-50" title={`${name} — ${courseLabel}`}>
+                                                                            {initials}
+                                                                            <span className="pointer-events-none absolute left-1/2 bottom-full z-50 mb-2 -translate-x-1/2 opacity-0 translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-y-0">
+                                                                                <span className="block w-max max-w-[220px] rounded-lg bg-slate-900 px-3 py-2 text-white shadow-lg">
+                                                                                    <span className="block text-xs font-semibold text-white leading-tight">{name}</span>
+                                                                                    <span className="block text-[11px] text-white/80 mt-0.5 leading-snug">{courseLabel}</span>
+                                                                                </span>
+                                                                            </span>
+                                                                        </div>
+                                                                    )
+                                                                })}
+                                                                {extra > 0 && (
+                                                                    <div className="group relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-50 border border-slate-200 text-slate-600 text-xs font-bold shrink-0 cursor-default hover:z-50">
+                                                                        +{extra}
+                                                                        <span className="pointer-events-none absolute left-1/2 bottom-full z-50 mb-2 -translate-x-1/2 opacity-0 translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-y-0">
+                                                                            <span className="block w-max max-w-[220px] rounded-lg bg-slate-900 px-3 py-2 text-white shadow-lg space-y-2">
+                                                                                {involved.slice(3).map((s: any) => {
+                                                                                    const n = `${s.name} ${s.last_name}`
+                                                                                    const cData = s.courses ?? s.course ?? students.find((st: any) => st.id === s.id)?.courses
+                                                                                    const cLabel = cData?.name ? `${cData.name}${cData.section ? " " + cData.section : ""}` : "Sin curso"
+                                                                                    return (
+                                                                                        <span key={s.id} className="block text-left">
+                                                                                            <span className="block text-xs font-semibold text-white leading-tight">{n}</span>
+                                                                                            <span className="block text-[10px] text-white/80 leading-snug">{cLabel}</span>
+                                                                                        </span>
+                                                                                    )
+                                                                                })}
+                                                                            </span>
+                                                                        </span>
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        )
+                                                    })()}
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <h3 className="font-bold text-lg text-slate-900 shrink-0">
+                                                    {caso.students?.name ?? "Estudiante"} {caso.students?.last_name ?? ""}
+                                                </h3>
+                                                <span className="hidden sm:inline text-slate-300 select-none" aria-hidden>·</span>
+                                                <span className="text-xs font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded shrink-0">
+                                                    {caso.students?.courses?.name ?? "Sin curso"} {caso.students?.courses?.section ?? ""}
+                                                </span>
+                                            </>
+                                        )}
+                                        {caso.convivenciaRecord && (
+                                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-violet-100 text-violet-700 shrink-0 ml-1">
+                                                Convivencia
+                                            </span>
+                                        )}
                                         <span className="text-slate-300 select-none" aria-hidden>·</span>
                                         <span className="text-xs text-slate-500">
-                                            Derivado por Prof. {caso.creador?.last_name}
+                                            {caso.convivenciaRecord
+                                                ? `Reg. convivencia · ${caso.creador?.last_name ?? ""}`
+                                                : `Derivado por Prof. ${caso.creador?.last_name ?? ""}`}
                                         </span>
                                         <span className="text-slate-300 select-none" aria-hidden>·</span>
                                         <span className="text-xs text-slate-500">
@@ -461,7 +553,7 @@ export function CasosPageContent({ casos, students, professionals, institutionId
                                                 Cerrado
                                             </span>
                                         ) : (
-                                            getUrgencyBadge(caso.initial_state, caso.responsable)
+                                            getUrgencyBadge(caso.initial_state, caso.responsable, caso.actions)
                                         )}
                                     </div>
 

@@ -37,7 +37,7 @@ export function ConvivenciaDashboardClient({ stats }: { stats: ConvivenciaStats 
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 {[
                     { value: activeAlerts, label: "Alertas activas", sub: "Requieren atención", icon: AlertTriangle, color: openDecs > 3 ? "bg-orange-500" : "bg-amber-500", href: undefined },
-                    { value: activeConvivenciaRecords, label: "Registros de convivencia activos", sub: "Reg. abiertos", icon: FileText, color: "bg-violet-500", href: "/registros-convivencia" },
+                    { value: activeConvivenciaRecords, label: "Registros de convivencia activos", sub: "Sin cerrar", icon: FileText, color: "bg-violet-500", href: "/registros-convivencia" },
                     { value: decSummary.lastMonth, label: "DEC último mes", sub: "Casos DEC en los últimos 30 días", icon: ShieldAlert, color: "bg-rose-500", href: "/convivencia/dec" },
                     { value: 0, label: "Curso con clima más bajo", sub: lowestClimateCourse ? `${lowestClimateCourse.courseName} · ${lowestClimateCourse.label}` : "Sin datos", icon: TrendingUp, color: "bg-indigo-500", href: "/convivencia/heatmap", isLowestClimateCard: true, lowestClimateScore: lowestClimateCourse?.score ?? null },
                 ].map((item) => {
@@ -119,7 +119,7 @@ export function ConvivenciaDashboardClient({ stats }: { stats: ConvivenciaStats 
                         <div className="min-w-0">
                             <p className="text-xs font-medium text-slate-600">Reg. convivencia</p>
                             <p className="text-sm font-bold text-slate-800 mt-0.5">
-                                {activeConvivenciaRecords} abiertos · {convivenciaSummary.closed} cerrados
+                                {activeConvivenciaRecords} activos · {convivenciaSummary.closed} cerrados
                             </p>
                             <p className="text-[10px] text-slate-400 mt-0.5">{convivenciaSummary.total} registros en total</p>
                         </div>

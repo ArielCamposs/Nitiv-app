@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { rememberPendingCaseStatus } from "@/lib/case-status-pending"
@@ -110,7 +110,58 @@ const ROLE_LABELS: Record<string, string> = {
     admin: "Admin",
 }
 
-export function CasoDetailClient({ caso, initialActions, userId, userRole }: { caso: Caso, initialActions: Action[], userId: string, userRole: string }) {
+type InvolvedStudent = { id: string; name: string; last_name: string }
+
+function parseParticipantIds(raw: unknown): string[] {
+    if (!raw) return []
+    if (Array.isArray(raw)) return raw.map((x) => String(x)).filter(Boolean)
+    if (typeof raw === "string") {
+        try {
+            const p = JSON.parse(raw)
+            return Array.isArray(p) ? p.map((x) => String(x)).filter(Boolean) : []
+        } catch {
+            return []
+        }
+    }
+    return []
+}
+
+/** Texto guardado en `description` si no existe la columna JSONB (migración pendiente). */
+const PARTICIPANTS_DESC_REGEX = /^\[Participan:\s*([^\]]+)]\s*\n\n/
+
+function participantsLineFromDescription(desc?: string | null): string | null {
+    const m = (desc ?? "").match(PARTICIPANTS_DESC_REGEX)
+    return m ? m[1].trim() : null
+}
+
+function stripParticipantsPrefixFromDescription(desc?: string | null): string {
+    return (desc ?? "").replace(PARTICIPANTS_DESC_REGEX, "").trim()
+}
+
+/** No usar `select=*` tras insert: PostgREST puede fallar si `participant_student_ids` no está en caché. */
+const ACTION_INSERT_SELECT = "id, action_type, description, created_at, users(name, last_name, role)"
+
+const SEVERITY_LABELS: Record<string, string> = {
+    leve: "Leve",
+    moderada: "Mediano",
+    grave: "Grave",
+    gravisimo: "Gravísimo",
+    "n/a": "No aplica",
+}
+
+export function CasoDetailClient({
+    caso,
+    initialActions,
+    userId,
+    userRole,
+    convivenciaRecord,
+}: {
+    caso: Caso
+    initialActions: Action[]
+    userId: string
+    userRole: string
+    convivenciaRecord?: any
+}) {
     const supabase = createClient()
     const router = useRouter()
     
@@ -126,7 +177,64 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
     const [selectedIntervention, setSelectedIntervention] = useState<Action | null>(null)
     const [actionType, setActionType] = useState("")
     const [actionDesc, setActionDesc] = useState("")
+    const [interventionParticipantIds, setInterventionParticipantIds] = useState<string[]>([])
     const [loading, setLoading] = useState(false)
+
+    const involvedStudentsFromConvivencia: InvolvedStudent[] = useMemo(() => {
+        const rows = convivenciaRecord?.convivencia_record_students
+        if (!Array.isArray(rows)) return []
+        const out: InvolvedStudent[] = []
+        for (const rs of rows) {
+            const sid = (rs as { student_id?: string })?.student_id ?? (rs as { students?: { id?: string } })?.students?.id
+            const s = (rs as { students?: { name?: string; last_name?: string } })?.students
+            if (sid && s) {
+                out.push({
+                    id: String(sid),
+                    name: String(s.name ?? ""),
+                    last_name: String(s.last_name ?? ""),
+                })
+            }
+        }
+        return out
+    }, [convivenciaRecord])
+
+    const needsInterventionParticipantPick = involvedStudentsFromConvivencia.length > 1
+
+    const studentLabelById = useMemo(() => {
+        const m = new Map<string, string>()
+        for (const s of involvedStudentsFromConvivencia) {
+            m.set(s.id, `${s.last_name}, ${s.name}`.trim())
+        }
+        if (caso?.students?.id) {
+            const st = caso.students
+            m.set(
+                String(st.id),
+                `${st.last_name ?? ""}, ${st.name ?? ""}`.trim()
+            )
+        }
+        return m
+    }, [involvedStudentsFromConvivencia, caso?.students])
+
+    const formatParticipantLine = (act: Action) => {
+        const ids = parseParticipantIds(act.participant_student_ids)
+        if (ids.length > 0) {
+            const labels = ids.map((id) => studentLabelById.get(id) ?? `Estudiante (${id.slice(0, 8)}…)`)
+            return labels.join(" · ")
+        }
+        return participantsLineFromDescription(act.description)
+    }
+
+    const toggleInterventionParticipant = (id: string) => {
+        setInterventionParticipantIds((prev) =>
+            prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+        )
+    }
+
+    const selectAllInterventionParticipants = () => {
+        setInterventionParticipantIds(involvedStudentsFromConvivencia.map((s) => s.id))
+    }
+
+    const clearInterventionParticipants = () => setInterventionParticipantIds([])
 
     useEffect(() => {
         const onCaseClosed = (event: Event) => {
@@ -142,25 +250,28 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
     }, [caso.id])
 
     const parseAllowedRoles = (derivedTo: unknown): string[] => {
-        if (!derivedTo) return []
+        // Por defecto, si no hay roles especificados, permitimos dupla y convivencia
+        const defaultRoles = ["dupla", "convivencia"]
+        
+        if (!derivedTo) return defaultRoles
 
-        if (Array.isArray(derivedTo)) {
+        if (Array.isArray(derivedTo) && derivedTo.length > 0) {
             return derivedTo.map((v) => String(v).trim().toLowerCase()).filter(Boolean)
         }
 
         const raw = String(derivedTo).trim()
-        if (!raw) return []
+        if (!raw || raw === "[]" || raw === "null") return defaultRoles
 
         try {
             const parsed = JSON.parse(raw)
-            if (Array.isArray(parsed)) {
+            if (Array.isArray(parsed) && parsed.length > 0) {
                 return parsed.map((v) => String(v).trim().toLowerCase()).filter(Boolean)
             }
         } catch {
             // Sigue con parsing flexible si no era JSON.
         }
 
-        return raw
+        const split = raw
             .split(/[|,]/g)
             .map((v) => v.trim().toLowerCase())
             .map((v) => {
@@ -168,21 +279,22 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
                 if (v.includes("dupla") || v.includes("psicolog")) return "dupla"
                 if (v.includes("inspector")) return "inspector"
                 if (v.includes("utp") || v.includes("orientador")) return "utp"
-                if (v.includes("director") || v.includes("direccion")) return "director"
                 return v
             })
             .filter(Boolean)
+
+        return split.length > 0 ? split : defaultRoles
     }
 
     const allowedRoles = parseAllowedRoles(caso.derived_to)
-    const canTakeCaseByRole = allowedRoles.length === 0 || allowedRoles.includes(userRole)
+    // Se elimina 'director' de los roles permitidos por defecto para tomar casos
+    const canTakeCaseByRole = allowedRoles.includes(userRole) || userRole === "admin"
     const { reasons: parsedReasons, observation: parsedObservation } = splitReasonAndObservation(caso.reason)
     const DERIVED_ROLE_LABELS: Record<string, string> = {
         dupla: "Dupla psicosocial",
         convivencia: "Convivencia",
         inspector: "Inspectoría",
         utp: "UTP",
-        director: "Dirección",
     }
     const derivedToLabels = allowedRoles.map((role) => DERIVED_ROLE_LABELS[role] ?? role)
 
@@ -202,11 +314,13 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
             const { data: actData, error: actError } = await supabase
                 .from("student_case_actions")
                 .insert({ case_id: caso.id, created_by: userId, action_type: 'asignacion', description: 'Caso asignado a mi bandeja.' })
-                .select('*, users(name, last_name, role)').single()
+                .select(ACTION_INSERT_SELECT)
+                .maybeSingle()
             if (actError) throw actError
+            if (!actData) throw new Error("Sin datos de asignación")
 
             setStatus("en_proceso")
-            setResponsable({ name: "Mí", last_name: "(Usuario actual)" })
+            setResponsable({ name: "Mí", last_name: "(Usuario actual)", role: userRole })
             setActions([actData, ...actions])
             toast.success("Te has asignado el caso.")
         } catch (e) {
@@ -217,6 +331,11 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
     const handleAddAction = async (isClosing = false) => {
         if (!actionType || !actionDesc.trim()) {
             toast.error("Debes seleccionar un tipo de acción y escribir un detalle.")
+            return
+        }
+
+        if (needsInterventionParticipantPick && interventionParticipantIds.length === 0) {
+            toast.error("Este caso tiene varios estudiantes involucrados. Indica quiénes participan en esta intervención.")
             return
         }
 
@@ -248,12 +367,79 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
                 setStatus('en_proceso')
             }
 
-            const { data: actData, error: actError } = await supabase
-                .from("student_case_actions")
-                .insert({ case_id: caso.id, created_by: userId, action_type: type, description: actionDesc })
-                .select('*, users(name, last_name, role)').single()
-                
-            if (actError) throw actError
+            const baseInsert = {
+                case_id: caso.id,
+                created_by: userId,
+                action_type: type,
+                description: actionDesc.trim(),
+            }
+
+            const withParticipantsJson = {
+                ...baseInsert,
+                /** JSON array; PostgREST escribe en columna jsonb */
+                participant_student_ids: interventionParticipantIds,
+            }
+
+            let actData: Action | null = null
+            let actError = null as { message?: string; code?: string } | null
+
+            if (needsInterventionParticipantPick && interventionParticipantIds.length > 0) {
+                const first = await supabase
+                    .from("student_case_actions")
+                    .insert(withParticipantsJson)
+                    .select(ACTION_INSERT_SELECT)
+                    .maybeSingle()
+                actData = first.data as Action | null
+                actError = first.error
+
+                if (actError) {
+                    const participantsLine = interventionParticipantIds
+                        .map((id) => studentLabelById.get(id) ?? id)
+                        .join(" · ")
+                    const descriptionWithParticipants = `[Participan: ${participantsLine}]\n\n${actionDesc.trim()}`
+                    const second = await supabase
+                        .from("student_case_actions")
+                        .insert({
+                            case_id: caso.id,
+                            created_by: userId,
+                            action_type: type,
+                            description: descriptionWithParticipants,
+                        })
+                        .select(ACTION_INSERT_SELECT)
+                        .maybeSingle()
+                    actData = second.data as Action | null
+                    actError = second.error
+                    if (!actError) {
+                        toast.warning(
+                            "Intervención guardada. Aplica la migración de participantes en la base de datos para guardarlos en campo dedicado."
+                        )
+                    }
+                } else if (!actData) {
+                    actError = { message: "La acción no se devolvió al guardar." }
+                } else {
+                    actData = {
+                        ...actData,
+                        participant_student_ids: interventionParticipantIds,
+                    } as Action
+                }
+            } else {
+                const res = await supabase
+                    .from("student_case_actions")
+                    .insert(baseInsert)
+                    .select(ACTION_INSERT_SELECT)
+                    .maybeSingle()
+                actData = res.data as Action | null
+                actError = res.error
+            }
+
+            if (actError) {
+                toast.error(actError.message || "Error al guardar la acción.")
+                return
+            }
+            if (!actData) {
+                toast.error("No se pudo registrar la intervención.")
+                return
+            }
 
             if (isClosing) setStatus('cerrado')
             setActions([actData, ...actions])
@@ -270,8 +456,10 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
             setIsActionModalOpen(false)
             setActionType("")
             setActionDesc("")
+            setInterventionParticipantIds([])
         } catch (e) {
-            toast.error("Error al guardar la acción.")
+            const msg = e && typeof e === "object" && "message" in e ? String((e as Error).message) : ""
+            toast.error(msg || "Error al guardar la acción.")
         } finally {
             setLoading(false)
         }
@@ -306,6 +494,101 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
 
     return (
         <div className="space-y-6">
+            {convivenciaRecord && !isDocente && (
+                <Card className="border-violet-200 bg-violet-50/30">
+                    <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-violet-600" />
+                            Registro de convivencia (origen del caso)
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4 text-sm">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {convivenciaRecord.event_title?.trim() && (
+                                <div>
+                                    <p className="text-xs text-slate-500 uppercase font-semibold mb-0.5">Título</p>
+                                    <p className="font-medium text-slate-900">{convivenciaRecord.event_title.trim()}</p>
+                                </div>
+                            )}
+                            <div>
+                                <p className="text-xs text-slate-500 uppercase font-semibold mb-0.5">Tipo</p>
+                                <p className="text-slate-700">{convivenciaRecord.type || "—"}</p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-slate-500 uppercase font-semibold mb-0.5">Fecha y hora</p>
+                                <p className="text-slate-700">
+                                    {convivenciaRecord.incident_date
+                                        ? format(new Date(convivenciaRecord.incident_date), "d MMM yyyy HH:mm", { locale: es })
+                                        : "—"}
+                                </p>
+                            </div>
+                            <div>
+                                <p className="text-xs text-slate-500 uppercase font-semibold mb-0.5">Gravedad</p>
+                                <p className="text-slate-700">
+                                    {SEVERITY_LABELS[convivenciaRecord.severity] ?? convivenciaRecord.severity ?? "—"}
+                                </p>
+                            </div>
+                            {convivenciaRecord.location && (
+                                <div>
+                                    <p className="text-xs text-slate-500 uppercase font-semibold mb-0.5">Lugar</p>
+                                    <p className="text-slate-700">{convivenciaRecord.location}</p>
+                                </div>
+                            )}
+                        </div>
+                        <div>
+                            <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Descripción</p>
+                            <ExpandableText text={convivenciaRecord.description} maxLength={300} className="rounded-lg bg-white/80 p-3 border border-violet-100" />
+                        </div>
+                        {(convivenciaRecord.convivencia_record_students?.length ?? 0) > 0 && (
+                            <div>
+                                <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Estudiantes involucrados</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {convivenciaRecord.convivencia_record_students.map((rs: any) => {
+                                        const s = rs?.students
+                                        if (!s) return null
+                                        const course = s.courses ?? s.course
+                                        const courseLabel = course ? `${course.name ?? ""}${course.section ? ` ${course.section}` : ""}`.trim() : ""
+                                        return (
+                                            <span
+                                                key={s.id}
+                                                className="inline-flex items-center px-2.5 py-1 rounded-lg bg-violet-100/80 text-violet-800 text-xs font-medium border border-violet-200"
+                                            >
+                                                {s.last_name}, {s.name}
+                                                {courseLabel && ` — ${courseLabel}`}
+                                            </span>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                        {convivenciaRecord.actions_taken?.length > 0 && (
+                            <div>
+                                <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Acciones inmediatas (registro)</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {convivenciaRecord.actions_taken.map((a: string) => (
+                                        <span key={a} className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs">
+                                            {a}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {convivenciaRecord.agreements?.trim() && (
+                            <div>
+                                <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Acuerdos</p>
+                                <ExpandableText text={convivenciaRecord.agreements} maxLength={200} />
+                            </div>
+                        )}
+                        {convivenciaRecord.resolved && convivenciaRecord.resolution_notes?.trim() && (
+                            <div className="pt-2 border-t border-violet-200">
+                                <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Notas de cierre (convivencia)</p>
+                                <ExpandableText text={convivenciaRecord.resolution_notes} maxLength={200} />
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 
                 {/* Info Panel */}
@@ -315,9 +598,21 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
                     </CardHeader>
                     <CardContent className="pt-4 space-y-4">
                         <div>
-                            <p className="text-xs text-slate-500 uppercase font-semibold">Estudiante</p>
-                            <p className="font-medium text-slate-900">{caso.students.name} {caso.students.last_name}</p>
-                            <p className="text-sm text-slate-500">{caso.students.courses?.name} {caso.students.courses?.section}</p>
+                            <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Estudiante(s)</p>
+                            {involvedStudentsFromConvivencia.length > 0 ? (
+                                <div className="space-y-1">
+                                    {involvedStudentsFromConvivencia.map(s => (
+                                        <div key={s.id}>
+                                            <p className="font-medium text-slate-900">{s.name} {s.last_name}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div>
+                                    <p className="font-medium text-slate-900">{caso.students.name} {caso.students.last_name}</p>
+                                    <p className="text-sm text-slate-500">{caso.students.courses?.name} {caso.students.courses?.section}</p>
+                                </div>
+                            )}
                         </div>
                         
                         {!isDocente && (
@@ -376,28 +671,37 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
                             </p>
                         </div>
 
-                        <div className="pt-2 border-t space-y-2">
-                            <p className="text-xs text-slate-500 uppercase font-semibold">Datos de la derivación</p>
-                            <div>
-                                <p className="text-xs text-slate-400">Cuándo ocurre</p>
-                                <ExpandableText text={caso.when_occurs} maxLength={180} />
+                        {!convivenciaRecord && (
+                            <div className="pt-2 border-t space-y-2">
+                                <p className="text-xs text-slate-500 uppercase font-semibold">Datos de la derivación</p>
+                                <div>
+                                    <p className="text-xs text-slate-400">Cuándo ocurre</p>
+                                    <ExpandableText text={caso.when_occurs} maxLength={180} />
+                                </div>
+                                <div>
+                                    <p className="text-xs text-slate-400">Frecuencia</p>
+                                    <ExpandableText text={caso.frequency} maxLength={180} />
+                                </div>
+                                <div>
+                                    <p className="text-xs text-slate-400">Derivado a</p>
+                                    <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">
+                                        {derivedToLabels.length > 0 ? derivedToLabels.join(", ") : "No definido"}
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                                <p className="text-xs text-slate-400">Frecuencia</p>
-                                <ExpandableText text={caso.frequency} maxLength={180} />
-                            </div>
-                            <div>
-                                <p className="text-xs text-slate-400">Derivado a</p>
-                                <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">
-                                    {derivedToLabels.length > 0 ? derivedToLabels.join(", ") : "No definido"}
-                                </p>
-                            </div>
-                        </div>
+                        )}
 
                         <div className="pt-2 border-t">
                             <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Responsable</p>
                             {responsable ? (
-                                <p className="text-sm font-medium text-slate-900">{responsable.name} {responsable.last_name}</p>
+                                <div>
+                                    <p className="text-sm font-medium text-slate-900">{responsable.name} {responsable.last_name}</p>
+                                    {responsable.role && (
+                                        <p className="text-xs text-slate-500 mt-0.5">
+                                            {ROLE_LABELS[responsable.role] ?? responsable.role}
+                                        </p>
+                                    )}
+                                </div>
                             ) : (
                                 <div className="space-y-2">
                                     <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">Sin asignar</span>
@@ -422,7 +726,15 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
                     <CardHeader className="flex flex-row items-center justify-between border-b bg-white pb-4">
                         <CardTitle className="text-lg">Línea de tiempo de intervenciones</CardTitle>
                         {!isDocente && !isClosed && (
-                            <Button size="sm" onClick={() => { setActionType(""); setIsActionModalOpen(true) }}>
+                            <Button
+                                size="sm"
+                                onClick={() => {
+                                    setActionType("")
+                                    setActionDesc("")
+                                    setInterventionParticipantIds([])
+                                    setIsActionModalOpen(true)
+                                }}
+                            >
                                 + Añadir intervención
                             </Button>
                         )}
@@ -447,12 +759,17 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
                                             {getActionIcon(act.action_type)}
                                         </div>
                                         <div className="min-w-0">
-                                            <div className="flex items-baseline gap-2">
+                                            <div className="flex items-baseline gap-2 flex-wrap">
                                                 <h4 className="text-sm font-semibold text-slate-900">{getActionLabel(act.action_type)}</h4>
                                                 <span className="text-xs text-slate-400">
                                                     {format(new Date(act.created_at), "d MMM yyyy HH:mm", { locale: es })}
                                                 </span>
                                             </div>
+                                            {formatParticipantLine(act) && (
+                                                <p className="text-xs text-indigo-700 font-medium mt-1">
+                                                    Participan: {formatParticipantLine(act)}
+                                                </p>
+                                            )}
                                             <div
                                                 role="button"
                                                 tabIndex={0}
@@ -465,7 +782,10 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
                                                 }}
                                                 className="mt-1 text-left w-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-300 rounded-sm"
                                             >
-                                                <TruncatedText text={act.description} maxLength={260} />
+                                                <TruncatedText
+                                                    text={stripParticipantsPrefixFromDescription(act.description)}
+                                                    maxLength={260}
+                                                />
                                             </div>
                                             <p className="text-xs text-slate-400 mt-2">
                                                 Registrado por: {act.users?.name} {act.users?.last_name}
@@ -480,12 +800,87 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
                 </Card>
             </div>
 
-            <Dialog open={isActionModalOpen} onOpenChange={setIsActionModalOpen}>
+            <Dialog
+                open={isActionModalOpen}
+                onOpenChange={(open) => {
+                    setIsActionModalOpen(open)
+                    if (!open) {
+                        setInterventionParticipantIds([])
+                        setActionType("")
+                        setActionDesc("")
+                    }
+                }}
+            >
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>Añadir Intervención</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
+                        {needsInterventionParticipantPick && (
+                            <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-3 space-y-3">
+                                <p className="text-sm font-semibold text-amber-900">
+                                    Estudiantes en esta intervención
+                                </p>
+                                <p className="text-xs text-amber-800/90">
+                                    Hay más de un estudiante involucrado en el registro de convivencia. Indica a quiénes aplica esta intervención (puedes elegir varios o todos).
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8 text-xs border-amber-300 bg-white"
+                                        onClick={selectAllInterventionParticipants}
+                                    >
+                                        Todos los involucrados
+                                    </Button>
+                                    {interventionParticipantIds.length > 0 && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-8 text-xs text-amber-900"
+                                            onClick={clearInterventionParticipants}
+                                        >
+                                            Limpiar selección
+                                        </Button>
+                                    )}
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {involvedStudentsFromConvivencia.map((s) => {
+                                        const selected = interventionParticipantIds.includes(s.id)
+                                        return (
+                                            <button
+                                                key={s.id}
+                                                type="button"
+                                                onClick={() => toggleInterventionParticipant(s.id)}
+                                                className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                                                    selected
+                                                        ? "border-indigo-500 bg-indigo-50 text-indigo-900"
+                                                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                                                }`}
+                                            >
+                                                <span
+                                                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${
+                                                        selected ? "border-indigo-600 bg-indigo-600" : "border-slate-300 bg-white"
+                                                    }`}
+                                                >
+                                                    {selected && <CheckCircle className="h-3.5 w-3.5 text-white" />}
+                                                </span>
+                                                <span className="font-medium truncate">
+                                                    {s.last_name}, {s.name}
+                                                </span>
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                                {interventionParticipantIds.length === 0 && (
+                                    <p className="text-xs font-medium text-red-700">
+                                        Debes seleccionar al menos un estudiante para continuar.
+                                    </p>
+                                )}
+                            </div>
+                        )}
                         <div className="space-y-2">
                             <label className="text-sm font-medium">Tipo de acción</label>
                             <Select value={actionType} onValueChange={setActionType}>
@@ -518,7 +913,13 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
                             <Button variant="outline" onClick={() => setIsActionModalOpen(false)} disabled={loading}>
                                 Cancelar
                             </Button>
-                            <Button onClick={() => handleAddAction(false)} disabled={loading}>
+                            <Button
+                                onClick={() => handleAddAction(false)}
+                                disabled={
+                                    loading ||
+                                    (needsInterventionParticipantPick && interventionParticipantIds.length === 0)
+                                }
+                            >
                                 Guardar Intervención
                             </Button>
                         </div>
@@ -549,9 +950,14 @@ export function CasoDetailClient({ caso, initialActions, userId, userRole }: { c
                                 ? `Registrado por: ${selectedIntervention.users?.name ?? ""} ${selectedIntervention.users?.last_name ?? ""}${selectedIntervention.users?.role ? ` (${ROLE_LABELS[selectedIntervention.users.role] ?? selectedIntervention.users.role})` : ""}`
                                 : ""}
                         </p>
+                        {selectedIntervention && formatParticipantLine(selectedIntervention) && (
+                            <p className="text-sm text-indigo-800 font-medium">
+                                Participan en la intervención: {formatParticipantLine(selectedIntervention)}
+                            </p>
+                        )}
                         <div className="max-h-[50vh] max-w-full overflow-y-auto overflow-x-hidden rounded-md border border-slate-200 bg-slate-50 p-3 min-w-0">
                             <p className="text-sm text-slate-700 whitespace-pre-wrap break-all [overflow-wrap:anywhere] max-w-full">
-                                {selectedIntervention?.description}
+                                {stripParticipantsPrefixFromDescription(selectedIntervention?.description) || "—"}
                             </p>
                         </div>
                     </div>
