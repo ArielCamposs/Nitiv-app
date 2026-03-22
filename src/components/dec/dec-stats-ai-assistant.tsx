@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { X, Loader2, Download } from "lucide-react"
 import jsPDF from "jspdf"
@@ -15,6 +15,25 @@ export function DecStatsAiAssistant({ institutionName }: Props) {
     const [error, setError] = useState<string | null>(null)
     const [response, setResponse] = useState<string | null>(null)
     const [downloading, setDownloading] = useState(false)
+
+    useEffect(() => {
+        const handleClose = (e: any) => {
+            if (e.detail?.id !== 'dec-stats-ai') {
+                setOpen(false)
+            }
+        }
+        window.addEventListener("nitiv:close-floating-widgets", handleClose)
+        return () => window.removeEventListener("nitiv:close-floating-widgets", handleClose)
+    }, [])
+
+    const toggleOpen = () => {
+        if (!open) {
+            window.dispatchEvent(new CustomEvent("nitiv:close-floating-widgets", { detail: { id: 'dec-stats-ai' } }))
+            setOpen(true)
+        } else {
+            setOpen(false)
+        }
+    }
 
     const handleGenerate = async () => {
         setLoading(true)
@@ -46,39 +65,134 @@ export function DecStatsAiAssistant({ institutionName }: Props) {
         setDownloading(true)
         try {
             const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
-            const marginX = 16
-            let y = 18
-
-            doc.setFont("helvetica", "bold")
-            doc.setFontSize(16)
-            doc.text("Nitiv — Análisis IA estadísticas DEC", marginX, y)
-            y += 8
-
-            doc.setFontSize(10)
-            doc.setFont("helvetica", "normal")
-            doc.setTextColor(100)
-            if (institutionName) {
-                doc.text(institutionName, marginX, y)
-                y += 5
-            }
-            doc.text(`Fecha: ${new Date().toLocaleDateString("es-CL")}`, marginX, y)
-            y += 8
-
-            doc.setTextColor(0)
-            doc.setFontSize(11)
-            doc.setFont("helvetica", "normal")
-
-            const lines = doc.splitTextToSize(response, doc.internal.pageSize.width - marginX * 2)
+            
+            const pageWidth = doc.internal.pageSize.width
             const pageHeight = doc.internal.pageSize.height
-
-            for (const line of lines) {
-                if (y > pageHeight - 20) {
-                    doc.addPage()
-                    y = 18
+            const marginX = 20
+            const contentWidth = pageWidth - marginX * 2
+            let y = 0
+            
+            const addHeader = (pageNum: number) => {
+                // Barra superior (sin color fuerte para impresión)
+                doc.setFillColor(248, 250, 252) // Slate-50
+                doc.rect(0, 0, pageWidth, 25, "F")
+                
+                doc.setTextColor(15, 23, 42) // Slate-900
+                doc.setFont("helvetica", "bold")
+                doc.setFontSize(16)
+                doc.text("Nitiv", marginX, 16)
+                
+                doc.setTextColor(100, 116, 139) // Slate-500
+                doc.setFont("helvetica", "normal")
+                doc.setFontSize(10)
+                doc.text("Análisis de Estadísticas DEC", pageWidth - marginX, 16, { align: "right" })
+                
+                y = 35
+                
+                if (pageNum === 1) {
+                    // Título principal
+                    doc.setTextColor(30, 41, 59) // Slate-800
+                    doc.setFont("helvetica", "bold")
+                    doc.setFontSize(18)
+                    doc.text(`Informe de Estadísticas y Recomendaciones`, marginX, y)
+                    y += 8
+                    
+                    doc.setFont("helvetica", "normal")
+                    doc.setFontSize(11)
+                    doc.setTextColor(100, 116, 139) // Slate-500
+                    if (institutionName) {
+                        doc.text(institutionName, marginX, y)
+                        y += 5
+                    }
+                    doc.text(`Fecha de emisión: ${new Date().toLocaleDateString("es-CL")}`, pageWidth - marginX, y, { align: "right" })
+                    y += 15
+                    
+                    // Línea separadora
+                    doc.setDrawColor(226, 232, 240) // Slate-200
+                    doc.line(marginX, y - 5, pageWidth - marginX, y - 5)
                 }
-                doc.text(line, marginX, y)
-                y += 5
             }
+
+            const addFooter = (pageNum: number) => {
+                doc.setFillColor(248, 250, 252) // Slate-50
+                doc.rect(0, pageHeight - 15, pageWidth, 15, "F")
+                
+                doc.setTextColor(148, 163, 184) // Slate-400
+                doc.setFont("helvetica", "normal")
+                doc.setFontSize(8)
+                doc.text(`Página ${pageNum}`, pageWidth / 2, pageHeight - 6, { align: "center" })
+            }
+
+            let pageNum = 1
+            addHeader(pageNum)
+
+            // Procesar el texto
+            const paragraphs = response.split('\n')
+            
+            for (const paragraph of paragraphs) {
+                if (paragraph.trim() === '') {
+                    y += 4
+                    continue
+                }
+
+                // Detectar si es un título (empieza con número o asteriscos)
+                const isTitle = /^(?:\d+\.|#+ |\*\*)/.test(paragraph.trim())
+                const cleanText = paragraph.replace(/\*\*/g, '').replace(/^#+ /, '').trim()
+
+                if (isTitle) {
+                    doc.setFont("helvetica", "bold")
+                    doc.setFontSize(12)
+                    doc.setTextColor(30, 41, 59)
+                    y += 4 // Espacio extra antes de un título
+                } else {
+                    doc.setFont("helvetica", "normal")
+                    doc.setFontSize(10)
+                    doc.setTextColor(71, 85, 105) // Slate-600
+                }
+
+                const lines = doc.splitTextToSize(cleanText, contentWidth)
+
+                for (const line of lines) {
+                    if (y > pageHeight - 30) {
+                        addFooter(pageNum)
+                        doc.addPage()
+                        pageNum++
+                        addHeader(pageNum)
+                    }
+                    doc.text(line, marginX, y)
+                    y += isTitle ? 6 : 5
+                }
+            }
+
+            // Nota aclaratoria al final
+            y += 10
+            if (y > pageHeight - 35) {
+                addFooter(pageNum)
+                doc.addPage()
+                pageNum++
+                addHeader(pageNum)
+            }
+
+            doc.setFillColor(241, 245, 249) // Slate-100
+            doc.roundedRect(marginX, y, contentWidth, 25, 2, 2, "F")
+            
+            doc.setFont("helvetica", "bold")
+            doc.setFontSize(9)
+            doc.setTextColor(100, 116, 139)
+            doc.text("Aviso Importante:", marginX + 4, y + 6)
+            
+            doc.setFont("helvetica", "italic")
+            doc.setFontSize(8)
+            const disclaimer = "Este análisis es generado por Inteligencia Artificial basándose en los datos cuantitativos registrados en la plataforma. Estas son solo recomendaciones y sugerencias de apoyo; no deben seguirse al 100% como reglas estrictas. El criterio profesional, la experiencia y el conocimiento directo que el equipo docente tiene sobre sus estudiantes siempre deben primar en la toma de decisiones."
+            const disclaimerLines = doc.splitTextToSize(disclaimer, contentWidth - 8)
+            
+            let dy = y + 11
+            for (const line of disclaimerLines) {
+                doc.text(line, marginX + 4, dy)
+                dy += 4
+            }
+
+            addFooter(pageNum)
 
             doc.save(`analisis_ia_estadisticas_DEC.pdf`)
         } catch (e) {
@@ -190,7 +304,7 @@ export function DecStatsAiAssistant({ institutionName }: Props) {
             </AnimatePresence>
 
             <motion.button
-                onClick={() => setOpen((v) => !v)}
+                onClick={toggleOpen}
                 className="flex items-center justify-center p-1 text-slate-700 hover:text-slate-900 transition-colors"
                 aria-label="Abrir análisis IA de estadísticas DEC"
                 whileHover={{ scale: 1.05 }}

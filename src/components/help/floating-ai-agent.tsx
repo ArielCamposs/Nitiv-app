@@ -77,6 +77,25 @@ export function FloatingHelpAgent() {
     }
   }, [messages, open, isLoading]);
 
+  useEffect(() => {
+    const handleClose = (e: any) => {
+      if (e.detail?.id !== 'floating-help') {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("nitiv:close-floating-widgets", handleClose);
+    return () => window.removeEventListener("nitiv:close-floating-widgets", handleClose);
+  }, []);
+
+  const toggleOpen = () => {
+    if (!open) {
+      window.dispatchEvent(new CustomEvent("nitiv:close-floating-widgets", { detail: { id: 'floating-help' } }));
+      setOpen(true);
+    } else {
+      setOpen(false);
+    }
+  };
+
   const handleSend = async () => {
     const text = inputText.trim();
     if (!text || isLoading) return;
@@ -336,7 +355,7 @@ export function FloatingHelpAgent() {
 
       {/* Botón flotante: solo cabeza del bot (icono), sin círculo exterior de fondo */}
       <motion.button
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={toggleOpen}
         className={cn(
           "relative flex items-center justify-center group p-1",
           open ? "text-slate-800" : "text-indigo-600 hover:text-indigo-500"

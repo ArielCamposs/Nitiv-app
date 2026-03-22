@@ -318,6 +318,26 @@ export function FloatingChat({ userId }: { userId: string }) {
     const { unreadMap, totalUnread, markAsRead } = useChatUnread()
     const [institutionId, setInstitutionId] = useState<string | null>(null)
 
+    // Escuchar evento global para cerrar otros widgets
+    useEffect(() => {
+        const handleClose = (e: any) => {
+            if (e.detail?.id !== 'floating-chat') {
+                setOpen(false)
+            }
+        }
+        window.addEventListener("nitiv:close-floating-widgets", handleClose)
+        return () => window.removeEventListener("nitiv:close-floating-widgets", handleClose)
+    }, [])
+
+    const toggleOpen = () => {
+        if (!open) {
+            window.dispatchEvent(new CustomEvent("nitiv:close-floating-widgets", { detail: { id: 'floating-chat' } }))
+            setOpen(true)
+        } else {
+            setOpen(false)
+        }
+    }
+
     // Cargar contactos al abrir por primera vez
     useEffect(() => {
         if (!open || contacts.length > 0) return
@@ -520,7 +540,7 @@ export function FloatingChat({ userId }: { userId: string }) {
 
             {/* Botón flotante */}
             <button
-                onClick={() => setOpen((v) => !v)}
+                onClick={toggleOpen}
                 className="relative h-14 w-14 rounded-full bg-primary text-white shadow-lg hover:bg-primary/90 transition-all hover:scale-105 flex items-center justify-center"
             >
                 {open ? (
