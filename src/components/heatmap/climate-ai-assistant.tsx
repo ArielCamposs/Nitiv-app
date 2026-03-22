@@ -229,7 +229,7 @@ export function ClimateAiAssistant({ courses, institutionName }: Props) {
                     {/* Header */}
                     <div className="flex items-center justify-between px-4 py-3 border-b bg-slate-50/80">
                         <div className="flex items-center gap-2">
-                            <div className="h-7 w-7 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center">
+                            <div className="h-7 w-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center">
                                 <Sparkles className="w-4 h-4" />
                             </div>
                             <div className="min-w-0">
@@ -312,7 +312,7 @@ export function ClimateAiAssistant({ courses, institutionName }: Props) {
                             type="button"
                             onClick={handleGenerate}
                             disabled={loading || !selectedCourseId}
-                            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-amber-500 text-white text-xs font-semibold px-3 py-2 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 text-white text-xs font-semibold px-3 py-2 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                             {loading ? (
                                 <>
@@ -346,7 +346,7 @@ export function ClimateAiAssistant({ courses, institutionName }: Props) {
             {/* Botón flotante */}
             <button
                 onClick={toggleOpen}
-                className="h-12 w-12 rounded-full bg-amber-500 text-white shadow-lg hover:bg-amber-600 transition-all hover:scale-105 flex items-center justify-center"
+                className="h-12 w-12 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 transition-all hover:scale-105 flex items-center justify-center"
                 aria-label="Abrir asistente IA de clima por curso"
             >
                 {open ? <X className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}

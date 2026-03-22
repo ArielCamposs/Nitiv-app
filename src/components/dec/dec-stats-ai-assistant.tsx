@@ -215,8 +215,10 @@ export function DecStatsAiAssistant({ institutionName }: Props) {
                         className="w-96 max-h-[520px] rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col overflow-hidden"
                     >
                     <div className="flex items-center justify-between px-4 py-3 border-b bg-slate-50/80">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <img src="/2%20ft.svg" alt="" className="h-9 w-15 shrink-0 object-contain" aria-hidden />
+                        <div className="flex items-center gap-2">
+                            <div className="h-7 w-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                                <Sparkles className="w-4 h-4" />
+                            </div>
                             <div className="min-w-0">
                                 <p className="text-sm font-semibold text-slate-800 truncate">
                                     Análisis IA de estadísticas DEC
@@ -303,20 +305,14 @@ export function DecStatsAiAssistant({ institutionName }: Props) {
                 )}
             </AnimatePresence>
 
-            <motion.button
+            {/* Botón flotante */}
+            <button
                 onClick={toggleOpen}
-                className="flex items-center justify-center p-1 text-slate-700 hover:text-slate-900 transition-colors"
+                className="h-12 w-12 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 transition-all hover:scale-105 flex items-center justify-center"
                 aria-label="Abrir análisis IA de estadísticas DEC"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.98 }}
-                transition={{ type: "spring", stiffness: 400, damping: 17 }}
             >
-                {open ? (
-                    <X className="w-7 h-7 shrink-0" />
-                ) : (
-                    <img src="/2%20ft.svg" alt="IA" className="w-16 h-16 object-contain shrink-0" />
-                )}
-            </motion.button>
+                {open ? <X className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
+            </button>
         </div>
     )
 }
