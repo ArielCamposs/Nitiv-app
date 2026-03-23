@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BackButton } from "@/components/ui/back-button"
 import { PerceptionForm } from "@/components/teacher/perception-form"
 import { StudentEmotionChart } from "@/components/student/student-emotion-chart"
+import { ExpandableText } from "@/components/ui/expandable-text"
 import Link from "next/link"
 
 const EMOTION_MAP: Record<string, { label: string; color: string }> = {
@@ -529,14 +530,23 @@ export default async function StudentProfilePage({
                                                             })}
                                                         </p>
                                                     </div>
-                                                    <p className="text-xs text-slate-600">{rec.description}</p>
+                                                    <ExpandableText 
+                                                        text={rec.description} 
+                                                        maxLength={250} 
+                                                        className="mt-2"
+                                                        textClassName="text-xs text-slate-600 leading-relaxed" 
+                                                    />
                                                     {rec.location && (
                                                         <p className="text-xs text-slate-400">📍 {rec.location}</p>
                                                     )}
                                                     {rec.resolved && rec.resolution_notes && (
-                                                        <div className="mt-2 pl-2 border-l-2 border-emerald-300">
-                                                            <p className="text-xs font-semibold text-emerald-600">Resolución</p>
-                                                            <p className="text-xs text-slate-500">{rec.resolution_notes}</p>
+                                                        <div className="mt-3 pl-2 border-l-2 border-emerald-300">
+                                                            <p className="text-[11px] font-semibold text-emerald-600 uppercase tracking-wide mb-1">Resolución</p>
+                                                            <ExpandableText 
+                                                                text={rec.resolution_notes} 
+                                                                maxLength={150} 
+                                                                textClassName="text-xs text-slate-500" 
+                                                            />
                                                         </div>
                                                     )}
                                                 </div>

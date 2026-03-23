@@ -351,7 +351,7 @@ export function CasoDetailClient({
             if (currentCase?.status === "cerrado") {
                 setStatus("cerrado")
                 setIsActionModalOpen(false)
-                toast.error("El caso ya está cerrado. No se pueden agregar intervenciones.")
+                toast.error("El caso ya está resuelto. No se pueden agregar intervenciones.")
                 return
             }
 
@@ -443,7 +443,7 @@ export function CasoDetailClient({
 
             if (isClosing) setStatus('cerrado')
             setActions([actData, ...actions])
-            toast.success(isClosing ? "Caso cerrado exitosamente." : "Intervención guardada.")
+            toast.success(isClosing ? "Caso resuelto exitosamente." : "Intervención guardada.")
 
             if (isClosing && typeof window !== "undefined") {
                 rememberPendingCaseStatus(caso.id, "cerrado")
@@ -486,7 +486,7 @@ export function CasoDetailClient({
             coordinacion_interna: "Coordinación interna",
             monitoreo: "Monitoreo en aula",
             derivacion_externa: "Derivación externa",
-            cierre: "Cierre de caso",
+            cierre: "Resolución de caso",
             nota: "Nota / Observación"
         }
         return labels[type] || "Otro"
@@ -631,12 +631,12 @@ export function CasoDetailClient({
                         <div>
                             <p className="text-xs text-slate-500 uppercase font-semibold">Estado actual</p>
                             <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium mt-1 ${
-                                status === 'cerrado' ? 'bg-slate-100 text-slate-700' :
+                                status === 'cerrado' ? 'bg-emerald-100 text-emerald-800' :
                                 status === 'atendido' ? 'bg-blue-100 text-blue-700' :
                                 status === 'en_proceso' ? 'bg-indigo-100 text-indigo-700' :
                                 'bg-yellow-100 text-yellow-800'
                             }`}>
-                                {status === 'en_proceso' ? 'EN PROCESO' : status.toUpperCase()}
+                                {status === 'cerrado' ? 'RESUELTO' : status === 'en_proceso' ? 'EN PROCESO' : status.toUpperCase()}
                             </span>
                         </div>
 

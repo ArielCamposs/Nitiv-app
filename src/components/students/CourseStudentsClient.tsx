@@ -13,6 +13,35 @@ import {
     Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, BarChart, Bar
 } from "recharts"
 
+const AXES_META: Record<string, { label: string; emoji: string; color: string }> = {
+    ac: { label: "Autoconciencia",     emoji: "🧠", color: "#db2777" },
+    ag: { label: "Autogestión",        emoji: "🎯", color: "#7c3aed" },
+    cs: { label: "Conciencia Social",  emoji: "🤝", color: "#d97706" },
+    hr: { label: "Hab. Relacionales",  emoji: "💬", color: "#4f46e5" },
+    td: { label: "Toma de Decisiones", emoji: "⚖️", color: "#b45309" },
+}
+
+function scoreColorForNote(avg: number): string {
+    if (avg < 2.5) return "#ef4444"
+    if (avg < 3.5) return "#f59e0b"
+    return "#10b981"
+}
+
+const RadarTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+        return (
+            <div className="bg-white border border-slate-200 shadow-md rounded-xl p-3">
+                <p className="font-bold text-slate-800 text-xs mb-1 uppercase tracking-wide">{label}</p>
+                <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-inner"></span>
+                    <span className="text-sm font-medium text-slate-700">Promedio: {Number(payload[0].value).toFixed(1)} / 5</span>
+                </div>
+            </div>
+        )
+    }
+    return null
+}
+
 interface Student {
     id: string
     name: string
@@ -52,6 +81,20 @@ interface Props {
 
 export function CourseStudentsClient({ course, students, baseUrl, profileBaseUrl = "/docente/estudiantes", stats }: Props) {
     const [search, setSearch] = useState("")
+
+    const formattedRadarData = useMemo(() => {
+        if (!stats?.radarAxes) return []
+        return stats.radarAxes.map(item => {
+            const code = item.axis.toLowerCase()
+            const meta = AXES_META[code]
+            return {
+                ...item,
+                fullLabel: meta ? meta.label : item.axis,
+                emoji: meta ? meta.emoji : "",
+                color: meta ? meta.color : "#94a3b8"
+            }
+        })
+    }, [stats?.radarAxes])
 
     const filtered = useMemo(() => {
         const lowerSearch = search.toLowerCase()
@@ -274,19 +317,55 @@ export function CourseStudentsClient({ course, students, baseUrl, profileBaseUrl
                                     <CardHeader>
                                         <CardTitle className="text-sm font-semibold text-slate-700">Radar de Competencias CASEL</CardTitle>
                                     </CardHeader>
-                                    <CardContent className="h-[400px]">
-                                        {stats.radarAxes.length > 0 ? (
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <RadarChart cx="50%" cy="50%" outerRadius="80%" data={stats.radarAxes}>
-                                                    <PolarGrid />
-                                                    <PolarAngleAxis dataKey="axis" fontSize={12} />
-                                                    <PolarRadiusAxis angle={30} domain={[0, 5]} />
-                                                    <Radar name="Promedio Curso" dataKey="score" stroke="#10b981" fill="#10b981" fillOpacity={0.4} />
-                                                    <RechartsTooltip />
-                                                </RadarChart>
-                                            </ResponsiveContainer>
+                                    <CardContent className="h-auto">
+                                        {formattedRadarData.length > 0 ? (
+                                            <div className="flex flex-col h-full gap-6">
+                                                {/* Recharts Wrapper */}
+                                                <div className="h-[350px] w-full mt-4 relative">
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                        <RadarChart cx="50%" cy="50%" outerRadius="75%" data={formattedRadarData}>
+                                                            <PolarGrid stroke="#e2e8f0" />
+                                                            <PolarAngleAxis 
+                                                                dataKey="fullLabel" 
+                                                                fontSize={11} 
+                                                                tick={{ fill: '#475569', fontWeight: 600, dx: 0, dy: 4 }} 
+                                                            />
+                                                            <PolarRadiusAxis 
+                                                                angle={30} 
+                                                                domain={[0, 5]} 
+                                                                tick={{ fontSize: 10, fill: '#94a3b8' }} 
+                                                            />
+                                                            <Radar 
+                                                                name="Promedio Curso" 
+                                                                dataKey="score" 
+                                                                stroke="#10b981" 
+                                                                strokeWidth={2}
+                                                                fill="#10b981" 
+                                                                fillOpacity={0.4} 
+                                                            />
+                                                            <RechartsTooltip content={<RadarTooltip />} />
+                                                        </RadarChart>
+                                                    </ResponsiveContainer>
+                                                </div>
+
+                                                {/* Breakdown Cards */}
+                                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mt-auto">
+                                                    {formattedRadarData.map((d, idx) => (
+                                                        <div key={idx} className="flex flex-col items-center justify-center border border-slate-100 bg-slate-50/70 rounded-2xl p-3 shadow-sm text-center transform transition-transform hover:scale-105">
+                                                            <span className="text-xl mb-1.5 drop-shadow-sm">{d.emoji}</span>
+                                                            <span className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase leading-snug tracking-wide mb-1.5 h-8 flex items-center justify-center overflow-hidden w-full px-1">{d.fullLabel}</span>
+                                                            <div className="flex items-baseline gap-1 bg-white px-2.5 py-1 rounded-full border border-slate-200 shadow-sm w-fit mt-auto">
+                                                                <span className="text-sm sm:text-base font-extrabold" style={{ color: scoreColorForNote(d.score) }}>
+                                                                    {d.score.toFixed(1)}
+                                                                </span>
+                                                                <span className="text-[9px] sm:text-[10px] text-slate-400 font-bold uppercase">/ 5</span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
                                         ) : (
-                                            <div className="h-full flex items-center justify-center text-sm text-slate-400">
+                                            <div className="h-[400px] flex items-center justify-center text-sm text-slate-400">
                                                 No hay respuestas de radar
                                             </div>
                                         )}

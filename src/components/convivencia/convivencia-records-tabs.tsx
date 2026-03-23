@@ -10,7 +10,9 @@ import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
     ResponsiveContainer, PieChart, Pie, Cell
 } from "recharts"
-import { ClipboardList, Plus, History, TrendingUp, TrendingDown, Minus, CheckCircle, ChevronDown, ChevronUp, Search, X, Mic, MicOff, BarChart3, Printer, Download, Edit, AlertCircle, Trophy, CalendarDays, Activity, MapPin, Users, Inbox, FileDown, FileText } from "lucide-react"
+import { ClipboardList, Plus, History, TrendingUp, TrendingDown, Minus, CheckCircle, ChevronDown, ChevronUp, Search, X, Mic, MicOff, BarChart3, Printer, Download, Edit, AlertCircle, Trophy, CalendarDays, Activity, MapPin, Users, Inbox, FileDown, FileText, Save, HandMetal, HeartHandshake, Filter, ArrowRight } from "lucide-react"
+import { ExpandableText } from "@/components/ui/expandable-text"
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 // ── Constants ──────────────────────────────────────────────────────────────────
@@ -24,6 +26,16 @@ const RECORD_TYPES: { value: string; label: string; color: string }[] = [
     { value: "conflicto_grupal", label: "Conflicto Grupal", color: "#3b82f6" }, // blue
     { value: "otro", label: "Otro", color: "#94a3b8" }, // slate
 ]
+
+const CUSTOM_CHART_COLORS = [
+    "#10b981", "#06b6d4", "#a855f7", "#84cc16", "#d946ef", "#0ea5e9", "#f59e0b", "#f43f5e", "#6366f1"
+]
+
+function getCustomColor(name: string) {
+    let hash = 0
+    for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
+    return CUSTOM_CHART_COLORS[Math.abs(hash) % CUSTOM_CHART_COLORS.length]
+}
 
 /** Valor guardado en `type` para entrevista con apoderado (incluye legado sin "con"). */
 const ENTREVISTA_APODERADO_LABEL = "Entrevista con el apoderado"
@@ -73,7 +85,7 @@ const SEVERITY_COLORS: { [key: string]: string } = {
 
 const STATUS_LABELS: Record<string, { label: string; class: string; cardBorder: string }> = {
     seguimiento: { label: "En seguimiento", class: "bg-orange-100 text-orange-700 border-orange-200", cardBorder: "border-l-4 border-l-orange-500" },
-    cerrado: { label: "Cerrada", class: "bg-slate-200 text-slate-700 border-slate-300", cardBorder: "border-l-4 border-l-slate-400" },
+    cerrado: { label: "Resuelto", class: "bg-emerald-100 text-emerald-800 border-emerald-300", cardBorder: "border-l-4 border-l-emerald-500" },
 }
 
 const HISTORY_STATUS_LABELS: Record<string, { label: string; class: string; cardBorder: string }> = {
@@ -159,19 +171,54 @@ function getWeekKey(dateStr: string): string {
     return mon.toLocaleDateString("es-CL", { day: "numeric", month: "short" })
 }
 
-function buildWeeklyChart(records: ConvivenciaRecord[]) {
-    const weekMap: { [key: string]: number } = {}
+function buildEvolutionChartData(records: ConvivenciaRecord[], period: "semanas" | "meses") {
+    const map: { [key: string]: number } = {}
     const now = new Date()
-    for (let i = 5; i >= 0; i--) {
-        const d = new Date(now)
-        d.setDate(now.getDate() - i * 7)
-        weekMap[getWeekKey(d.toISOString())] = 0
+    const currentYear = now.getFullYear()
+    const year = now.getMonth() < 2 ? currentYear - 1 : currentYear
+    const startOfMarch = new Date(year, 2, 1)
+
+    if (period === "meses") {
+        let cursor = new Date(startOfMarch)
+        while (cursor <= now) {
+            const key = cursor.toLocaleDateString("es-CL", { month: "short" }).replace(/\./g, "").toUpperCase()
+            if (!map[key]) map[key] = 0
+            cursor.setMonth(cursor.getMonth() + 1)
+        }
+        const nowKey = now.toLocaleDateString("es-CL", { month: "short" }).replace(/\./g, "").toUpperCase()
+        if (map[nowKey] === undefined) map[nowKey] = 0
+
+        for (const r of records) {
+            const d = new Date(r.incident_date)
+            if (d >= startOfMarch && d <= now) {
+                const k = d.toLocaleDateString("es-CL", { month: "short" }).replace(/\./g, "").toUpperCase()
+                if (k in map) map[k]++
+            }
+        }
+    } else {
+        let cursor = new Date(startOfMarch)
+        const day = cursor.getDay()
+        const diff = cursor.getDate() - day + (day === 0 ? -6 : 1)
+        cursor.setDate(diff)
+
+        while (cursor <= now) {
+            const key = getWeekKey(cursor.toISOString())
+            if (!map[key]) map[key] = 0
+            cursor.setDate(cursor.getDate() + 7)
+        }
+        const nowKey = getWeekKey(now.toISOString())
+        if (map[nowKey] === undefined) map[nowKey] = 0
+
+        for (const r of records) {
+            const d = new Date(r.incident_date)
+            // Solo considerar desde principio de marzo (aprox el lunes correspondiente)
+            if (d >= startOfMarch || getWeekKey(d.toISOString()) in map) {
+                const k = getWeekKey(r.incident_date)
+                if (k in map) map[k]++
+            }
+        }
     }
-    for (const r of records) {
-        const key = getWeekKey(r.incident_date)
-        if (key in weekMap) weekMap[key]++
-    }
-    return Object.entries(weekMap).map(([semana, casos]) => ({ semana, casos: casos as number }))
+    return Object.entries(map).map(([label, casos]) => ({ label, casos: casos as number }))
 }
 
 // ── Student Picker ─────────────────────────────────────────────────────────────
@@ -296,10 +343,10 @@ function HistoryCaseStatus({ record }: { record: ConvivenciaRecord }) {
     }
 
     return (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-            <p className="text-xs font-semibold text-slate-700">Cerrado en convivencia</p>
-            <p className="text-xs text-slate-500 mt-1">
-                Este registro fue cerrado desde convivencia y no requiere seguimiento en Gestión de casos.
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+            <p className="text-xs font-semibold text-emerald-800">Resuelto en convivencia</p>
+            <p className="text-[11px] text-emerald-600 mt-1">
+                Este registro fue resuelto desde convivencia y no requiere seguimiento en Gestión de casos.
             </p>
         </div>
     )
@@ -308,6 +355,8 @@ function HistoryCaseStatus({ record }: { record: ConvivenciaRecord }) {
 // ── Main Component ─────────────────────────────────────────────────────────────
 export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, reporterName, institutionName, institutionLogoUrl }: Props) {
     const [tab, setTab] = useState<"nuevo" | "historial" | "estadisticas">("nuevo")
+    const [evolutionPeriod, setEvolutionPeriod] = useState<"semanas" | "meses">("semanas")
+    const [showAllPieTypes, setShowAllPieTypes] = useState(false)
     const [records, setRecords] = useState<ConvivenciaRecord[]>(initialRecords)
     const [pending, startTransition] = useTransition()
     const [createdRecord, setCreatedRecord] = useState<ConvivenciaRecord | null>(null)
@@ -399,21 +448,28 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
         return RECORD_TYPES.find(t => t.value === top[0]) ?? null
     }, [last30])
 
-    const weeklyData = useMemo(() => buildWeeklyChart(records), [records])
+    const evolutionData = useMemo(() => buildEvolutionChartData(records, evolutionPeriod), [records, evolutionPeriod])
 
     const pieData = useMemo(() => {
-        if (last30.length === 0) return []
+        if (records.length === 0) return []
         const counts: { [key: string]: number } = {}
-        for (const r of last30) counts[r.type] = (counts[r.type] ?? 0) + 1
+        for (const r of records) counts[r.type] = (counts[r.type] ?? 0) + 1
 
         // Use a set to detect duplicates from unknowns vs authentic 'otro's if needed, though they map to same name/color.
         return Object.entries(counts)
             .map(([value, count]) => {
                 const typeInfo = RECORD_TYPES.find(t => t.value === value)
+                let customName = value
+                if (!customName || customName.toLowerCase() === "otro") {
+                    customName = "Otro"
+                } else {
+                    customName = customName.charAt(0).toUpperCase() + customName.slice(1)
+                }
+
                 return {
-                    name: typeInfo?.label || "Otro",
+                    name: typeInfo?.label || customName,
                     value: count,
-                    color: typeInfo?.color || "#94a3b8"
+                    color: typeInfo?.color || getCustomColor(customName)
                 }
             })
             // sum duplicates if any (e.g. "unknownType" and "otro" both rendering as "Otro")
@@ -424,8 +480,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                 return acc
             }, [] as { name: string, value: number, color: string }[])
             .sort((a, b) => b.value - a.value)
-            .slice(0, 5) // Top 5
-    }, [last30])
+    }, [records])
 
     const topReincidentStudents = useMemo(() => {
         if (records.length === 0) return []
@@ -473,11 +528,20 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
             { id: 5, name: "Viernes", count: 0 },
         ]
 
+        const now = new Date()
+        const dayOfWeek = now.getDay()
+        const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1
+        const startOfWeek = new Date(now)
+        startOfWeek.setHours(0, 0, 0, 0)
+        startOfWeek.setDate(now.getDate() - diffToMonday)
+
         for (const r of records) {
             const date = new Date(r.incident_date)
-            const day = date.getDay()
-            if (day >= 1 && day <= 5) {
-                daysTemplate[day - 1].count++
+            if (date >= startOfWeek) {
+                const day = date.getDay()
+                if (day >= 1 && day <= 5) {
+                    daysTemplate[day - 1].count++
+                }
             }
         }
 
@@ -669,15 +733,32 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
         return { logoInst, logoNitiv }
     }
 
+    function printDoc(doc: any) {
+        const blob = doc.output("blob")
+        const url = URL.createObjectURL(blob)
+        const w = window.open(url, "_blank")
+        if (w) {
+            setTimeout(() => {
+                try {
+                    w.print()
+                } finally {
+                    URL.revokeObjectURL(url)
+                }
+            }, 600)
+            toast.success("Abriendo impresión...")
+        } else {
+            URL.revokeObjectURL(url)
+            toast.error("Permite ventanas emergentes para imprimir el PDF")
+        }
+    }
+
     function handlePrint(record: ConvivenciaRecord) {
         getLogos().then(({ logoInst, logoNitiv }) => {
             const doc = buildConvivenciaPdf(enrichRecordWithCourses(record), reporterName, institutionName, logoInst, logoNitiv)
-            doc.autoPrint()
-            doc.output("dataurlnewwindow")
+            printDoc(doc)
         }).catch(() => {
             const doc = buildConvivenciaPdf(enrichRecordWithCourses(record), reporterName, institutionName)
-            doc.autoPrint()
-            doc.output("dataurlnewwindow")
+            printDoc(doc)
         })
     }
 
@@ -709,7 +790,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
             daysHeatmap: daysHeatmap.map(d => ({ name: d.name, count: d.count })),
             byLocation: byLocation.map(l => ({ name: l.name, count: l.count })),
             involvedStats: { avg: involvedStats.avg, soloUno: involvedStats.soloUno, dosOMas: involvedStats.dosOMas },
-            weeklyData: weeklyData.map(w => ({ semana: w.semana, casos: w.casos })),
+            weeklyData: evolutionData.map(w => ({ semana: w.label, casos: w.casos })),
             pieData: pieData.map(p => ({ name: p.name, value: p.value })),
             topReincidentStudents: topReincidentStudents.map(s => ({ name: s.name, last_name: s.last_name, count: s.count })),
             topActionsTaken: topActionsTaken.map(a => ({ name: a.name, count: a.count })),
@@ -735,9 +816,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
             .then(({ logoInst, logoNitiv }) => {
                 const data = getStatsPdfData()
                 const doc = buildConvivenciaStatsPdf(data, logoInst, logoNitiv)
-                doc.autoPrint()
-                doc.output("dataurlnewwindow")
-                toast.success("Abriendo impresión...")
+                printDoc(doc)
             })
             .catch((e) => {
                 console.error(e)
@@ -897,8 +976,8 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                 toast.error(result.error)
             } else {
                 toast.success(editingRecordId ? "Registro actualizado correctamente" : "Registro creado correctamente")
-                if ((result as { warning?: string })?.warning) {
-                    toast.warning((result as { warning: string }).warning)
+                if (result && 'warning' in result && typeof result.warning === 'string') {
+                    toast.warning(result.warning)
                 }
 
                 // limpiar snapshot después de guardar
@@ -1065,8 +1144,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                     ].map(shortcut => (
                                         <button key={shortcut.label} type="button"
                                             onClick={() => selectEventType(shortcut.label)}
-                                            className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
-                                                type === shortcut.label
+                                            className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${type === shortcut.label
                                                     ? "bg-indigo-500 text-white border-indigo-500 shadow-sm ring-2 ring-indigo-200"
                                                     : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
                                                 }`}
@@ -1172,11 +1250,10 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                         type="button"
                                         key={s.value}
                                         onClick={() => setSeverity(prev => (prev === s.value ? "" : s.value))}
-                                        className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                                            severity === s.value
+                                        className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${severity === s.value
                                                 ? s.activeClass
                                                 : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
-                                        }`}
+                                            }`}
                                     >
                                         {s.label}
                                     </button>
@@ -1311,14 +1388,13 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                         <div className="flex flex-wrap items-center gap-2 bg-white p-1.5 rounded-full border border-slate-200 w-fit">
                             {[
                                 { value: "seguimiento", label: "En seguimiento", activeClass: "bg-orange-500 text-white shadow-md ring-2 ring-orange-200 border-orange-500" },
-                                { value: "cerrado", label: "Cerrado", activeClass: "bg-red-500 text-white shadow-md ring-2 ring-red-200 border-red-500" },
+                                { value: "cerrado", label: "Resuelto", activeClass: "bg-emerald-500 text-white shadow-md ring-2 ring-emerald-200 border-emerald-500" },
                             ].map(s => (
                                 <button
                                     type="button"
                                     key={s.value}
                                     onClick={() => setStatus(prev => (prev === s.value ? "" : s.value))}
-                                    className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                                        status === s.value
+                                    className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${status === s.value
                                             ? s.activeClass
                                             : "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200"
                                         }`}
@@ -1423,10 +1499,10 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                 <p className="text-2xl font-bold text-orange-700 mt-0.5">{statusCounts.seguimiento}</p>
                                 <p className="text-xs text-slate-500 mt-0.5">En proceso</p>
                             </div>
-                            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-                                <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wide">Cerrados</p>
-                                <p className="text-2xl font-bold text-slate-700 mt-0.5">{statusCounts.cerrados}</p>
-                                <p className="text-xs text-slate-500 mt-0.5">Resueltos</p>
+                            <div className="bg-emerald-50/50 rounded-xl border border-emerald-200 p-4 shadow-sm">
+                                <p className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">Resueltos</p>
+                                <p className="text-2xl font-bold text-emerald-800 mt-0.5">{statusCounts.cerrados}</p>
+                                <p className="text-xs text-emerald-600 mt-0.5">Finalizados</p>
                             </div>
                         </div>
                     </div>
@@ -1458,10 +1534,9 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             </p>
                         </div>
                         <div className="bg-white rounded-2xl border p-4 shadow-sm">
-                            <p className="text-xs font-medium text-slate-500">Tipo más frecuente</p>
-                            {topType
-                                ? <p className="text-sm font-semibold text-slate-700 mt-2">{topType.label}</p>
-                                : <p className="text-slate-400 text-sm mt-1">Sin datos</p>}
+                            <p className="text-xs font-medium text-slate-500">Tasa de resolución</p>
+                            <p className="text-3xl font-bold text-emerald-600 mt-1">{closureRate}%</p>
+                            <p className="text-xs text-slate-400 mt-1">{statusCounts.cerrados} de {records.length} resueltos</p>
                         </div>
                         <div className="bg-white rounded-2xl border p-4 shadow-sm">
                             <p className="text-xs font-medium text-slate-500">Casos graves</p>
@@ -1474,9 +1549,27 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                         {/* Weekly Timeline */}
                         <div className="bg-white rounded-2xl border shadow-sm p-6 lg:col-span-2">
-                            <h3 className="text-sm font-semibold text-slate-700 mb-4">Evolución de casos (últimas 6 semanas)</h3>
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-sm font-semibold text-slate-700">Evolución de casos</h3>
+                                <div className="flex bg-slate-100 p-1 rounded-lg">
+                                    <button
+                                        type="button"
+                                        onClick={() => setEvolutionPeriod("semanas")}
+                                        className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${evolutionPeriod === "semanas" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                                    >
+                                        Semanas
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setEvolutionPeriod("meses")}
+                                        className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${evolutionPeriod === "meses" ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                                    >
+                                        Meses
+                                    </button>
+                                </div>
+                            </div>
                             <ResponsiveContainer width="100%" height={220}>
-                                <AreaChart data={weeklyData} margin={{ top: 0, right: 10, left: -20, bottom: 0 }}>
+                                <AreaChart data={evolutionData} margin={{ top: 0, right: 10, left: -20, bottom: 0 }}>
                                     <defs>
                                         <linearGradient id="colorCasos" x1="0" y1="0" x2="0" y2="1">
                                             <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
@@ -1484,7 +1577,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                         </linearGradient>
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                                    <XAxis dataKey="semana" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                                     <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} allowDecimals={false} />
                                     <RechartsTooltip
                                         contentStyle={{ borderRadius: "12px", border: "1px solid #e2e8f0", fontSize: "12px", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
@@ -1497,7 +1590,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
 
                         {/* Top Types Donut Chart */}
                         <div className="bg-white rounded-2xl border shadow-sm p-6 lg:col-span-1 flex flex-col items-center">
-                            <h3 className="text-sm font-semibold text-slate-700 w-full mb-2">Distribución (30 días)</h3>
+                            <h3 className="text-sm font-semibold text-slate-700 w-full mb-2">Distribución (Histórico)</h3>
                             {pieData.length > 0 ? (
                                 <ResponsiveContainer width="100%" height={180}>
                                     <PieChart>
@@ -1521,53 +1614,30 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             ) : (
                                 <div className="flex-1 flex items-center justify-center text-sm font-medium text-slate-400">Sin datos registrados</div>
                             )}
-                            <div className="w-full space-y-1.5 mt-2 max-h-[80px] overflow-y-auto pr-1">
-                                {pieData.map((entry, index) => (
+                            <div className={`w-full space-y-1.5 mt-2 pr-1 transition-all ${showAllPieTypes ? "max-h-[200px] overflow-y-auto" : "max-h-[140px] overflow-y-hidden"}`}>
+                                {(showAllPieTypes ? pieData : pieData.slice(0, 5)).map((entry, index) => (
                                     <div key={entry.name} className="flex items-center justify-between text-xs">
                                         <div className="flex items-center gap-2">
-                                            <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
-                                            <span className="text-slate-600 truncate max-w-[120px]" title={entry.name}>{entry.name}</span>
+                                            <div className="w-2.5 h-2.5 shrink-0 rounded-full" style={{ backgroundColor: entry.color }} />
+                                            <span className="text-slate-600 truncate max-w-[150px]" title={entry.name}>{entry.name}</span>
                                         </div>
                                         <span className="font-semibold text-slate-700">{entry.value}</span>
                                     </div>
                                 ))}
                             </div>
+                            {pieData.length > 5 && (
+                                <button
+                                    onClick={() => setShowAllPieTypes(!showAllPieTypes)}
+                                    className="text-xs text-indigo-600 hover:text-indigo-800 font-medium w-full text-center mt-3 pt-2 border-t border-slate-100 transition-colors"
+                                >
+                                    {showAllPieTypes ? "Ver menos" : `Ver más (${pieData.length - 5})`}
+                                </button>
+                            )}
                         </div>
                     </div>
 
                     {/* Insights avanzados */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-
-                        {/* 1. Tasa de cierre */}
-                        <div className="bg-white rounded-2xl border shadow-sm p-6 flex flex-col items-center justify-center text-center">
-                            <h3 className="text-sm font-semibold text-slate-700 mb-2">Tasa de cierre</h3>
-                            <div className="relative w-28 h-28 flex items-center justify-center rounded-full border-8 border-slate-50">
-                                <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 36 36">
-                                    <path
-                                        className="text-slate-100"
-                                        strokeWidth="3.8"
-                                        stroke="currentColor"
-                                        fill="none"
-                                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                    />
-                                    <path
-                                        className="text-emerald-500"
-                                        strokeWidth="3.8"
-                                        strokeDasharray={`${closureRate}, 100`}
-                                        strokeLinecap="round"
-                                        stroke="currentColor"
-                                        fill="none"
-                                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                    />
-                                </svg>
-                                <div className="absolute flex flex-col items-center justify-center">
-                                    <span className="text-2xl font-bold text-slate-800">{closureRate}%</span>
-                                </div>
-                            </div>
-                            <p className="text-xs text-slate-400 mt-4">
-                                {statusCounts.cerrados} de {records.length} registros cerrados
-                            </p>
-                        </div>
 
                         {/* 2. Distribución por Gravedad */}
                         <div className="bg-white rounded-2xl border shadow-sm p-6 pl-5">
@@ -1594,7 +1664,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                         <div className="bg-white rounded-2xl border shadow-sm p-5 flex flex-col">
                             <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
                                 <CalendarDays className="w-4 h-4 text-indigo-500" />
-                                Mapa de Días (Lun - Vie)
+                                Mapa de Días (Semana actual)
                             </h3>
                             <div className="flex-1 flex items-center justify-center gap-2 mt-2">
                                 {daysHeatmap.map(d => (
@@ -1631,7 +1701,12 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             )}
                         </div>
 
-                        {/* 3c. Involucrados por caso — individual vs grupal */}
+                    </div>
+
+                    {/* Fila: Involucrados + Reincidentes + Acciones */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+                        {/* Involucrados por caso */}
                         <div className="bg-white rounded-2xl border shadow-sm p-5">
                             <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
                                 <Users className="w-4 h-4 text-violet-500" />
@@ -1640,21 +1715,21 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             <div className="space-y-3">
                                 <div className="flex items-baseline gap-2">
                                     <span className="text-2xl font-bold text-slate-800">{involvedStats.avg}</span>
-                                    <span className="text-xs text-slate-500">promedio de personas por caso</span>
+                                    <span className="text-xs text-slate-500">promedio por caso</span>
                                 </div>
-                                <div className="flex gap-3 text-xs">
+                                <div className="flex gap-2 text-xs flex-wrap">
                                     <span className="px-2 py-1 rounded-lg bg-slate-100 text-slate-600">
-                                        1 involucrado: {involvedStats.soloUno}
+                                        1 inv.: {involvedStats.soloUno}
                                     </span>
                                     <span className="px-2 py-1 rounded-lg bg-indigo-100 text-indigo-700">
-                                        2 o más: {involvedStats.dosOMas}
+                                        2+: {involvedStats.dosOMas}
                                     </span>
                                 </div>
                             </div>
                         </div>
 
-                        {/* 4. Top Estudiantes Reincidentes */}
-                        <div className="bg-white rounded-2xl border shadow-sm p-5 md:col-span-2 lg:col-span-1">
+                        {/* Estudiantes Reincidentes */}
+                        <div className="bg-white rounded-2xl border shadow-sm p-5">
                             <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
                                 <AlertCircle className="w-4 h-4 text-red-500" />
                                 Estudiantes Reincidentes
@@ -1662,23 +1737,23 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             {topReincidentStudents.length === 0 ? (
                                 <p className="text-sm text-slate-400 py-6 text-center">Sin reincidencias</p>
                             ) : (
-                                <div className="space-y-3">
+                                <div className="space-y-2">
                                     {topReincidentStudents.map((st, i) => (
                                         <Link
                                             key={st.id}
                                             href={`/perfil/${st.id}`}
-                                            className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100 hover:bg-slate-100 hover:border-slate-200 transition-colors"
+                                            className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-100 hover:bg-slate-100 hover:border-slate-200 transition-colors"
                                         >
-                                            <div className="flex items-center gap-3">
-                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${i === 0 ? "bg-red-100 text-red-600" :
+                                            <div className="flex items-center gap-2">
+                                                <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${i === 0 ? "bg-red-100 text-red-600" :
                                                     i === 1 ? "bg-orange-100 text-orange-600" :
                                                         "bg-slate-200 text-slate-500"
                                                     }`}>
                                                     {i + 1}
                                                 </div>
-                                                <span className="text-sm font-medium text-slate-700">{st.last_name}, {st.name}</span>
+                                                <span className="text-xs font-medium text-slate-700 truncate max-w-[110px]">{st.last_name}, {st.name}</span>
                                             </div>
-                                            <span className="text-xs font-bold text-slate-500 px-2.5 py-1 rounded-full bg-white border border-slate-200 shadow-sm">
+                                            <span className="text-[10px] font-bold text-slate-500 px-2 py-0.5 rounded-full bg-white border border-slate-200 shadow-sm shrink-0">
                                                 {st.count} casos
                                             </span>
                                         </Link>
@@ -1687,25 +1762,25 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                             )}
                         </div>
 
-                        {/* 5. Acciones Más Frecuentes */}
-                        <div className="bg-white rounded-2xl border shadow-sm p-5 md:col-span-2 lg:col-span-2">
+                        {/* Medidas y Acciones Frecuentes */}
+                        <div className="bg-white rounded-2xl border shadow-sm p-5">
                             <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
                                 <div className="relative flex items-center justify-center">
-                                    <Activity className="w-5 h-5 text-emerald-500 animate-pulse drop-shadow-md z-10" />
+                                    <Activity className="w-4 h-4 text-emerald-500 animate-pulse drop-shadow-md z-10" />
                                     <div className="absolute inset-0 bg-emerald-400 rounded-full animate-ping opacity-20"></div>
                                 </div>
-                                Medidas y Acciones Frecuentes
+                                Acciones Frecuentes
                             </h3>
                             {topActionsTaken.length === 0 ? (
                                 <div className="flex-1 flex items-center justify-center text-sm font-medium text-slate-400 h-32">
                                     Sin acciones registradas
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-                                    {topActionsTaken.map((a, i) => (
-                                        <div key={a.name} className="flex flex-col items-center justify-center bg-slate-50 border border-slate-200 rounded-2xl p-4 transition-colors hover:bg-slate-100 min-h-[110px]">
-                                            <span className="text-sm font-medium text-slate-700 text-center mb-3 leading-tight line-clamp-3" title={a.name}>{a.name}</span>
-                                            <span className="text-xs font-semibold text-slate-500 mt-auto bg-white px-3 py-1 rounded-full border border-slate-200 shadow-sm">{a.count} veces</span>
+                                <div className="space-y-2">
+                                    {topActionsTaken.map((a) => (
+                                        <div key={a.name} className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-50 border border-slate-100 rounded-xl hover:bg-slate-100 transition-colors">
+                                            <span className="text-xs font-medium text-slate-700 truncate" title={a.name}>{a.name}</span>
+                                            <span className="text-[10px] font-semibold text-slate-500 shrink-0 bg-white px-2 py-0.5 rounded-full border border-slate-200 shadow-sm">{a.count}×</span>
                                         </div>
                                     ))}
                                 </div>
@@ -1725,7 +1800,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                         <div className="px-6 py-4 border-b">
                             <h3 className="font-semibold text-slate-800">Todos los registros</h3>
                             <p className="text-xs text-slate-400 mt-0.5">
-                                {records.length} en total · {statusCounts.cerrados} cerrados
+                                {records.length} en total · {statusCounts.cerrados} resueltos
                             </p>
                             {/* Filtros por gravedad y estado */}
                             <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -1751,7 +1826,7 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                     >
                                         <option value="">Todos</option>
                                         <option value="seguimiento">En seguimiento</option>
-                                        <option value="cerrado">Cerrada</option>
+                                        <option value="cerrado">Resuelto</option>
                                     </select>
                                 </div>
                             </div>
@@ -1785,199 +1860,207 @@ export function ConvivenciaRecordsTabs({ initialRecords, students, staffUsers, r
                                     )}
                                 </div>
                             ) : (
-                            <>
-                            <div className="p-4 space-y-2 bg-slate-50/50">
-                                {filteredRecords.map(r => {
-                                    const typeLabel = (r.type === "Otro" || r.type.startsWith("Otro:"))
-                                        ? r.type
-                                        : normalizeConvivenciaTypeForUi(
-                                            RECORD_TYPES.find(t => t.value === r.type || t.label === r.type)?.label ?? r.type
-                                        )
-                                    const statusMeta = HISTORY_STATUS_LABELS[effectiveStatus(r)]
-                                    const involvedList: any[] = (r.convivencia_record_students ?? [])
-                                        .map((rs: any) => rs?.students)
-                                        .filter(Boolean)
-                                    const visibleStudents = involvedList.slice(0, 3)
-                                    const extraStudents = Math.max(involvedList.length - visibleStudents.length, 0)
-                                    const titleTrim = r.event_title?.trim() ?? ""
-                                    return (
-                                        <div
-                                            key={r.id}
-                                            className={`flex flex-wrap items-center justify-between gap-3 bg-white rounded-xl border px-4 py-3 shadow-sm transition-all hover:border-slate-300 ${statusMeta.cardBorder}`}
-                                        >
-                                            <div className="flex flex-1 flex-col gap-1 min-w-0">
-                                                <div className="flex flex-wrap items-center gap-2 min-w-0">
-                                                <span className="text-xs font-medium text-slate-500 shrink-0">
-                                                    {new Date(r.incident_date).toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                                                </span>
-                                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${statusMeta.class}`}>{statusMeta.label}</span>
-                                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${SEVERITY_COLORS[r.severity] ?? "bg-slate-100 text-slate-600"}`}>{SEVERITY_LABELS[r.severity] ?? r.severity}</span>
-                                                {r.location && <span className="text-xs text-slate-500 truncate max-w-[120px]" title={r.location}>📍 {r.location}</span>}
-                                                {involvedList.length > 0 && (
-                                                    <div className="flex flex-wrap items-center gap-1 shrink-0">
-                                                        {visibleStudents.map((s: any) => {
-                                                            const name = `${s?.last_name ?? ""}, ${s?.name ?? ""}`.trim().replace(/^,|,$/g, "").trim()
-                                                            const getInitial = (val: unknown) => {
-                                                                const str = (val ?? "").toString().trim()
-                                                                if (!str) return ""
-                                                                // Quita tildes para que se vea como en la foto (A-Z).
-                                                                return str
-                                                                    .charAt(0)
-                                                                    .normalize("NFD")
-                                                                    .replace(/[\u0300-\u036f]/g, "")
-                                                                    .toUpperCase()
-                                                            }
-                                                            const initials = `${getInitial(s?.name)}${getInitial(s?.last_name)}`.replace(/[^A-Z]/g, "")
-                                                            const courseData = s?.courses ?? s?.course ?? students.find((st: Student) => st.id === s?.id)?.courses
-                                                            const courseLabel = courseData?.name
-                                                                ? `${courseData.name}${courseData.section ? " " + courseData.section : ""}`
-                                                                : "Sin curso"
-                                                            return (
-                                                                <span
-                                                                    key={s?.id}
-                                                                    className="group relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold shrink-0 cursor-default hover:z-50"
-                                                                    title={`${name} — ${courseLabel}`}
-                                                                >
-                                                                    {initials || "?"}
-                                                                        <span className="pointer-events-none absolute left-1/2 bottom-full z-50 mb-2 -translate-x-1/2 opacity-0 translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-y-0">
-                                                                        <span className="block w-max max-w-[220px] rounded-lg bg-slate-900 px-3 py-2 text-white shadow-lg">
-                                                                            <span className="block text-xs font-semibold text-white leading-tight">{name || "Estudiante"}</span>
-                                                                            <span className="block text-[11px] text-white/80 mt-0.5 leading-snug">{courseLabel}</span>
-                                                                        </span>
-                                                                    </span>
-                                                                </span>
-                                                            )
-                                                        })}
-                                                        {extraStudents > 0 && (
-                                                            <span className="group relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-50 border border-slate-200 text-slate-600 text-xs font-bold shrink-0 cursor-default hover:z-50">
-                                                                +{extraStudents}
-                                                                <span className="pointer-events-none absolute left-1/2 bottom-full z-50 mb-2 -translate-x-1/2 opacity-0 translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-y-0">
-                                                                    <span className="block w-max max-w-[220px] rounded-lg bg-slate-900 px-3 py-2 text-white shadow-lg space-y-2">
-                                                                        {involvedList.slice(3).map((s: any) => {
-                                                                            const n = `${s?.last_name ?? ""}, ${s?.name ?? ""}`.trim().replace(/^,|,$/g, "").trim()
-                                                                            const cData = s?.courses ?? s?.course ?? students.find((st: Student) => st.id === s?.id)?.courses
-                                                                            const cLabel = cData?.name ? `${cData.name}${cData.section ? " " + cData.section : ""}` : "Sin curso"
-                                                                            return (
-                                                                                <span key={s?.id} className="block text-left">
-                                                                                    <span className="block text-xs font-semibold text-white leading-tight">{n || "Estudiante"}</span>
-                                                                                    <span className="block text-[10px] text-white/80 leading-snug">{cLabel}</span>
-                                                                                </span>
-                                                                            )
-                                                                        })}
-                                                                    </span>
-                                                                </span>
+                                <>
+                                    <div className="p-4 space-y-2 bg-slate-50/50">
+                                        {filteredRecords.map(r => {
+                                            const typeLabel = (r.type === "Otro" || r.type.startsWith("Otro:"))
+                                                ? r.type
+                                                : normalizeConvivenciaTypeForUi(
+                                                    RECORD_TYPES.find(t => t.value === r.type || t.label === r.type)?.label ?? r.type
+                                                )
+                                            const statusMeta = HISTORY_STATUS_LABELS[effectiveStatus(r)]
+                                            const involvedList: any[] = (r.convivencia_record_students ?? [])
+                                                .map((rs: any) => rs?.students)
+                                                .filter(Boolean)
+                                            const visibleStudents = involvedList.slice(0, 3)
+                                            const extraStudents = Math.max(involvedList.length - visibleStudents.length, 0)
+                                            const titleTrim = r.event_title?.trim() ?? ""
+                                            return (
+                                                <div
+                                                    key={r.id}
+                                                    className={`flex flex-wrap items-center justify-between gap-3 bg-white rounded-xl border px-4 py-3 shadow-sm transition-all hover:border-slate-300 ${statusMeta.cardBorder}`}
+                                                >
+                                                    <div className="flex flex-1 flex-col gap-1 min-w-0">
+                                                        <div className="flex flex-wrap items-center gap-2 min-w-0">
+                                                            <span className="text-xs font-medium text-slate-500 shrink-0">
+                                                                {new Date(r.incident_date).toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                                                             </span>
-                                                        )}
+                                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${statusMeta.class}`}>{statusMeta.label}</span>
+                                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${SEVERITY_COLORS[r.severity] ?? "bg-slate-100 text-slate-600"}`}>{SEVERITY_LABELS[r.severity] ?? r.severity}</span>
+                                                            {r.location && <span className="text-xs text-slate-500 truncate max-w-[120px]" title={r.location}>📍 {r.location}</span>}
+                                                            {involvedList.length > 0 && (
+                                                                <div className="flex flex-wrap items-center gap-1 shrink-0">
+                                                                    {visibleStudents.map((s: any) => {
+                                                                        const name = `${s?.last_name ?? ""}, ${s?.name ?? ""}`.trim().replace(/^,|,$/g, "").trim()
+                                                                        const getInitial = (val: unknown) => {
+                                                                            const str = (val ?? "").toString().trim()
+                                                                            if (!str) return ""
+                                                                            // Quita tildes para que se vea como en la foto (A-Z).
+                                                                            return str
+                                                                                .charAt(0)
+                                                                                .normalize("NFD")
+                                                                                .replace(/[\u0300-\u036f]/g, "")
+                                                                                .toUpperCase()
+                                                                        }
+                                                                        const initials = `${getInitial(s?.name)}${getInitial(s?.last_name)}`.replace(/[^A-Z]/g, "")
+                                                                        const courseData = s?.courses ?? s?.course ?? students.find((st: Student) => st.id === s?.id)?.courses
+                                                                        const courseLabel = courseData?.name
+                                                                            ? `${courseData.name}${courseData.section ? " " + courseData.section : ""}`
+                                                                            : "Sin curso"
+                                                                        return (
+                                                                            <span
+                                                                                key={s?.id}
+                                                                                className="group relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold shrink-0 cursor-default hover:z-50"
+                                                                                title={`${name} — ${courseLabel}`}
+                                                                            >
+                                                                                {initials || "?"}
+                                                                                <span className="pointer-events-none absolute left-1/2 bottom-full z-50 mb-2 -translate-x-1/2 opacity-0 translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-y-0">
+                                                                                    <span className="block w-max max-w-[220px] rounded-lg bg-slate-900 px-3 py-2 text-white shadow-lg">
+                                                                                        <span className="block text-xs font-semibold text-white leading-tight">{name || "Estudiante"}</span>
+                                                                                        <span className="block text-[11px] text-white/80 mt-0.5 leading-snug">{courseLabel}</span>
+                                                                                    </span>
+                                                                                </span>
+                                                                            </span>
+                                                                        )
+                                                                    })}
+                                                                    {extraStudents > 0 && (
+                                                                        <span className="group relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-50 border border-slate-200 text-slate-600 text-xs font-bold shrink-0 cursor-default hover:z-50">
+                                                                            +{extraStudents}
+                                                                            <span className="pointer-events-none absolute left-1/2 bottom-full z-50 mb-2 -translate-x-1/2 opacity-0 translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-y-0">
+                                                                                <span className="block w-max max-w-[220px] rounded-lg bg-slate-900 px-3 py-2 text-white shadow-lg space-y-2">
+                                                                                    {involvedList.slice(3).map((s: any) => {
+                                                                                        const n = `${s?.last_name ?? ""}, ${s?.name ?? ""}`.trim().replace(/^,|,$/g, "").trim()
+                                                                                        const cData = s?.courses ?? s?.course ?? students.find((st: Student) => st.id === s?.id)?.courses
+                                                                                        const cLabel = cData?.name ? `${cData.name}${cData.section ? " " + cData.section : ""}` : "Sin curso"
+                                                                                        return (
+                                                                                            <span key={s?.id} className="block text-left">
+                                                                                                <span className="block text-xs font-semibold text-white leading-tight">{n || "Estudiante"}</span>
+                                                                                                <span className="block text-[10px] text-white/80 leading-snug">{cLabel}</span>
+                                                                                            </span>
+                                                                                        )
+                                                                                    })}
+                                                                                </span>
+                                                                            </span>
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        {titleTrim ? (
+                                                            <p className="text-sm font-semibold text-slate-900 leading-snug truncate" title={titleTrim}>{titleTrim}</p>
+                                                        ) : null}
+                                                        <p className={`text-sm leading-snug truncate ${titleTrim ? "text-slate-600" : "font-semibold text-slate-800"}`} title={typeLabel}>{typeLabel}</p>
                                                     </div>
-                                                )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setDetailRecordId(r.id)}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-medium hover:bg-indigo-100 transition-colors shrink-0"
+                                                    >
+                                                        <FileText className="w-3.5 h-3.5" />
+                                                        Ver registro
+                                                    </button>
                                                 </div>
-                                                {titleTrim ? (
-                                                    <p className="text-sm font-semibold text-slate-900 leading-snug truncate" title={titleTrim}>{titleTrim}</p>
-                                                ) : null}
-                                                <p className={`text-sm leading-snug truncate ${titleTrim ? "text-slate-600" : "font-semibold text-slate-800"}`} title={typeLabel}>{typeLabel}</p>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => setDetailRecordId(r.id)}
-                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-medium hover:bg-indigo-100 transition-colors shrink-0"
-                                            >
-                                                <FileText className="w-3.5 h-3.5" />
-                                                Ver registro
-                                            </button>
-                                        </div>
-                                    )
-                                })}
-                            </div>
+                                            )
+                                        })}
+                                    </div>
 
-                        {/* Modal detalle del registro */}
-                        <Dialog open={!!detailRecordId} onOpenChange={(open) => !open && setDetailRecordId(null)}>
-                            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl sm:rounded-[2rem]">
-                                <DialogHeader>
-                                    <DialogTitle>Registro de convivencia</DialogTitle>
-                                </DialogHeader>
-                                {(() => {
-                                    const r = detailRecordId ? records.find(rec => rec.id === detailRecordId) : null
-                                    if (!r) return null
-                                    const typeLabel = (r.type === "Otro" || r.type.startsWith("Otro:"))
-                                        ? r.type
-                                        : normalizeConvivenciaTypeForUi(
-                                            RECORD_TYPES.find(t => t.value === r.type || t.label === r.type)?.label ?? r.type
-                                        )
-                                    const involvedList = (r.convivencia_record_students ?? []).map(rs => rs.students).filter(Boolean)
-                                    const statusMeta = HISTORY_STATUS_LABELS[effectiveStatus(r)]
-                                    return (
-                                        <div className="space-y-4 text-sm">
-                                            {r.event_title?.trim() && (
-                                                <p className="text-base font-semibold text-slate-900">{r.event_title.trim()}</p>
-                                            )}
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <span className="font-bold text-slate-800">{typeLabel}</span>
-                                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${statusMeta.class}`}>{statusMeta.label}</span>
-                                                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${SEVERITY_COLORS[r.severity] ?? "bg-slate-100 text-slate-600"}`}>{SEVERITY_LABELS[r.severity] ?? r.severity}</span>
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-slate-600">
-                                                <p><span className="font-medium text-slate-500">Fecha y hora:</span> {new Date(r.incident_date).toLocaleDateString("es-CL", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
-                                                {r.location && <p><span className="font-medium text-slate-500">Lugar:</span> {r.location}</p>}
-                                                <p><span className="font-medium text-slate-500">Involucrados:</span> {r.involved_count}</p>
-                                            </div>
-                                            <div>
-                                                <p className="font-medium text-slate-500 mb-1">Descripción</p>
-                                                <p className="text-slate-700 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 border border-slate-100">{r.description}</p>
-                                            </div>
-                                            {involvedList.length > 0 && (
-                                                <div>
-                                                    <p className="font-medium text-slate-500 mb-1.5">Estudiantes asociados</p>
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {involvedList.map((s: any) => {
-                                                            const courseData = s.courses ?? s.course ?? students.find((st: Student) => st.id === s.id)?.courses
-                                                            const courseLabel = courseData ? ` — ${courseData.name}${courseData.section ? " " + courseData.section : ""}` : ""
-                                                            return (
-                                                                <span key={s.id} className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 text-xs font-medium">
-                                                                    {s.last_name}, {s.name}{courseLabel}
-                                                                </span>
-                                                            )
-                                                        })}
+                                    {/* Modal detalle del registro */}
+                                    <Dialog open={!!detailRecordId} onOpenChange={(open) => !open && setDetailRecordId(null)}>
+                                        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl sm:rounded-[2rem]">
+                                            <DialogHeader>
+                                                <DialogTitle>Registro de convivencia</DialogTitle>
+                                            </DialogHeader>
+                                            {(() => {
+                                                const r = detailRecordId ? records.find(rec => rec.id === detailRecordId) : null
+                                                if (!r) return null
+                                                const typeLabel = (r.type === "Otro" || r.type.startsWith("Otro:"))
+                                                    ? r.type
+                                                    : normalizeConvivenciaTypeForUi(
+                                                        RECORD_TYPES.find(t => t.value === r.type || t.label === r.type)?.label ?? r.type
+                                                    )
+                                                const involvedList = (r.convivencia_record_students ?? []).map(rs => rs.students).filter(Boolean)
+                                                const statusMeta = HISTORY_STATUS_LABELS[effectiveStatus(r)]
+                                                return (
+                                                    <div className="space-y-4 text-sm">
+                                                        {r.event_title?.trim() && (
+                                                            <p className="text-base font-semibold text-slate-900">{r.event_title.trim()}</p>
+                                                        )}
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <span className="font-bold text-slate-800">{typeLabel}</span>
+                                                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${statusMeta.class}`}>{statusMeta.label}</span>
+                                                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${SEVERITY_COLORS[r.severity] ?? "bg-slate-100 text-slate-600"}`}>{SEVERITY_LABELS[r.severity] ?? r.severity}</span>
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-slate-600">
+                                                            <p><span className="font-medium text-slate-500">Fecha y hora:</span> {new Date(r.incident_date).toLocaleDateString("es-CL", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+                                                            {r.location && <p><span className="font-medium text-slate-500">Lugar:</span> {r.location}</p>}
+                                                            <p><span className="font-medium text-slate-500">Involucrados:</span> {r.involved_count}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-medium text-slate-500 mb-1">Descripción</p>
+                                                            <ExpandableText
+                                                                text={r.description}
+                                                                maxLength={300}
+                                                                textClassName="text-slate-700 rounded-lg bg-slate-50 p-3 border border-slate-100"
+                                                            />
+                                                        </div>
+                                                        {involvedList.length > 0 && (
+                                                            <div>
+                                                                <p className="font-medium text-slate-500 mb-1.5">Estudiantes asociados</p>
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    {involvedList.map((s: any) => {
+                                                                        const courseData = s.courses ?? s.course ?? students.find((st: Student) => st.id === s.id)?.courses
+                                                                        const courseLabel = courseData ? ` — ${courseData.name}${courseData.section ? " " + courseData.section : ""}` : ""
+                                                                        return (
+                                                                            <span key={s.id} className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 text-xs font-medium">
+                                                                                {s.last_name}, {s.name}{courseLabel}
+                                                                            </span>
+                                                                        )
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        {r.actions_taken?.length > 0 && (
+                                                            <div>
+                                                                <p className="font-medium text-slate-500 mb-1.5">Acciones realizadas</p>
+                                                                <div className="flex flex-wrap gap-1.5">
+                                                                    {r.actions_taken.map(a => (
+                                                                        <span key={a} className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-xs">{a}</span>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        {r.agreements && (
+                                                            <div>
+                                                                <p className="font-medium text-slate-500 mb-1">Acuerdos</p>
+                                                                <ExpandableText
+                                                                    text={r.agreements}
+                                                                    maxLength={200}
+                                                                    textClassName="text-slate-700 rounded-lg bg-slate-50 p-3 border border-slate-100 text-xs"
+                                                                />
+                                                            </div>
+                                                        )}
+                                                        <div className="pt-4 border-t border-slate-200 space-y-3">
+                                                            <HistoryCaseStatus record={r} />
+                                                            <div className="flex flex-wrap gap-2">
+                                                                <button type="button" onClick={() => handleDownloadPdf(r)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-medium hover:bg-indigo-100">
+                                                                    <Download className="w-3.5 h-3.5" /> Descargar PDF
+                                                                </button>
+                                                                <button type="button" onClick={() => handlePrint(r)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200">
+                                                                    <Printer className="w-3.5 h-3.5" /> Imprimir
+                                                                </button>
+                                                                <button type="button" onClick={() => { handleEdit(r); setDetailRecordId(null) }} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50">
+                                                                    <Edit className="w-3.5 h-3.5" /> Editar
+                                                                </button>
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            )}
-                                            {r.actions_taken?.length > 0 && (
-                                                <div>
-                                                    <p className="font-medium text-slate-500 mb-1.5">Acciones realizadas</p>
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {r.actions_taken.map(a => (
-                                                            <span key={a} className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md text-xs">{a}</span>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                            {r.agreements && (
-                                                <div>
-                                                    <p className="font-medium text-slate-500 mb-1">Acuerdos</p>
-                                                    <p className="text-slate-700 whitespace-pre-wrap rounded-lg bg-slate-50 p-3 border border-slate-100 text-xs">{r.agreements}</p>
-                                                </div>
-                                            )}
-                                            <div className="pt-4 border-t border-slate-200 space-y-3">
-                                                <HistoryCaseStatus record={r} />
-                                                <div className="flex flex-wrap gap-2">
-                                                    <button type="button" onClick={() => handleDownloadPdf(r)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-medium hover:bg-indigo-100">
-                                                        <Download className="w-3.5 h-3.5" /> Descargar PDF
-                                                    </button>
-                                                    <button type="button" onClick={() => handlePrint(r)} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 text-slate-700 text-sm font-medium hover:bg-slate-200">
-                                                        <Printer className="w-3.5 h-3.5" /> Imprimir
-                                                    </button>
-                                                    <button type="button" onClick={() => { handleEdit(r); setDetailRecordId(null) }} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-700 text-sm font-medium hover:bg-slate-50">
-                                                        <Edit className="w-3.5 h-3.5" /> Editar
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )
-                                })()}
-                            </DialogContent>
-                        </Dialog>
-                            </>
+                                                )
+                                            })()}
+                                        </DialogContent>
+                                    </Dialog>
+                                </>
                             );
-                            })()}
+                        })()}
                     </div>
                 </div>
             )}

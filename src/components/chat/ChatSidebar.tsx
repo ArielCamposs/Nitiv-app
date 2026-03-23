@@ -20,7 +20,7 @@ const STATUS_BADGE: Record<string, string> = {
     cerrado: "text-slate-500 bg-slate-50 border-slate-200",
 }
 const STATUS_LABEL: Record<string, string> = {
-    abierto: "Abierto", en_proceso: "En proceso", cerrado: "Cerrado",
+    abierto: "Abierto", en_proceso: "En proceso", cerrado: "Resuelto",
 }
 
 interface UserProfile {

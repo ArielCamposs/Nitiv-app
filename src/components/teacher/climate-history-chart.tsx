@@ -100,8 +100,8 @@ export function ClimateHistoryChart({ courses, historyLogs, showFilters, teacher
             // Ensure l.log_date is treated as a local date string
             const logDate = new Date(l.log_date + "T12:00:00")
             return (l.course_id === selectedCourse) &&
-                   (logDate >= currentWeekStart) && 
-                   (logDate <= weekEnd)
+                (logDate >= currentWeekStart) &&
+                (logDate <= weekEnd)
         })
     }, [historyLogs, selectedCourse, currentWeekStart])
 
@@ -112,10 +112,10 @@ export function ClimateHistoryChart({ courses, historyLogs, showFilters, teacher
         const freqMap: Record<string, number> = {}
         weekLogs.forEach(l => { freqMap[l.energy_level] = (freqMap[l.energy_level] ?? 0) + 1 })
         const mostFrequent = Object.entries(freqMap).sort((a, b) => b[1] - a[1])[0][0]
-        
+
         // Find most active teacher in this course this week
         const teacherMap: Record<string, number> = {}
-        weekLogs.forEach(l => { if(l.teacher_id) teacherMap[l.teacher_id] = (teacherMap[l.teacher_id] ?? 0) + 1 })
+        weekLogs.forEach(l => { if (l.teacher_id) teacherMap[l.teacher_id] = (teacherMap[l.teacher_id] ?? 0) + 1 })
         const topTeacherId = Object.entries(teacherMap).sort((a, b) => b[1] - a[1])[0]?.[0]
         const topTeacher = teachers?.find(t => t.id === topTeacherId)?.name ?? "Docente"
 
@@ -155,9 +155,10 @@ export function ClimateHistoryChart({ courses, historyLogs, showFilters, teacher
     }, [weekLogs])
 
     return (
-        <div className="bg-white rounded-2xl border p-5 space-y-8">
-            {/* Header + Selector de Curso y Semana */}
-            <div className="flex items-start justify-between gap-6 flex-wrap">
+        <div className="space-y-6">
+            <div className="bg-white rounded-2xl border p-5 space-y-8">
+                {/* Header + Selector de Curso y Semana */}
+                <div className="flex items-start justify-between gap-6 flex-wrap">
                 <div className="space-y-1">
                     <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                         <CalendarDays className="w-5 h-5 text-indigo-500" />
@@ -216,66 +217,68 @@ export function ClimateHistoryChart({ courses, historyLogs, showFilters, teacher
                 </div>
             </div>
 
-            {selectedCourse === "all" ? (
-                <div className="flex flex-col items-center justify-center h-80 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 gap-3">
-                    <span className="text-5xl">👈</span>
-                    <div className="text-center">
-                        <p className="text-sm font-bold text-slate-600">Selecciona un curso</p>
-                        <p className="text-xs">Para visualizar el calendario semanal debes filtrar por un curso específico.</p>
+            {selectedCourse === "all" ? null : (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch mt-6">
+                    {/* 1. Estadísticas Clave */}
+                    <div className="lg:col-span-6 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <div className="p-3 rounded-2xl bg-linear-to-br from-slate-50 to-white border border-slate-100 shadow-xs">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Registros</p>
+                            <p className="text-xl font-black text-slate-700">{stats?.total ?? 0}</p>
+                        </div>
+                        <div className="p-3 rounded-2xl bg-linear-to-br from-emerald-50 to-white border border-emerald-100 shadow-xs text-emerald-900">
+                            <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest leading-none mb-1">Más Activo</p>
+                            <p className="text-xs font-bold truncate">{stats?.topTeacher?.split(' ')[0] ?? "N/A"}</p>
+                        </div>
+                        <div className="p-3 rounded-2xl bg-linear-to-br from-indigo-50 to-white border border-indigo-100 shadow-xs text-indigo-900 col-span-2 sm:col-span-1">
+                            <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest leading-none mb-1">Predominante</p>
+                            <p className="text-xs font-bold truncate">
+                                {stats ? `${ENERGY_DEFINITIONS[stats.mostFrequent]?.label}` : "N/A"}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* 2. Leyenda Compacta */}
+                    <div className="lg:col-span-3 p-3 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-center">
+                        <div className="grid grid-cols-2 gap-2">
+                            {Object.entries(ENERGY_DEFINITIONS).map(([key, def]) => (
+                                <div key={key} className="flex items-center gap-1">
+                                    <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: ENERGY_COLORS[key] }} />
+                                    <span className="text-[9px] font-bold text-slate-600 truncate">{def.label}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* 3. Tips de Funcionamiento */}
+                    <div className="lg:col-span-3 p-3 rounded-2xl bg-amber-50/50 border border-amber-100/50 flex flex-col justify-center">
+                        <div className="flex items-start gap-2">
+                            <Info className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
+                            <div className="space-y-1">
+                                <p className="text-[9px] font-black text-amber-700 uppercase tracking-wider">Ayuda</p>
+                                <p className="text-[9px] text-amber-800 leading-tight">Muestra registros de todos los docentes del curso por bloque (1-12).</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            ) : (
-                <div className="space-y-8">
-                    {/* DASHBOARD SUPERIOR: Estadísticas + Leyenda + Ayuda */}
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
-                        {/* 1. Estadísticas Clave */}
-                        <div className="lg:col-span-6 grid grid-cols-2 sm:grid-cols-3 gap-3">
-                            <div className="p-3 rounded-2xl bg-linear-to-br from-slate-50 to-white border border-slate-100 shadow-xs">
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Registros</p>
-                                <p className="text-xl font-black text-slate-700">{stats?.total ?? 0}</p>
-                            </div>
-                            <div className="p-3 rounded-2xl bg-linear-to-br from-emerald-50 to-white border border-emerald-100 shadow-xs text-emerald-900">
-                                <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest leading-none mb-1">Más Activo</p>
-                                <p className="text-xs font-bold truncate">{stats?.topTeacher?.split(' ')[0] ?? "N/A"}</p>
-                            </div>
-                            <div className="p-3 rounded-2xl bg-linear-to-br from-indigo-50 to-white border border-indigo-100 shadow-xs text-indigo-900 col-span-2 sm:col-span-1">
-                                <p className="text-[9px] font-black text-indigo-600 uppercase tracking-widest leading-none mb-1">Predominante</p>
-                                <p className="text-xs font-bold truncate">
-                                    {stats ? `${ENERGY_DEFINITIONS[stats.mostFrequent]?.label}` : "N/A"}
-                                </p>
-                            </div>
-                        </div>
+            )}
+            </div>
 
-                        {/* 2. Leyenda Compacta */}
-                        <div className="lg:col-span-3 p-3 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col justify-center">
-                            <div className="grid grid-cols-2 gap-2">
-                                {Object.entries(ENERGY_DEFINITIONS).map(([key, def]) => (
-                                    <div key={key} className="flex items-center gap-1">
-                                        <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: ENERGY_COLORS[key] }} />
-                                        <span className="text-[9px] font-bold text-slate-600 truncate">{def.label}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* 3. Tips de Funcionamiento */}
-                        <div className="lg:col-span-3 p-3 rounded-2xl bg-amber-50/50 border border-amber-100/50 flex flex-col justify-center">
-                            <div className="flex items-start gap-2">
-                                <Info className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" />
-                                <div className="space-y-1">
-                                    <p className="text-[9px] font-black text-amber-700 uppercase tracking-wider">Ayuda</p>
-                                    <p className="text-[9px] text-amber-800 leading-tight">Muestra registros de todos los docentes del curso por bloque (1-12).</p>
-                                </div>
-                            </div>
+            {/* SEGUNDA CAJA: EL CALENDARIO O EL ESTADO VACÍO */}
+            <div className="bg-white rounded-2xl border p-5">
+                {selectedCourse === "all" ? (
+                    <div className="flex flex-col items-center justify-center h-80 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 gap-3">
+                        <span className="text-5xl">👈</span>
+                        <div className="text-center">
+                            <p className="text-sm font-bold text-slate-600">Selecciona un curso</p>
+                            <p className="text-xs">Para visualizar el calendario semanal debes filtrar por un curso específico.</p>
                         </div>
                     </div>
-
-                    {/* El Calendario Grid */}
-                    <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-sm">
-                        <div className="min-w-[800px] bg-white">
+                ) : (
+                    <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-sm max-w-3xl mx-auto w-full">
+                        <div className="min-w-[500px] bg-white">
                             {/* Días del Calendario (Header del Grid) */}
-                            <div className="grid grid-cols-[100px_repeat(5,1fr)] bg-slate-50 border-b border-slate-200">
-                                <div className="p-4 text-[11px] font-black text-slate-400 uppercase tracking-widest border-r border-slate-200 flex items-center justify-center">
+                            <div className="grid grid-cols-[60px_repeat(5,1fr)] bg-slate-50 border-b border-slate-200 sm:grid-cols-[80px_repeat(5,1fr)]">
+                                <div className="p-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-r border-slate-200 flex items-center justify-center sm:text-[11px]">
                                     Bloques
                                 </div>
                                 {DAYS_OF_WEEK.map((day) => {
@@ -283,9 +286,9 @@ export function ClimateHistoryChart({ courses, historyLogs, showFilters, teacher
                                     date.setDate(currentWeekStart.getDate() + day.key - 1)
                                     const formatted = date.toLocaleDateString("es-CL", { day: 'numeric', month: 'short' })
                                     return (
-                                        <div key={day.key} className="p-4 text-center border-r border-slate-200 last:border-r-0">
-                                            <p className="text-xs font-black text-slate-800 uppercase tracking-wider">{day.name}</p>
-                                            <p className="text-[10px] text-slate-400 font-medium">{formatted}</p>
+                                        <div key={day.key} className="p-2 text-center border-r border-slate-200 last:border-r-0">
+                                            <p className="text-[11px] font-black text-slate-800 uppercase tracking-wider sm:text-xs">{day.name}</p>
+                                            <p className="text-[9px] text-slate-400 font-medium sm:text-[10px]">{formatted}</p>
                                         </div>
                                     )
                                 })}
@@ -293,11 +296,11 @@ export function ClimateHistoryChart({ courses, historyLogs, showFilters, teacher
 
                             {/* Filas de Bloques (1 al 12) */}
                             {Array.from({ length: 12 }, (_, i) => i + 1).map((blockNum) => (
-                                <div key={blockNum} className="grid grid-cols-[100px_repeat(5,1fr)] border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
+                                <div key={blockNum} className="grid grid-cols-[60px_repeat(5,1fr)] border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors sm:grid-cols-[80px_repeat(5,1fr)]">
                                     {/* Etiqueta del Bloque */}
-                                    <div className="p-4 flex flex-col items-center justify-center border-r border-slate-200 bg-slate-50/30">
+                                    <div className="p-2 flex flex-col items-center justify-center border-r border-slate-200 bg-slate-50/30">
                                         <span className="text-xs font-black text-slate-700">{blockNum}°</span>
-                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">Bloque</span>
+                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter hidden sm:inline">Bloque</span>
                                     </div>
 
                                     {/* Celdas por Día */}
@@ -309,29 +312,29 @@ export function ClimateHistoryChart({ courses, historyLogs, showFilters, teacher
                                         const teacherName = teachers?.find(t => t.id === log?.teacher_id)?.name ?? "Docente"
 
                                         return (
-                                            <div key={day.key} className="p-2 border-r border-slate-100 last:border-r-0 min-h-[80px] flex items-stretch">
+                                            <div key={day.key} className="p-1 border-r border-slate-100 last:border-r-0 min-h-[50px] flex items-stretch">
                                                 {log ? (
-                                                    <div 
-                                                        className="w-full rounded-xl p-2.5 flex flex-col justify-between shadow-sm border animate-in fade-in duration-500"
-                                                        style={{ 
+                                                    <div
+                                                        className="w-full rounded-lg p-1.5 flex flex-col justify-center gap-1 shadow-sm border animate-in fade-in duration-500"
+                                                        style={{
                                                             backgroundColor: `${ENERGY_COLORS[log.energy_level]}10`,
                                                             borderColor: `${ENERGY_COLORS[log.energy_level]}30`
                                                         }}
                                                     >
-                                                            <div className="flex items-start gap-1 min-w-0">
-                                                                <User className="w-2.5 h-2.5 text-slate-400 shrink-0 mt-0.5" />
-                                                                <span className="text-[9px] font-bold leading-tight text-slate-800 truncate" title={teacherName}>
-                                                                    {teacherName}
+                                                        <div className="flex items-center gap-1 min-w-0">
+                                                            <User className="w-2.5 h-2.5 text-slate-500 shrink-0" />
+                                                            <span className="text-[9px] font-bold leading-none text-slate-800 truncate" title={teacherName}>
+                                                                {teacherName}
+                                                            </span>
+                                                            {log.session_time && (
+                                                                <span className="text-[7px] font-black bg-slate-100 border border-slate-200 text-slate-500 px-1 py-0.5 rounded-sm shrink-0 leading-none ml-auto">
+                                                                    {log.session_time === 'morning' ? 'M' : 'T'}
                                                                 </span>
-                                                                {log.session_time && (
-                                                                    <span className="text-[7px] font-black bg-slate-100 text-slate-400 px-1 rounded-sm shrink-0">
-                                                                        {log.session_time === 'morning' ? 'M' : 'T'}
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        <div 
-                                                            className="mt-1.5 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest w-fit"
-                                                            style={{ 
+                                                            )}
+                                                        </div>
+                                                        <div
+                                                            className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest w-fit"
+                                                            style={{
                                                                 backgroundColor: ENERGY_COLORS[log.energy_level],
                                                                 color: 'white'
                                                             }}
@@ -341,8 +344,8 @@ export function ClimateHistoryChart({ courses, historyLogs, showFilters, teacher
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <div className="w-full rounded-xl border border-dashed border-slate-100 flex items-center justify-center">
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-slate-100" />
+                                                    <div className="w-full rounded-lg hover:bg-slate-50/80 transition-colors flex items-center justify-center">
+                                                        <div className="w-1 h-1 rounded-full bg-slate-200" />
                                                     </div>
                                                 )}
                                             </div>
@@ -352,8 +355,8 @@ export function ClimateHistoryChart({ courses, historyLogs, showFilters, teacher
                             ))}
                         </div>
                     </div>
-                </div>
-            )}
+                )}
+            </div>
         </div>
     )
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import {
-    ShieldAlert, FileText, Users, TrendingUp, AlertTriangle, ChevronRight, Thermometer,
+    ShieldAlert, FileText, Users, TrendingUp, AlertTriangle, Thermometer,
 } from "lucide-react"
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts"
 
@@ -97,48 +97,35 @@ export function ConvivenciaDashboardClient({ stats }: { stats: ConvivenciaStats 
 
             {/* ── Resumen por área (lo más importante al entrar) ── */}
             <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Resumen por área — últimos 12 meses</p>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Resumen por área</p>
+                <div className="grid grid-cols-3 gap-3">
                     <Link
                         href="/convivencia/dec"
-                        className="flex items-center justify-between rounded-xl border border-slate-100 bg-rose-50/50 px-4 py-3 hover:bg-rose-50 transition-colors group"
+                        className="flex flex-col items-center text-center rounded-xl border border-rose-100 bg-rose-50/50 px-3 py-3 hover:bg-rose-50 transition-colors group"
                     >
-                        <div className="min-w-0">
-                            <p className="text-xs font-medium text-slate-600">DEC</p>
-                            <p className="text-sm font-bold text-slate-800 mt-0.5">
-                                {openDecs} abiertos · {decSummary.resolved} resueltos
-                            </p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">{decSummary.total} casos en total</p>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-rose-500 shrink-0 ml-2" />
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-rose-400 mb-1">DEC</p>
+                        <p className="text-3xl font-extrabold text-rose-600 tabular-nums leading-none">{openDecs}</p>
+                        <p className="text-[10px] text-slate-400 mt-1">abiertos</p>
                     </Link>
                     <Link
                         href="/registros-convivencia"
-                        className="flex items-center justify-between rounded-xl border border-slate-100 bg-violet-50/50 px-4 py-3 hover:bg-violet-50 transition-colors group"
+                        className="flex flex-col items-center text-center rounded-xl border border-violet-100 bg-violet-50/50 px-3 py-3 hover:bg-violet-50 transition-colors group"
                     >
-                        <div className="min-w-0">
-                            <p className="text-xs font-medium text-slate-600">Reg. convivencia</p>
-                            <p className="text-sm font-bold text-slate-800 mt-0.5">
-                                {activeConvivenciaRecords} activos · {convivenciaSummary.closed} cerrados
-                            </p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">{convivenciaSummary.total} registros en total</p>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-violet-500 shrink-0 ml-2" />
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-400 mb-1">Convivencia</p>
+                        <p className="text-3xl font-extrabold text-violet-600 tabular-nums leading-none">{activeConvivenciaRecords}</p>
+                        <p className="text-[10px] text-slate-400 mt-1">activos</p>
                     </Link>
                     <Link
                         href="/convivencia/heatmap"
-                        className="flex items-center justify-between rounded-xl border border-slate-100 bg-indigo-50/50 px-4 py-3 hover:bg-indigo-50 transition-colors group"
+                        className="flex flex-col items-center text-center rounded-xl border border-indigo-100 bg-indigo-50/50 px-3 py-3 hover:bg-indigo-50 transition-colors group"
                     >
-                        <div className="min-w-0">
-                            <p className="text-xs font-medium text-slate-600">Clima de aula</p>
-                            <p className="text-sm font-bold text-slate-800 mt-0.5">
-                                {lowestClimateCourse ? lowestClimateCourse.courseName : "—"}
-                            </p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">
-                                {lowestClimateCourse ? `Más bajo · ${climateSummary.coursesWithData} cursos con registro` : `${climateSummary.coursesWithData} cursos con registro`}
-                            </p>
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-indigo-500 shrink-0 ml-2" />
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-400 mb-1">Clima</p>
+                        <p className="text-3xl font-extrabold text-indigo-600 tabular-nums leading-none">
+                            {lowestClimateCourse?.score != null ? lowestClimateCourse.score : "—"}
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-1 truncate max-w-full" title={lowestClimateCourse?.courseName}>
+                            {lowestClimateCourse?.courseName ?? "Sin datos"}
+                        </p>
                     </Link>
                 </div>
             </div>

@@ -330,7 +330,7 @@ export function CasosPageContent({ casos, students, professionals, institutionId
                         <div className="inline-flex flex-wrap items-center gap-2 bg-slate-50 p-1.5 rounded-full border border-slate-200 w-fit">
                             {[
                                 { value: "activos" as const, label: `Activos (${activeCases.length})`, activeClass: "bg-emerald-500 text-white shadow-md ring-2 ring-emerald-200 border-emerald-500" },
-                                { value: "cerrados" as const, label: `Cerrados (${closedCases.length})`, activeClass: "bg-slate-700 text-white shadow-md ring-2 ring-slate-300 border-slate-700" },
+                                { value: "cerrados" as const, label: `Resueltos (${closedCases.length})`, activeClass: "bg-slate-700 text-white shadow-md ring-2 ring-slate-300 border-slate-700" },
                             ].map(tab => (
                                 <button
                                     type="button"
@@ -435,11 +435,11 @@ export function CasosPageContent({ casos, students, professionals, institutionId
                             ) : viewTab === "activos" ? (
                                 "No hay casos activos en la bandeja."
                             ) : (
-                                "No hay casos cerrados."
+                                "No hay casos resueltos."
                             )}
                             {!hasActiveFilters && viewTab === "activos" && closedCount > 0 && (
                                 <p className="mt-2 text-xs text-slate-400">
-                                    Hay {closedCount} caso(s) cerrado(s).
+                                    Hay {closedCount} caso(s) resuelto(s).
                                 </p>
                             )}
                         </div>
@@ -447,13 +447,13 @@ export function CasosPageContent({ casos, students, professionals, institutionId
                         paginatedCases.map((caso) => {
                             const caseIsClosed = isClosed(caso.status)
                             return (
-                            <div key={caso.id} className="relative bg-white border border-slate-200 rounded-xl p-5 hover:border-slate-300 hover:shadow-sm transition-all shadow-sm">
+                            <div key={caso.id} className="relative bg-white border border-slate-200 rounded-xl p-5 hover:border-slate-300 hover:shadow-sm hover:z-50 transition-all shadow-sm">
                                 
                                 {/* Badge Superior Derecha */}
                                 <div className="absolute top-5 right-5 hidden md:block">
                                     {caseIsClosed ? (
-                                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                                            Cerrado
+                                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                            Resuelto
                                         </span>
                                     ) : (
                                         getUrgencyBadge(caso.initial_state, caso.responsable, caso.actions)
@@ -469,7 +469,7 @@ export function CasosPageContent({ casos, students, professionals, institutionId
                                                     {caso.convivenciaRecord.event_title?.trim() || caso.convivenciaRecord.type || "Registro de convivencia"}
                                                 </h3>
                                                 <span className="hidden sm:inline text-slate-300 select-none" aria-hidden>·</span>
-                                                <div className="flex -space-x-2 overflow-hidden">
+                                                <div className="flex -space-x-2">
                                                     {(() => {
                                                         const involved = caso.convivenciaRecord.convivencia_record_students?.map((rs: any) => rs.students).filter(Boolean) || []
                                                         const visible = involved.slice(0, 3)
@@ -484,8 +484,8 @@ export function CasosPageContent({ casos, students, professionals, institutionId
                                                                     return (
                                                                         <div key={s.id} className="group relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold shrink-0 cursor-default hover:z-50" title={`${name} — ${courseLabel}`}>
                                                                             {initials}
-                                                                            <span className="pointer-events-none absolute left-1/2 bottom-full z-50 mb-2 -translate-x-1/2 opacity-0 translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-y-0">
-                                                                                <span className="block w-max max-w-[220px] rounded-lg bg-slate-900 px-3 py-2 text-white shadow-lg">
+                                                                            <span className="pointer-events-none absolute left-1/2 top-full z-100 mt-2 -translate-x-1/2 opacity-0 -translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-y-0">
+                                                                                <span className="block w-max max-w-[220px] rounded-lg bg-slate-900 px-3 py-2 text-white shadow-xl">
                                                                                     <span className="block text-xs font-semibold text-white leading-tight">{name}</span>
                                                                                     <span className="block text-[11px] text-white/80 mt-0.5 leading-snug">{courseLabel}</span>
                                                                                 </span>
@@ -494,10 +494,13 @@ export function CasosPageContent({ casos, students, professionals, institutionId
                                                                     )
                                                                 })}
                                                                 {extra > 0 && (
-                                                                    <div className="group relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-50 border border-slate-200 text-slate-600 text-xs font-bold shrink-0 cursor-default hover:z-50">
+                                                                    <div 
+                                                                        className="group relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-50 border border-slate-200 text-slate-600 text-xs font-bold shrink-0 cursor-default hover:z-50"
+                                                                        title={involved.slice(3).map((s: any) => `${s.name} ${s.last_name}`).join(" · ")}
+                                                                    >
                                                                         +{extra}
-                                                                        <span className="pointer-events-none absolute left-1/2 bottom-full z-50 mb-2 -translate-x-1/2 opacity-0 translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-y-0">
-                                                                            <span className="block w-max max-w-[220px] rounded-lg bg-slate-900 px-3 py-2 text-white shadow-lg space-y-2">
+                                                                        <span className="pointer-events-none absolute left-1/2 top-full z-100 mt-2 -translate-x-1/2 opacity-0 -translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-y-0">
+                                                                            <span className="block w-max max-w-[220px] rounded-lg bg-slate-900 px-3 py-2 text-white shadow-xl space-y-2">
                                                                                 {involved.slice(3).map((s: any) => {
                                                                                     const n = `${s.name} ${s.last_name}`
                                                                                     const cData = s.courses ?? s.course ?? students.find((st: any) => st.id === s.id)?.courses
@@ -521,12 +524,29 @@ export function CasosPageContent({ casos, students, professionals, institutionId
                                         ) : (
                                             <>
                                                 <h3 className="font-bold text-lg text-slate-900 shrink-0">
-                                                    {caso.students?.name ?? "Estudiante"} {caso.students?.last_name ?? ""}
+                                                    Gestión de caso
                                                 </h3>
                                                 <span className="hidden sm:inline text-slate-300 select-none" aria-hidden>·</span>
-                                                <span className="text-xs font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded shrink-0">
-                                                    {caso.students?.courses?.name ?? "Sin curso"} {caso.students?.courses?.section ?? ""}
-                                                </span>
+                                                <div className="flex -space-x-2">
+                                                    {(() => {
+                                                        const s = caso.students
+                                                        if (!s) return null
+                                                        const name = `${s.name ?? "Estudiante"} ${s.last_name ?? ""}`.trim()
+                                                        const initials = `${s.name?.charAt(0) || ""}${s.last_name?.charAt(0) || ""}`.toUpperCase()
+                                                        const courseLabel = s.courses?.name ? `${s.courses.name}${s.courses.section ? " " + s.courses.section : ""}` : "Sin curso"
+                                                        return (
+                                                            <div className="group relative inline-flex items-center justify-center w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold shrink-0 cursor-default hover:z-50" title={`${name} — ${courseLabel}`}>
+                                                                {initials}
+                                                                <span className="pointer-events-none absolute left-1/2 top-full z-100 mt-2 -translate-x-1/2 opacity-0 -translate-y-1 transition-all duration-150 group-hover:opacity-100 group-hover:translate-y-0">
+                                                                    <span className="block w-max max-w-[220px] rounded-lg bg-slate-900 px-3 py-2 text-white shadow-xl">
+                                                                        <span className="block text-xs font-semibold text-white leading-tight">{name}</span>
+                                                                        <span className="block text-[11px] text-white/80 mt-0.5 leading-snug">{courseLabel}</span>
+                                                                    </span>
+                                                                </span>
+                                                            </div>
+                                                        )
+                                                    })()}
+                                                </div>
                                             </>
                                         )}
                                         {caso.convivenciaRecord && (
@@ -549,8 +569,8 @@ export function CasosPageContent({ casos, students, professionals, institutionId
                                     {/* Mobile Badge */}
                                     <div className="mt-2 block md:hidden">
                                         {caseIsClosed ? (
-                                            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                                                Cerrado
+                                            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                                Resuelto
                                             </span>
                                         ) : (
                                             getUrgencyBadge(caso.initial_state, caso.responsable, caso.actions)
@@ -614,7 +634,7 @@ export function CasosPageContent({ casos, students, professionals, institutionId
                             >
                                 <ChevronLeft className="h-4 w-4" />
                             </Button>
-                            <span className="text-xs font-medium text-slate-600 tabular-nums min-w-[5.5rem] text-center">
+                            <span className="text-xs font-medium text-slate-600 tabular-nums min-w-22 text-center">
                                 Pág. {casesSafePage} / {casesTotalPages}
                             </span>
                             <Button

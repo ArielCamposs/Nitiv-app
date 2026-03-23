@@ -15,7 +15,7 @@ function getStatusBarColor(resolved: boolean, status?: string): [number, number,
 function formatConvivenciaRecordStatusLine(record: { resolved?: boolean; status?: string | null }): string {
     if (record.resolved) return "Resuelto"
     const s = (record.status || "").toLowerCase()
-    if (s === "cerrado" || s === "cerrada") return "Cerrado"
+    if (s === "cerrado" || s === "cerrada") return "Resuelto"
     if (s === "seguimiento") return "En seguimiento"
     if (s === "abierto" || s === "abierta") return "En seguimiento"
     return "En seguimiento"
