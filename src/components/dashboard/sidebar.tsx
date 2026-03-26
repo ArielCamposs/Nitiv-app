@@ -10,7 +10,8 @@ import {
     ChevronDown,
     ShieldAlert,
     ShieldAlertIcon,
-    Thermometer
+    Thermometer,
+    HeartHandshake,
 } from "lucide-react"
 import { useChatUnread } from "@/context/chat-unread-context"
 import { DecBadge } from "@/components/dashboard/dec-badge"
@@ -91,6 +92,7 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
 
     if (isDocente) {
         centroAccion.push({ title: "Clima de aula", href: "/docente/clima", icon: Thermometer })
+        centroAccion.push({ title: "Juegos SEL", href: "/docente/convivencia-sel", icon: HeartHandshake })
     }
 
     // ── Bloque 2: Gestión de Casos ─────────────────────────────────────────────
@@ -131,6 +133,11 @@ function getSidebarGroups(currentRole: string | null): NavGroup[] {
     // Radar de Competencias — solo dupla y convivencia
     if (currentRole === "dupla" || currentRole === "convivencia") {
         gestionCasos.push({ title: "Radar de Competencias", href: `/${currentRole}/radar`, icon: Radar })
+    }
+
+    // Convivencia SEL — docente y encargado de convivencia
+    if (currentRole === "convivencia") {
+        gestionCasos.push({ title: "Juegos SEL", href: "/convivencia/convivencia-sel", icon: HeartHandshake })
     }
 
 
