@@ -8,13 +8,15 @@ import {
     COLORES_CASEL,
     COLORES_TIPO,
     ACTIVIDADES_CICLO1,
+    CARD_PALETTES_MODAL,
     type Ciclo,
     type EjeCasel,
     type TipoActividad,
     type ActividadSEL,
+    type SELActividadRegistro,
 } from "@/lib/data/convivencia-sel"
 import { cn } from "@/lib/utils"
-import { BookOpen, ChevronDown, ChevronUp, LogOut, RotateCcw } from "lucide-react"
+import { BookOpen, ChevronDown, LogOut, RotateCcw, PlayCircle, BarChart3, Star, Users, Calendar, ChevronLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
     Select,
@@ -24,6 +26,8 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { SELSplashScreen } from "./SELSplashScreen"
+import { ActividadSELModal } from "./ActividadSELModal"
+import { createClient } from "@/lib/supabase/client"
 
 const ACTIVIDADES_POR_CICLO: Record<Ciclo, ActividadSEL[]> = {
     ciclo1: ACTIVIDADES_CICLO1,
@@ -33,80 +37,7 @@ const ACTIVIDADES_POR_CICLO: Record<Ciclo, ActividadSEL[]> = {
 
 const TIPOS: TipoActividad[] = ["Reflexión", "Dilema", "Regulación"]
 
-// Fondo de cada tarjeta según el eje (pastel vivo)
-const CARD_PALETTES: Record<EjeCasel, {
-    cardBg: string
-    headerBg: string
-    numBg: string
-    numText: string
-    shadow: string
-    quoteColor: string
-    toggleBg: string
-    consejoBg: string
-    consejoText: string
-    consejoBorder: string
-}> = {
-    "Autoconciencia": {
-        cardBg: "bg-violet-50",
-        headerBg: "bg-violet-100",
-        numBg: "bg-violet-500",
-        numText: "text-white",
-        shadow: "0 8px 32px rgba(139,92,246,0.22)",
-        quoteColor: "text-violet-600",
-        toggleBg: "hover:bg-violet-100/60",
-        consejoBg: "bg-violet-50",
-        consejoText: "text-violet-800",
-        consejoBorder: "border-violet-200",
-    },
-    "Autoregulación": {
-        cardBg: "bg-blue-50",
-        headerBg: "bg-blue-100",
-        numBg: "bg-blue-500",
-        numText: "text-white",
-        shadow: "0 8px 32px rgba(59,130,246,0.22)",
-        quoteColor: "text-blue-600",
-        toggleBg: "hover:bg-blue-100/60",
-        consejoBg: "bg-blue-50",
-        consejoText: "text-blue-800",
-        consejoBorder: "border-blue-200",
-    },
-    "Habilidades Relacionales": {
-        cardBg: "bg-pink-50",
-        headerBg: "bg-pink-100",
-        numBg: "bg-pink-500",
-        numText: "text-white",
-        shadow: "0 8px 32px rgba(236,72,153,0.22)",
-        quoteColor: "text-pink-600",
-        toggleBg: "hover:bg-pink-100/60",
-        consejoBg: "bg-pink-50",
-        consejoText: "text-pink-800",
-        consejoBorder: "border-pink-200",
-    },
-    "Conciencia Social": {
-        cardBg: "bg-teal-50",
-        headerBg: "bg-teal-100",
-        numBg: "bg-teal-500",
-        numText: "text-white",
-        shadow: "0 8px 32px rgba(20,184,166,0.22)",
-        quoteColor: "text-teal-600",
-        toggleBg: "hover:bg-teal-100/60",
-        consejoBg: "bg-teal-50",
-        consejoText: "text-teal-800",
-        consejoBorder: "border-teal-200",
-    },
-    "Toma de decisiones": {
-        cardBg: "bg-amber-50",
-        headerBg: "bg-amber-100",
-        numBg: "bg-amber-500",
-        numText: "text-white",
-        shadow: "0 8px 32px rgba(245,158,11,0.22)",
-        quoteColor: "text-amber-600",
-        toggleBg: "hover:bg-amber-100/60",
-        consejoBg: "bg-amber-50",
-        consejoText: "text-amber-800",
-        consejoBorder: "border-amber-200",
-    },
-}
+const CARD_PALETTES = CARD_PALETTES_MODAL
 
 const BG_SHAPES = [
     { size: 320, top: "-8%",  left: "-5%",  color: "#e0e7ff", dur: "9s",  delay: "0s"   },
@@ -139,7 +70,15 @@ function TipoBadge({ tipo }: { tipo: TipoActividad }) {
     )
 }
 
-function ActividadCard({ actividad, index }: { actividad: ActividadSEL; index: number }) {
+function ActividadCard({
+    actividad,
+    index,
+    onProyectar,
+}: {
+    actividad: ActividadSEL
+    index: number
+    onProyectar: () => void
+}) {
     const [expanded, setExpanded] = useState(false)
     const [visible, setVisible] = useState(false)
     const p = CARD_PALETTES[actividad.ejeCasel]
@@ -179,7 +118,22 @@ function ActividadCard({ actividad, index }: { actividad: ActividadSEL; index: n
                             </h3>
                         </div>
                     </div>
-                    <TipoBadge tipo={actividad.tipo} />
+                    <div className="flex items-center gap-2 shrink-0">
+                        <TipoBadge tipo={actividad.tipo} />
+                        {actividad.interactivo && (
+                            <button
+                                onClick={onProyectar}
+                                title="Proyectar actividad"
+                                className={cn(
+                                    "sel-font h-8 w-8 rounded-xl flex items-center justify-center transition-all duration-200",
+                                    "bg-white/70 hover:bg-white text-slate-500 hover:text-indigo-600",
+                                    "shadow-sm hover:shadow-md hover:scale-110 active:scale-95"
+                                )}
+                            >
+                                <PlayCircle className="h-5 w-5" />
+                            </button>
+                        )}
+                    </div>
                 </div>
                 <div className="mt-2.5">
                     <EjeBadge eje={actividad.ejeCasel} />
@@ -199,6 +153,21 @@ function ActividadCard({ actividad, index }: { actividad: ActividadSEL; index: n
                 )}>
                     {actividad.moraleja}
                 </blockquote>
+
+                {actividad.interactivo && (
+                    <button
+                        onClick={onProyectar}
+                        className={cn(
+                            "sel-font mt-3 w-full flex items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-black",
+                            "bg-gradient-to-r from-indigo-500 to-violet-500 text-white",
+                            "shadow-md shadow-indigo-200 hover:from-indigo-600 hover:to-violet-600",
+                            "transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                        )}
+                    >
+                        <PlayCircle className="h-4 w-4" />
+                        Proyectar actividad
+                    </button>
+                )}
             </div>
 
             {/* Toggle consejo */}
@@ -240,6 +209,154 @@ function ActividadCard({ actividad, index }: { actividad: ActividadSEL; index: n
     )
 }
 
+// ─── Sección de Estadísticas SEL ─────────────────────────────────────────────
+
+function SELEstadisticasSection({ cicloSeleccionado }: { cicloSeleccionado: Ciclo }) {
+    const [registros, setRegistros] = useState<SELActividadRegistro[]>([])
+    const [cargando, setCargando] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+
+    useEffect(() => {
+        const cargar = async () => {
+            setCargando(true)
+            setError(null)
+            try {
+                const supabase = createClient()
+                const { data, error: e } = await supabase
+                    .from("sel_actividad_registros")
+                    .select("*")
+                    .eq("ciclo", cicloSeleccionado)
+                    .order("realizada_en", { ascending: false })
+                if (e) throw e
+                setRegistros(data ?? [])
+            } catch (e: unknown) {
+                setError(e instanceof Error ? e.message : "Error al cargar registros.")
+            } finally {
+                setCargando(false)
+            }
+        }
+        cargar()
+    }, [cicloSeleccionado])
+
+    const PARTICIPACION_COLOR: Record<string, string> = {
+        alta: "bg-emerald-100 text-emerald-700",
+        media: "bg-amber-100 text-amber-700",
+        baja: "bg-red-100 text-red-600",
+    }
+
+    const PARTICIPACION_EMOJI: Record<string, string> = {
+        alta: "🙌",
+        media: "👍",
+        baja: "😐",
+    }
+
+    if (cargando) {
+        return (
+            <div className="flex items-center justify-center py-20">
+                <div className="h-8 w-8 rounded-full border-3 border-indigo-500 border-t-transparent animate-spin" />
+            </div>
+        )
+    }
+
+    if (error) {
+        return (
+            <div className="rounded-3xl bg-red-50 border-2 border-red-200 px-6 py-8 text-center">
+                <p className="sel-font text-red-600 font-bold text-sm">⚠️ {error}</p>
+            </div>
+        )
+    }
+
+    if (registros.length === 0) {
+        return (
+            <div className="rounded-3xl border-2 border-dashed border-indigo-200 bg-white/50 px-8 py-20 text-center">
+                <BarChart3 className="mx-auto h-10 w-10 text-indigo-300 mb-3" />
+                <p className="sel-font text-slate-500 font-black text-lg">Sin registros aún</p>
+                <p className="sel-font text-slate-400 text-sm mt-1 font-semibold">
+                    Cuando realices actividades y las evalúes, aparecerán aquí.
+                </p>
+            </div>
+        )
+    }
+
+    const totalActividades = registros.length
+    const promedioCalificacion = registros.filter(r => r.calificacion).reduce((a, r) => a + (r.calificacion ?? 0), 0) / (registros.filter(r => r.calificacion).length || 1)
+    const participacionAlta = registros.filter(r => r.participacion === "alta").length
+
+    return (
+        <div className="space-y-5 pb-10">
+            {/* Resumen */}
+            <div className="grid grid-cols-3 gap-3">
+                {[
+                    { label: "Actividades realizadas", valor: totalActividades, emoji: "🎯", color: "bg-indigo-50 border-indigo-200" },
+                    { label: "Calificación promedio", valor: promedioCalificacion.toFixed(1) + " ⭐", emoji: "📊", color: "bg-amber-50 border-amber-200" },
+                    { label: "Alta participación", valor: participacionAlta, emoji: "🙌", color: "bg-emerald-50 border-emerald-200" },
+                ].map((stat) => (
+                    <div key={stat.label} className={cn("rounded-2xl border-2 px-4 py-3 text-center", stat.color)}>
+                        <p className="sel-font text-2xl font-black text-slate-800">{stat.valor}</p>
+                        <p className="sel-font text-[10px] font-bold text-slate-500 mt-0.5 leading-tight">{stat.label}</p>
+                    </div>
+                ))}
+            </div>
+
+            {/* Lista de registros */}
+            <div className="space-y-3">
+                {registros.map((r) => (
+                    <div key={r.id} className="rounded-2xl bg-white border-2 border-slate-100 overflow-hidden">
+                        <div className="flex items-start gap-3 px-4 py-3">
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="sel-font text-sm font-black text-slate-800">{r.actividad_nombre}</p>
+                                    {r.participacion && (
+                                        <span className={cn("sel-font rounded-full px-2 py-0.5 text-[10px] font-black", PARTICIPACION_COLOR[r.participacion])}>
+                                            {PARTICIPACION_EMOJI[r.participacion]} {r.participacion}
+                                        </span>
+                                    )}
+                                    {r.curso_nombre && (
+                                        <span className="sel-font rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-600 flex items-center gap-1">
+                                            <Users className="h-2.5 w-2.5" />
+                                            {r.curso_nombre}
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-3 mt-1">
+                                    <span className="sel-font text-[10px] text-slate-400 font-bold flex items-center gap-1">
+                                        <Calendar className="h-3 w-3" />
+                                        {new Date(r.realizada_en).toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric" })}
+                                    </span>
+                                    <span className="sel-font text-[10px] text-slate-400 font-bold">{r.eje_casel}</span>
+                                </div>
+                                {r.observaciones && (
+                                    <p className="sel-font text-xs text-slate-500 font-semibold mt-1.5 line-clamp-2">
+                                        💬 {r.observaciones}
+                                    </p>
+                                )}
+                            </div>
+                            {r.calificacion && (
+                                <div className="shrink-0 flex flex-col items-center gap-0.5">
+                                    <div className="flex">
+                                        {[1, 2, 3, 4, 5].map((n) => (
+                                            <Star
+                                                key={n}
+                                                className={cn(
+                                                    "h-3 w-3",
+                                                    n <= (r.calificacion ?? 0) ? "fill-amber-400 text-amber-400" : "text-slate-200"
+                                                )}
+                                            />
+                                        ))}
+                                    </div>
+                                    <span className="sel-font text-[10px] font-black text-amber-500">{r.calificacion}/5</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    )
+}
+
+// ─── Cliente principal ────────────────────────────────────────────────────────
+
 interface Props {
     homeHref: string
 }
@@ -252,6 +369,9 @@ export function ConvivenciaSELClient({ homeHref }: Props) {
     const [ejeSeleccionado, setEjeSeleccionado]     = useState<EjeCasel | "todos">("todos")
     const [mesSeleccionado, setMesSeleccionado]     = useState<string>("todos")
     const [tipoSeleccionado, setTipoSeleccionado]   = useState<TipoActividad | "todos">("todos")
+
+    const [actividadModal, setActividadModal]         = useState<ActividadSEL | null>(null)
+    const [vistaActiva, setVistaActiva]               = useState<"actividades" | "estadisticas">("actividades")
 
     const handleSplashEnter = (eje: EjeCasel | "todos") => {
         if (eje !== "todos") setEjeSeleccionado(eje)
@@ -399,25 +519,72 @@ export function ConvivenciaSELClient({ homeHref }: Props) {
                         })}
                     </div>
 
-                    {/* Salir */}
-                    <button
-                        onClick={handleExit}
-                        className={cn(
-                            "sel-font flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-black",
-                            "bg-white text-slate-500 border-2 border-slate-200",
-                            "hover:bg-red-50 hover:text-red-500 hover:border-red-300",
-                            "transition-all duration-200 shadow-sm hover:shadow-md hover:scale-105 active:scale-95"
-                        )}
-                        style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}
-                    >
-                        <LogOut className="h-3.5 w-3.5" />
-                        Salir del modo de juego
-                    </button>
+                    {/* Estadísticas + Salir */}
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setVistaActiva(v => v === "estadisticas" ? "actividades" : "estadisticas")}
+                            className={cn(
+                                "sel-font flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-black",
+                                "border-2 transition-all duration-200 shadow-sm hover:shadow-md hover:scale-105 active:scale-95",
+                                vistaActiva === "estadisticas"
+                                    ? "bg-indigo-500 text-white border-indigo-500"
+                                    : "bg-white text-slate-500 border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200"
+                            )}
+                            style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}
+                        >
+                            <BarChart3 className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">
+                                {vistaActiva === "estadisticas" ? "Ver actividades" : "Estadísticas"}
+                            </span>
+                        </button>
+                        <button
+                            onClick={handleExit}
+                            className={cn(
+                                "sel-font flex items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-black",
+                                "bg-white text-slate-500 border-2 border-slate-200",
+                                "hover:bg-red-50 hover:text-red-500 hover:border-red-300",
+                                "transition-all duration-200 shadow-sm hover:shadow-md hover:scale-105 active:scale-95"
+                            )}
+                            style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}
+                        >
+                            <LogOut className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">Salir</span>
+                        </button>
+                    </div>
                 </div>
 
                 {/* ── Contenido ── */}
                 <div className="relative z-10 h-[calc(100vh-65px)] overflow-y-auto">
                     <div className={cn("mx-auto max-w-5xl px-6 py-6 space-y-5", splashDone && "content-enter")}>
+
+                        {/* Header estadísticas */}
+                        {vistaActiva === "estadisticas" && (
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={() => setVistaActiva("actividades")}
+                                    className="sel-font flex items-center gap-1.5 text-xs font-black text-slate-400 hover:text-indigo-600 transition-colors"
+                                >
+                                    <ChevronLeft className="h-4 w-4" />
+                                    Volver
+                                </button>
+                                <div>
+                                    <h2 className="sel-font text-lg font-black text-slate-800">
+                                        📊 Estadísticas Juegos SEL
+                                    </h2>
+                                    <p className="sel-font text-xs text-slate-400 font-bold">
+                                        Registros de actividades realizadas — visibles para ti, tu dupla y convivencia
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Vista estadísticas */}
+                        {vistaActiva === "estadisticas" && (
+                            <SELEstadisticasSection cicloSeleccionado={cicloSeleccionado} />
+                        )}
+
+                        {/* Vista actividades */}
+                        {vistaActiva === "actividades" && <>
 
                         {/* Enfoque del ciclo */}
                         {cicloInfo && (
@@ -558,14 +725,30 @@ export function ConvivenciaSELClient({ homeHref }: Props) {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pb-10">
                                 {actividadesFiltradas.map((actividad, i) => (
                                     <div key={actividad.id} className="card-hover">
-                                        <ActividadCard actividad={actividad} index={i} />
+                                        <ActividadCard
+                                            actividad={actividad}
+                                            index={i}
+                                            onProyectar={() => setActividadModal(actividad)}
+                                        />
                                     </div>
                                 ))}
                             </div>
                         )}
+
+                        </> /* fin vista actividades */}
+
                     </div>
                 </div>
             </div>
+
+            {/* Modal de actividad interactiva */}
+            {actividadModal && (
+                <ActividadSELModal
+                    actividad={actividadModal}
+                    ciclo={cicloSeleccionado}
+                    onCerrar={() => setActividadModal(null)}
+                />
+            )}
         </>
     )
 }

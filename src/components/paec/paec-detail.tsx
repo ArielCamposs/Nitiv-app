@@ -17,6 +17,8 @@ type Props = {
     institutionName?: string
     institutionLogoUrl?: string
     courseName?: string | null
+    /** Oculta acciones de pie (volver / editar) cuando se muestra dentro de un modal */
+    embeddedInModal?: boolean
 }
 
 function BoolBadge({ value, label }: { value: boolean; label: string }) {
@@ -46,7 +48,7 @@ const calcularEdad = (fecha: string | null): number | null => {
     return edad
 }
 
-export function PaecDetail({ paec, userRole, institutionName, institutionLogoUrl, courseName: courseNameProp }: Props) {
+export function PaecDetail({ paec, userRole, institutionName, institutionLogoUrl, courseName: courseNameProp, embeddedInModal }: Props) {
     const router = useRouter()
     const supabase = createClient()
     const [signing, setSigning] = useState(false)
@@ -56,8 +58,6 @@ export function PaecDetail({ paec, userRole, institutionName, institutionLogoUrl
     const student = paec.students
     const canSign = ["dupla", "director"].includes(userRole)
     const canEdit = ["dupla", "director"].includes(userRole)
-
-    console.log("PAEC Detail Debug:", { userRole, canSign, canEdit })
 
     // Fetch del curso por separado
     useEffect(() => {
@@ -306,17 +306,19 @@ export function PaecDetail({ paec, userRole, institutionName, institutionLogoUrl
             {/* Seguimiento */}
             <PaecSeguimiento paec={paec} userRole={userRole} />
 
-            {/* Acciones — ocultas al imprimir */}
-            <div className="flex justify-between pb-8 print:hidden">
-                <Button variant="outline" onClick={() => router.push("/paec")}>
-                    Volver al listado
-                </Button>
-                {canEdit && (
-                    <Button onClick={() => router.push(`/paec/${paec.id}/editar`)}>
-                        Editar PAEC
+            {/* Acciones — ocultas al imprimir y en modal embebido */}
+            {!embeddedInModal && (
+                <div className="flex justify-between pb-8 print:hidden">
+                    <Button variant="outline" onClick={() => router.push("/paec")}>
+                        Volver al listado
                     </Button>
-                )}
-            </div>
+                    {canEdit && (
+                        <Button onClick={() => router.push(`/paec/${paec.id}/editar`)}>
+                            Editar PAEC
+                        </Button>
+                    )}
+                </div>
+            )}
 
         </div>
     )

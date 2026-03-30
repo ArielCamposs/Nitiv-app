@@ -3,13 +3,10 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { DirectorDashboardClient } from "@/components/director/director-dashboard-client"
 import Link from "next/link"
+import { climateScoreForAggregation } from "@/lib/climate-evaluation"
 
 const EMOTION_SCORE: Record<string, number> = {
     muy_mal: 1, mal: 2, neutral: 3, bien: 4, muy_bien: 5,
-}
-
-const ENERGY_SCORE: Record<string, number> = {
-    explosiva: 1, apatica: 2, inquieta: 3, regulada: 4,
 }
 
 const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
@@ -78,13 +75,13 @@ async function getDirectorData() {
     const climatePorCurso = (courses ?? []).map(course => {
         const logs = (teacherLogs ?? []).filter(l => l.course_id === course.id)
         const avg = logs.length > 0
-            ? Math.round((logs.reduce((a, l) => a + (ENERGY_SCORE[l.energy_level] ?? 3), 0) / logs.length) * 10) / 10
+            ? Math.round((logs.reduce((a, l) => a + climateScoreForAggregation(l.energy_level), 0) / logs.length) * 10) / 10
             : null
         const label =
             avg === null ? "Sin datos" :
-                avg >= 3.5 ? "Regulada 😊" :
-                    avg >= 2.5 ? "Inquieta 😤" :
-                        avg >= 1.5 ? "Apática 😴" : "Explosiva 🔥"
+                avg >= 4 ? "Favorable ☀️" :
+                    avg >= 3 ? "Intermedio 🌤️" :
+                        avg >= 2 ? "Irregular ☁️" : "Muy adverso ⛈️"
         return {
             courseId: course.id,
             courseName: `${course.name} ${course.section ?? ""}`.trim(),

@@ -26,19 +26,15 @@ import {
     ThermometerSun,
 } from "lucide-react"
 
-const ENERGY_SCORE: Record<string, number> = {
-    explosiva: 1, apatica: 2, inquieta: 3, regulada: 4,
-}
+import {
+    CLIMATE_STATS_ORDER,
+    initClimateCountMap,
+    climateScoreForAggregation,
+    climateLabel,
+    climateColor,
+} from "@/lib/climate-evaluation"
 
-const ENERGY_LABEL: Record<string, { label: string; color: string }> = {
-    explosiva: { label: "Explosiva", color: "text-red-600" },
-    apatica: { label: "Apática", color: "text-blue-500" },
-    inquieta: { label: "Inquieta", color: "text-yellow-600" },
-    regulada: { label: "Regulada", color: "text-green-600" },
-}
-
-const ENERGY_ORDER = ["regulada", "inquieta", "apatica", "explosiva"] as const
-const ENERGY_CHART_COLORS = ["#10b981", "#f59e0b", "#6366f1", "#ef4444"] // emerald, amber, indigo, red
+const FAVORABLE_WELLBEING_KEYS = ["soleado", "extraordinario", "regulada"] as const
 
 type CourseItem = { course_id: string; courses: { name: string } }
 
@@ -91,15 +87,30 @@ function getCourseRecommendation(
         }
     }
 
-    if (dominant === "explosiva") {
+    if (dominant === "explosiva" || dominant === "tormenta") {
         return {
             priority: "critical",
-            title: "Clima explosivo detectado",
-            summary: "Predomina un clima de descontrol o conflictos visibles. Priorizar contención y resolución de conflictos.",
+            title: "Clima muy adverso o explosivo",
+            summary:
+                "Predomina tensión fuerte, descontrol o conflictos visibles. Priorizar contención, vínculo y resolución con apoyo de convivencia o dupla.",
             actions: [
                 "Aplicar mediación y técnicas de contención emocional",
                 "Establecer pausas y rutinas claras antes de retomar la clase",
                 "Derivar a convivencia/dupla si hay situaciones recurrentes",
+            ],
+        }
+    }
+
+    if (dominant === "nublado") {
+        return {
+            priority: "warning",
+            title: "Clima irregular o nublado",
+            summary:
+                "Momentos difíciles o inconsistentes son frecuentes conviene observar patrones (horario, tipo de clase) y reforzar acuerdos.",
+            actions: [
+                "Revisar transiciones y acuerdos de convivencia al inicio del bloque",
+                "Alternar demanda cognitiva con momentos breves de regulación",
+                "Coordinar con otros docentes del curso para alinear expectativas",
             ],
         }
     }
@@ -143,15 +154,42 @@ function getCourseRecommendation(
         }
     }
 
+    if ((dominant === "soleado" || dominant === "extraordinario") && score >= 3.5) {
+        return {
+            priority: "good",
+            title: "Clima muy favorable",
+            summary:
+                "Predomina buen clima o clima excepcional, con participación y respeto. Es un activo para el aprendizaje.",
+            actions: [
+                "Sostener rutinas y prácticas que favorecen este clima",
+                "Documentar qué momentos o estrategias funcionan mejor",
+                "Compartir buenas prácticas con otros cursos si aplica",
+            ],
+        }
+    }
+
     if (dominant === "regulada" && score >= 3) {
         return {
             priority: "good",
             title: "Buen clima de aprendizaje",
-            summary: "El curso mantiene un clima regulado. Conviene sostener las prácticas que lo favorecen.",
+            summary: "El curso mantiene un clima regulado (modelo histórico). Conviene sostener las prácticas que lo favorecen.",
             actions: [
                 "Mantener dinámicas actuales que favorecen el clima",
                 "Documentar qué momentos o actividades funcionan mejor",
                 "Compartir buenas prácticas con otros cursos si aplica",
+            ],
+        }
+    }
+
+    if (dominant === "parcial" && score >= 2.5) {
+        return {
+            priority: "ok",
+            title: "Clima razonable con fricción puntual",
+            summary:
+                "El curso se mueve en un rango aceptable con algunas trabas. Reforzar lo que ya funciona y suavizar los puntos de fricción.",
+            actions: [
+                "Identificar en qué momentos mejora el clima y replicar condiciones",
+                "Acordar señales de atención y pausas breves cuando sube la tensión",
             ],
         }
     }
@@ -184,26 +222,26 @@ export function ClimateHeatmapTabs({ courses, historyLogs, teachers = [] }: Prop
 
     const stats = useMemo(() => {
         const total = historyLogs.length
-        const byLevel: Record<string, number> = {}
-        ENERGY_ORDER.forEach(k => { byLevel[k] = 0 })
+        const byLevel = initClimateCountMap()
         historyLogs.forEach((l: any) => {
             const k = l.energy_level || "regulada"
-            if (k in byLevel) byLevel[k]++
+            byLevel[k] = (byLevel[k] ?? 0) + 1
         })
         const avgGlobal = total > 0
-            ? historyLogs.reduce((a: number, l: any) => a + (ENERGY_SCORE[l.energy_level] ?? 3), 0) / total
+            ? historyLogs.reduce((a: number, l: any) => a + climateScoreForAggregation(l.energy_level), 0) / total
             : null
         const dominant = total > 0
             ? (Object.entries(byLevel).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null)
             : null
-        const pctRegulada = total > 0 ? Math.round(((byLevel.regulada ?? 0) / total) * 100) : 0
+        const favorableCount = FAVORABLE_WELLBEING_KEYS.reduce((s, k) => s + (byLevel[k] ?? 0), 0)
+        const pctFavorable = total > 0 ? Math.round((favorableCount / total) * 100) : 0
 
         const byCourse = courses.map((course) => {
             const id = course.course_id
             const logs = historyLogs.filter((l: any) => l.course_id === id)
             const n = logs.length
             const courseAvg = n > 0
-                ? logs.reduce((a: number, l: any) => a + (ENERGY_SCORE[l.energy_level] ?? 3), 0) / n
+                ? logs.reduce((a: number, l: any) => a + climateScoreForAggregation(l.energy_level), 0) / n
                 : null
             const courseDominant = n > 0
                 ? (Object.entries(
@@ -245,7 +283,7 @@ export function ClimateHeatmapTabs({ courses, historyLogs, teachers = [] }: Prop
             const key = getWeekKey(l.log_date)
             if (key in weekMap) {
                 weekMap[key].total++
-                weekMap[key].sum += ENERGY_SCORE[l.energy_level] ?? 3
+                weekMap[key].sum += climateScoreForAggregation(l.energy_level)
             }
         })
         const weeklyTrend = Object.entries(weekMap)
@@ -296,11 +334,11 @@ export function ClimateHeatmapTabs({ courses, historyLogs, teachers = [] }: Prop
             .sort((a, b) => b.count - a.count)
             .slice(0, 6)
 
-        const pieData = ENERGY_ORDER.map((key, i) => ({
-            name: ENERGY_LABEL[key]?.label ?? key,
+        const pieData = CLIMATE_STATS_ORDER.map((key) => ({
+            name: climateLabel(key),
             value: byLevel[key] ?? 0,
-            color: ENERGY_CHART_COLORS[i],
-        })).filter(d => d.value > 0)
+            color: climateColor(key),
+        })).filter((d) => d.value > 0)
 
         const barCourseData = byCourse.map(c => ({
             nombre: c.name.length > 12 ? c.name.slice(0, 11) + "…" : c.name,
@@ -314,7 +352,7 @@ export function ClimateHeatmapTabs({ courses, historyLogs, teachers = [] }: Prop
             avgGlobal,
             dominant,
             byCourse,
-            pctRegulada,
+            pctFavorable,
             weeklyTrend,
             byDayOfWeek,
             topTeachers,
@@ -370,8 +408,8 @@ export function ClimateHeatmapTabs({ courses, historyLogs, teachers = [] }: Prop
                         <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-500 to-emerald-600 p-5 text-white shadow-lg">
                             <ThermometerSun className="absolute right-3 top-3 w-8 h-8 opacity-20" />
                             <p className="text-emerald-100 text-xs font-semibold uppercase tracking-wider">Índice bienestar</p>
-                            <p className="text-3xl font-black tabular-nums mt-1">{stats.pctRegulada}%</p>
-                            <p className="text-emerald-200 text-xs mt-1">clima regulada</p>
+                            <p className="text-3xl font-black tabular-nums mt-1">{stats.pctFavorable}%</p>
+                            <p className="text-emerald-200 text-xs mt-1">soleado, extraordinario o regulada (hist.)</p>
                         </div>
                         <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-violet-500 to-violet-600 p-5 text-white shadow-lg">
                             <TrendingUp className="absolute right-3 top-3 w-8 h-8 opacity-20" />
@@ -379,13 +417,13 @@ export function ClimateHeatmapTabs({ courses, historyLogs, teachers = [] }: Prop
                             <p className="text-3xl font-black tabular-nums mt-1">
                                 {stats.avgGlobal != null ? stats.avgGlobal.toFixed(1) : "—"}
                             </p>
-                            <p className="text-violet-200 text-xs mt-1">escala 1–4</p>
+                            <p className="text-violet-200 text-xs mt-1">escala 1–5 (hist. 1–4 mapeado)</p>
                         </div>
                         <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-amber-500 to-amber-600 p-5 text-white shadow-lg">
                             <BarChart3 className="absolute right-3 top-3 w-8 h-8 opacity-20" />
                             <p className="text-amber-100 text-xs font-semibold uppercase tracking-wider">Predominante</p>
                             <p className="text-xl font-bold mt-1 truncate">
-                                {stats.dominant ? (ENERGY_LABEL[stats.dominant]?.label ?? stats.dominant) : "—"}
+                                {stats.dominant ? climateLabel(stats.dominant) : "—"}
                             </p>
                             <p className="text-amber-200 text-xs mt-1">tipo de clima</p>
                         </div>
@@ -412,7 +450,9 @@ export function ClimateHeatmapTabs({ courses, historyLogs, teachers = [] }: Prop
                                             paddingAngle={2}
                                             dataKey="value"
                                             nameKey="name"
-                                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                            label={({ name, percent }) =>
+                                                `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`
+                                            }
                                             labelLine={false}
                                         >
                                             {stats.pieData.map((entry, i) => (
@@ -420,7 +460,7 @@ export function ClimateHeatmapTabs({ courses, historyLogs, teachers = [] }: Prop
                                             ))}
                                         </Pie>
                                         <Tooltip
-                                            formatter={(value: number) => [value, "Registros"]}
+                                            formatter={(value) => [value ?? 0, "Registros"]}
                                             contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12 }}
                                         />
                                     </PieChart>
@@ -450,11 +490,15 @@ export function ClimateHeatmapTabs({ courses, historyLogs, teachers = [] }: Prop
                                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                                         <XAxis dataKey="semana" tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} />
                                         <YAxis yAxisId="left" tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                                        <YAxis yAxisId="right" orientation="right" domain={[0, 4]} tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} />
+                                        <YAxis yAxisId="right" orientation="right" domain={[0, 5]} tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} />
                                         <Tooltip
                                             contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12 }}
-                                            formatter={(value: number, name: string) => [
-                                                name === "Registros" ? value : (typeof value === "number" ? value.toFixed(1) : value),
+                                            formatter={(value, name) => [
+                                                name === "Registros"
+                                                    ? (value ?? 0)
+                                                    : typeof value === "number"
+                                                      ? value.toFixed(1)
+                                                      : value,
                                                 name,
                                             ]}
                                         />
@@ -479,14 +523,17 @@ export function ClimateHeatmapTabs({ courses, historyLogs, teachers = [] }: Prop
                                 <ResponsiveContainer width="100%" height={Math.max(220, stats.barCourseData.length * 36)}>
                                     <BarChart data={stats.barCourseData} layout="vertical" margin={{ top: 4, right: 20, left: 0, bottom: 4 }}>
                                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" horizontal={false} />
-                                        <XAxis type="number" domain={[0, 4]} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                                        <XAxis type="number" domain={[0, 5]} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
                                         <YAxis type="category" dataKey="nombre" width={90} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                                         <Tooltip
                                             contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12 }}
-                                            formatter={(value: number, _: any, props: any) => [
-                                                `Promedio ${value.toFixed(1)} · ${props.payload.registros} registros`,
-                                                "",
-                                            ]}
+                                            formatter={(value, _name, props) => {
+                                                const n = typeof value === "number" ? value : Number(value)
+                                                return [
+                                                    `Promedio ${(Number.isFinite(n) ? n : 0).toFixed(1)} · ${props?.payload?.registros ?? 0} registros`,
+                                                    "",
+                                                ]
+                                            }}
                                         />
                                         <Bar dataKey="promedio" fill="#8b5cf6" radius={[0, 4, 4, 0]} maxBarSize={28} />
                                     </BarChart>
@@ -508,7 +555,7 @@ export function ClimateHeatmapTabs({ courses, historyLogs, teachers = [] }: Prop
                                         <YAxis tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} allowDecimals={false} />
                                         <Tooltip
                                             contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12 }}
-                                            formatter={(value: number) => [value, "Registros"]}
+                                            formatter={(value) => [value ?? 0, "Registros"]}
                                         />
                                         <Bar dataKey="registros" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                                     </BarChart>
@@ -568,8 +615,13 @@ export function ClimateHeatmapTabs({ courses, historyLogs, teachers = [] }: Prop
                                                 <td className="py-2.5 font-medium text-slate-800">{c.name}</td>
                                                 <td className="py-2.5 text-center text-slate-600">{c.count}</td>
                                                 <td className="py-2.5 text-center font-medium text-slate-700">{c.avg != null ? c.avg.toFixed(1) : "—"}</td>
-                                                <td className={`py-2.5 font-medium ${c.dominant ? ENERGY_LABEL[c.dominant]?.color ?? "" : "text-slate-400"}`}>
-                                                    {c.dominant ? ENERGY_LABEL[c.dominant]?.label : "—"}
+                                                <td
+                                                    className="py-2.5 font-medium"
+                                                    style={{
+                                                        color: c.dominant ? climateColor(c.dominant) : undefined,
+                                                    }}
+                                                >
+                                                    {c.dominant ? climateLabel(c.dominant) : "—"}
                                                 </td>
                                             </tr>
                                         ))}

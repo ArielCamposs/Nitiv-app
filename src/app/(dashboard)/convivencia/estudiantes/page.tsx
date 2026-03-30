@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
+import { climateScoreForAggregation } from "@/lib/climate-evaluation"
 
 async function getData() {
     const supabase = await createClient()
@@ -60,10 +61,6 @@ async function getData() {
 
     const alertSet = new Set((activeAlerts ?? []).map(a => a.student_id))
     
-    const ENERGY_SCORE: Record<string, number> = {
-        regulada: 4, inquieta: 3, apatica: 2, explosiva: 1,
-    }
-
     const decCountByStudent = (evaluations ?? []).reduce((acc, ev) => {
         if (ev.type === "DEC") acc[ev.student_id] = (acc[ev.student_id] || 0) + 1
         return acc
@@ -89,7 +86,7 @@ async function getData() {
             
             const logs = (teacherLogs ?? []).filter(l => l.course_id === c.id)
             const climateAvg = logs.length > 0 
-                ? (logs.reduce((sum, l) => sum + (ENERGY_SCORE[l.energy_level] ?? 3), 0) / logs.length).toFixed(1)
+                ? (logs.reduce((sum, l) => sum + climateScoreForAggregation(l.energy_level), 0) / logs.length).toFixed(1)
                 : null
 
             return {

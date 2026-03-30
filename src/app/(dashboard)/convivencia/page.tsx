@@ -4,10 +4,7 @@ import { getActiveAlerts } from "@/lib/utils/get-alerts"
 import { getHeatmapData } from "@/lib/data/get-heatmap-data"
 import { ConvivenciaDashboardClient, ConvivenciaStats } from "@/components/convivencia/ConvivenciaDashboardClient"
 import { RadarDashboardWidget } from "@/components/radar/RadarDashboardWidget"
-
-const ENERGY_SCORE: Record<string, number> = {
-    explosiva: 1, apatica: 2, inquieta: 3, regulada: 4,
-}
+import { climateScoreForAggregation } from "@/lib/climate-evaluation"
 
 export default async function ConvivenciaPage() {
     const supabase = await createClient()
@@ -91,7 +88,7 @@ export default async function ConvivenciaPage() {
             if (!cid) continue
             courseIdsWithData.add(cid)
             if (!scoreByCourseId[cid]) scoreByCourseId[cid] = { sum: 0, count: 0 }
-            scoreByCourseId[cid].sum += ENERGY_SCORE[(log as any).energy_level] ?? 3
+            scoreByCourseId[cid].sum += climateScoreForAggregation((log as any).energy_level)
             scoreByCourseId[cid].count += 1
         }
         coursesWithClimateCount = courseIdsWithData.size
@@ -100,7 +97,14 @@ export default async function ConvivenciaPage() {
                 const { sum, count } = scoreByCourseId[c.course_id] ?? { sum: 0, count: 0 }
                 const score = count > 0 ? Math.round((sum / count) * 10) / 10 : 0
                 const courseName = c.courses?.name?.trim() ?? c.course_id ?? "Curso"
-                const label = score === 0 ? "Sin datos" : score >= 3.5 ? "Regulada" : score >= 2.5 ? "Inquieta" : "Apática/Explosiva"
+                const label =
+                    score === 0
+                        ? "Sin datos"
+                        : score >= 4
+                          ? "Clima favorable"
+                          : score >= 3
+                            ? "Intermedio"
+                            : "Requiere atención"
                 return { courseName, score, label, count }
             })
             .filter((x: { score: number; count: number }) => x.score > 0 && x.count > 0)

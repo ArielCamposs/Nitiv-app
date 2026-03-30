@@ -10,13 +10,23 @@ import {
 } from "@/components/ui/card"
 import { TrendingUp, TrendingDown, Minus, AlertTriangle, Users, Thermometer } from "lucide-react"
 import { ClimateRegisterCard } from "@/components/teacher/climate-register-card"
+import {
+    CLASSROOM_CLIMATES,
+    climateColor,
+    climateLabel,
+    climateDefinition,
+} from "@/lib/climate-evaluation"
 
-const ENERGY_CONFIG = {
-    regulada: { label: "Regulada", emoji: "😊", bg: "bg-emerald-500", color: "#10b981" },
-    inquieta: { label: "Inquieta", emoji: "😤", bg: "bg-amber-400", color: "#f59e0b" },
-    apatica: { label: "Apática", emoji: "😴", bg: "bg-gray-400", color: "#9ca3af" },
-    explosiva: { label: "Explosiva", emoji: "🔥", bg: "bg-red-500", color: "#ef4444" },
-} as const
+function cellClimateStyle(energy: string | null): {
+    label: string
+    emoji: string
+    color: string
+} | null {
+    if (!energy) return null
+    const def = climateDefinition(energy)
+    if (!def) return { label: energy, emoji: "📌", color: climateColor(energy) }
+    return { label: def.label, emoji: def.emoji, color: climateColor(energy) }
+}
 
 export type Tendencia = "mejorando" | "empeorando" | "estable" | "sin_datos"
 
@@ -78,7 +88,7 @@ export function TeacherDashboardClient({
                             <h3 className="font-bold">Registrar Clima de Aula</h3>
                         </div>
                         <div className="text-indigo-100 text-xs font-medium bg-white/10 px-2 py-1 rounded-md">
-                            Obligatorio · Paso 1
+                            Clima obligatorio · Detalle opcional
                         </div>
                     </div>
                     <div className="p-5">
@@ -148,7 +158,7 @@ export function TeacherDashboardClient({
             <Card className="border-0 shadow-sm">
                 <CardHeader className="pb-3">
                     <CardTitle className="text-base">Clima del aula</CardTitle>
-                    <CardDescription>Últimas 4 semanas — energía registrada por día</CardDescription>
+                    <CardDescription>Últimas 4 semanas — tipo de clima registrado por día</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {/* Cabecera de días */}
@@ -160,21 +170,19 @@ export function TeacherDashboardClient({
                     </div>
 
                     {/* Filas por semana */}
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                         {WEEK_NAMES.map((week) => (
                             <div key={week} className="grid grid-cols-[32px_repeat(5,1fr)] gap-1.5 items-center">
                                 <span className="text-[11px] font-medium text-slate-400">{week}</span>
                                 {DAY_NAMES.map((_, di) => {
                                     const cell = heatmapData.find(h => h.week === week && h.dayIndex === di)
-                                    const cfg = cell?.energy
-                                        ? ENERGY_CONFIG[cell.energy as keyof typeof ENERGY_CONFIG]
-                                        : null
+                                    const cfg = cell?.energy ? cellClimateStyle(cell.energy) : null
 
                                     return (
                                         <div
                                             key={di}
                                             title={cfg?.label ?? "Sin registro"}
-                                            className="group relative h-10 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all"
+                                            className="group relative aspect-square rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all w-full max-w-[48px] mx-auto"
                                             style={{
                                                 background: cfg
                                                     ? `${cfg.color}18`
@@ -186,12 +194,19 @@ export function TeacherDashboardClient({
                                         >
                                             {cfg ? (
                                                 <>
-                                                    <span className="text-sm leading-none">{cfg.emoji}</span>
+                                                    <span className="text-[10px] sm:text-xs leading-none">{cfg.emoji}</span>
                                                     <span
-                                                        className="text-[9px] font-semibold leading-none"
+                                                        className="text-[7px] sm:text-[8px] font-semibold leading-none w-full text-center px-0.5 overflow-hidden"
                                                         style={{ color: cfg.color }}
                                                     >
-                                                        {cfg.label}
+                                                        {cfg.label === "Extraordinario" ? (
+                                                            <>
+                                                                <span className="sm:hidden block truncate">Extra.</span>
+                                                                <span className="hidden sm:block truncate">Extraordinario</span>
+                                                            </>
+                                                        ) : (
+                                                            <span className="block truncate">{cfg.label}</span>
+                                                        )}
                                                     </span>
                                                 </>
                                             ) : (
@@ -205,14 +220,11 @@ export function TeacherDashboardClient({
                     </div>
 
                     {/* Leyenda */}
-                    <div className="flex flex-wrap gap-3 mt-4 pt-3 border-t border-slate-100">
-                        {Object.entries(ENERGY_CONFIG).map(([key, cfg]) => (
+                    <div className="flex flex-wrap gap-2 mt-4 pt-3 border-t border-slate-100">
+                        {CLASSROOM_CLIMATES.map((key) => (
                             <div key={key} className="flex items-center gap-1.5">
-                                <div
-                                    className="w-3 h-3 rounded-full"
-                                    style={{ background: cfg.color }}
-                                />
-                                <span className="text-xs text-slate-500">{cfg.label}</span>
+                                <div className="w-3 h-3 rounded-full" style={{ background: climateColor(key) }} />
+                                <span className="text-xs text-slate-500">{climateLabel(key)}</span>
                             </div>
                         ))}
                         <div className="flex items-center gap-1.5">
@@ -227,7 +239,7 @@ export function TeacherDashboardClient({
             <Card className="border-0 shadow-sm">
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base">Tendencia semanal</CardTitle>
-                    <CardDescription>Promedio de energía del aula (4 = regulada · 1 = explosiva)</CardDescription>
+                    <CardDescription>Promedio numérico 1–5 (incluye histórico antiguo mapeado)</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {sinDatos ? (
@@ -246,14 +258,22 @@ export function TeacherDashboardClient({
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                                 <XAxis dataKey="semana" tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                                <YAxis domain={[1, 4]} ticks={[1, 2, 3, 4]}
-                                    tickFormatter={(v) => (["", "🔥", "😴", "😤", "😊"] as string[])[v] ?? v}
-                                    tick={{ fontSize: 13 }} axisLine={false} tickLine={false} />
+                                <YAxis domain={[1, 5]} ticks={[1, 2, 3, 4, 5]}
+                                    tickFormatter={(v) => `${v}`}
+                                    tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
                                 <Tooltip
-                                    formatter={(value: number | undefined) => {
+                                    formatter={(value) => {
                                         if (value === undefined) return ["Sin datos", "Clima"]
-                                        const map: Record<number, string> = { 1: "Explosiva 🔥", 2: "Apática 😴", 3: "Inquieta 😤", 4: "Regulada 😊" }
-                                        return [map[Math.round(value)] ?? value, "Clima"]
+                                        const n = typeof value === "number" ? value : Number(value)
+                                        const r = Math.round(Number.isFinite(n) ? n : 0)
+                                        const hint: Record<number, string> = {
+                                            1: "Muy adverso",
+                                            2: "Bajo / irregular",
+                                            3: "Intermedio",
+                                            4: "Favorable",
+                                            5: "Muy favorable",
+                                        }
+                                        return [`${Number.isFinite(n) ? n.toFixed(1) : "—"} · ${hint[r] ?? "—"}`, "Clima"]
                                     }}
                                 />
                                 <Area type="monotone" dataKey="promedio" stroke={trendColor} strokeWidth={2.5}

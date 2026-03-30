@@ -3,12 +3,10 @@ import { redirect } from "next/navigation"
 import { HelpRequestsPanel } from "@/components/help/HelpRequestsPanel"
 import { DuplaDashboardClient, DuplaStats } from "@/components/dupla/DuplaDashboardClient"
 import { RadarDashboardWidget } from "@/components/radar/RadarDashboardWidget"
+import { climateScoreForAggregation } from "@/lib/climate-evaluation"
 
 const EMOTION_SCORE: Record<string, number> = {
     muy_mal: 1, mal: 2, neutral: 3, bien: 4, muy_bien: 5,
-}
-const ENERGY_SCORE: Record<string, number> = {
-    explosiva: 1, apatica: 2, inquieta: 3, regulada: 4,
 }
 
 export default async function DuplaPage() {
@@ -106,9 +104,10 @@ export default async function DuplaPage() {
     const climatePorCurso = (courses ?? []).map(c => {
         const logs = (teacherLogs ?? []).filter(l => l.course_id === c.id)
         const score = logs.length > 0
-            ? Math.round((logs.reduce((s, l) => s + (ENERGY_SCORE[l.energy_level] ?? 3), 0) / logs.length) * 10) / 10
+            ? Math.round((logs.reduce((s, l) => s + climateScoreForAggregation(l.energy_level), 0) / logs.length) * 10) / 10
             : 0
-        const label = score === 0 ? "Sin datos" : score >= 3.5 ? "Regulada" : score >= 2.5 ? "Inquieta" : "Apática/Explosiva"
+        const label =
+            score === 0 ? "Sin datos" : score >= 4 ? "Favorable" : score >= 3 ? "Intermedio" : "Requiere atención"
         return { curso: `${c.name}${c.section ? " " + c.section : ""}`, score, label }
     }).filter(c => c.score > 0).sort((a, b) => a.score - b.score)
 

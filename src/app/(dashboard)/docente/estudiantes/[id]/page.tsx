@@ -13,6 +13,7 @@ import { BackButton } from "@/components/ui/back-button"
 import { PerceptionForm } from "@/components/teacher/perception-form"
 import { StudentEmotionChart } from "@/components/student/student-emotion-chart"
 import { ExpandableText } from "@/components/ui/expandable-text"
+import { StudentDecRecordsWithModal, StudentPaecCardWithModal } from "@/components/student/student-profile-dec-paec-modals"
 import Link from "next/link"
 
 const EMOTION_MAP: Record<string, { label: string; color: string }> = {
@@ -79,24 +80,21 @@ async function getStudentForTeacher(studentId: string) {
         .order("created_at", { ascending: false })
         .limit(7)
 
-    // PAEC
+    // PAEC — todos los campos + estudiante y equipo (misma forma que /paec/[id])
     const { data: paec } = await supabase
         .from("paec")
         .select(`
-            strengths,
-            support_routines, support_anticipation, support_visual_aids,
-            support_calm_space, support_breaks, key_support,
-            trigger_noise, trigger_changes, trigger_orders,
-            trigger_social, trigger_sensory, trigger_other,
-            strategy_calm_space, strategy_accompaniment,
-            strategy_reduce_stimuli, strategy_other,
-            review_date, active
+            *,
+            students ( name, last_name, rut, birthdate ),
+            professional_1:users!paec_professional_1_id_fkey ( name, last_name, role ),
+            professional_2:users!paec_professional_2_id_fkey ( name, last_name, role ),
+            professional_3:users!paec_professional_3_id_fkey ( name, last_name, role )
         `)
         .eq("student_id", studentId)
         .eq("active", true)
         .maybeSingle()
 
-    // DEC
+    // DEC — todos los campos para modal de ficha completa
     const { data: decRecords } = await supabase
         .from("incidents")
         .select(`
@@ -105,10 +103,27 @@ async function getStudentForTeacher(studentId: string) {
             type,
             severity,
             location,
+            context,
+            conduct_types,
+            triggers,
+            actions_taken,
+            description,
+            guardian_contacted,
+            resolved,
             incident_date,
             end_date,
-            resolved,
+            created_at,
+            students (
+                id,
+                name,
+                last_name,
+                rut,
+                guardian_name,
+                guardian_phone,
+                courses ( name, level )
+            ),
             users!reporter_id (
+                id,
                 name,
                 last_name,
                 role
@@ -116,6 +131,18 @@ async function getStudentForTeacher(studentId: string) {
         `)
         .eq("student_id", studentId)
         .order("incident_date", { ascending: false })
+
+    let institutionName: string | undefined
+    let institutionLogoUrl: string | undefined
+    if (profile.institution_id) {
+        const { data: inst } = await supabase
+            .from("institutions")
+            .select("name, logo_url")
+            .eq("id", profile.institution_id)
+            .maybeSingle()
+        institutionName = inst?.name
+        institutionLogoUrl = inst?.logo_url ?? undefined
+    }
 
     // Convivencia records the student was involved in
     const { data: convivenciaLinks } = await supabase
@@ -168,6 +195,8 @@ async function getStudentForTeacher(studentId: string) {
         teacherId: profile.id,
         institutionId: profile.institution_id,
         role: profile.role,
+        institutionName,
+        institutionLogoUrl,
     }
 }
 
@@ -181,7 +210,19 @@ export default async function StudentProfilePage({
 
     if (!data) return notFound()
 
-    const { student, recentLogs, paec, decRecords, convivenciaRecords, casosDerivacion, teacherId, institutionId } = data
+    const {
+        student,
+        recentLogs,
+        paec,
+        decRecords,
+        convivenciaRecords,
+        casosDerivacion,
+        teacherId,
+        institutionId,
+        institutionName,
+        institutionLogoUrl,
+    } = data
+    const courseNameForPaec = (student.courses as { name?: string } | null)?.name ?? null
 
     // Calcular edad
     let ageText = "No registrada"
@@ -353,73 +394,13 @@ export default async function StudentProfilePage({
 
                     <TabsContent value="paec" className="mt-6 space-y-6">
                         {paec ? (
-                            <Card className="border-violet-200 bg-violet-50/40">
-                                <CardHeader>
-                                    <CardTitle className="text-base flex items-center gap-2">
-                                        📋 Plan de Apoyo Emocional y Conductual (PAEC)
-                                    </CardTitle>
-                                    {paec.review_date && (
-                                        <CardDescription>
-                                            Próxima revisión: {new Date(paec.review_date).toLocaleDateString("es-CL")}
-                                        </CardDescription>
-                                    )}
-                                </CardHeader>
-                                <CardContent className="space-y-4 text-sm">
-                                    {paec.strengths && (
-                                        <div>
-                                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Fortalezas</p>
-                                            <p className="text-slate-700">{paec.strengths}</p>
-                                        </div>
-                                    )}
-                                    {/* Apoyos activos */}
-                                    <div>
-                                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Apoyos activos</p>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {paec.support_routines && <Badge variant="secondary">Rutinas</Badge>}
-                                            {paec.support_anticipation && <Badge variant="secondary">Anticipación</Badge>}
-                                            {paec.support_visual_aids && <Badge variant="secondary">Apoyos visuales</Badge>}
-                                            {paec.support_calm_space && <Badge variant="secondary">Espacio calma</Badge>}
-                                            {paec.support_breaks && <Badge variant="secondary">Pausas activas</Badge>}
-                                            {!paec.support_routines && !paec.support_anticipation && !paec.support_visual_aids &&
-                                                !paec.support_calm_space && !paec.support_breaks && (
-                                                    <span className="text-slate-400 text-xs">Sin apoyos registrados</span>
-                                                )}
-                                        </div>
-                                    </div>
-                                    {/* Desencadenantes */}
-                                    <div>
-                                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Desencadenantes conocidos</p>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {paec.trigger_noise && <Badge variant="outline" className="border-rose-300 text-rose-600">Ruido</Badge>}
-                                            {paec.trigger_changes && <Badge variant="outline" className="border-rose-300 text-rose-600">Cambios</Badge>}
-                                            {paec.trigger_orders && <Badge variant="outline" className="border-rose-300 text-rose-600">Órdenes directas</Badge>}
-                                            {paec.trigger_social && <Badge variant="outline" className="border-rose-300 text-rose-600">Interacción social</Badge>}
-                                            {paec.trigger_sensory && <Badge variant="outline" className="border-rose-300 text-rose-600">Sensorial</Badge>}
-                                            {paec.trigger_other && <Badge variant="outline" className="border-rose-300 text-rose-600">{paec.trigger_other}</Badge>}
-                                            {!paec.trigger_noise && !paec.trigger_changes && !paec.trigger_orders &&
-                                                !paec.trigger_social && !paec.trigger_sensory && !paec.trigger_other && (
-                                                    <span className="text-slate-400 text-xs">No registrados</span>
-                                                )}
-                                        </div>
-                                    </div>
-                                    {/* Estrategias */}
-                                    <div>
-                                        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Estrategias de intervención</p>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {paec.strategy_calm_space && <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Espacio calma</Badge>}
-                                            {paec.strategy_accompaniment && <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Acompañamiento</Badge>}
-                                            {paec.strategy_reduce_stimuli && <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">Reducir estímulos</Badge>}
-                                            {paec.strategy_other && <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100">{paec.strategy_other}</Badge>}
-                                        </div>
-                                    </div>
-                                    {paec.key_support && (
-                                        <div>
-                                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Apoyo clave</p>
-                                            <p className="text-slate-700">{paec.key_support}</p>
-                                        </div>
-                                    )}
-                                </CardContent>
-                            </Card>
+                            <StudentPaecCardWithModal
+                                paec={paec}
+                                courseName={courseNameForPaec}
+                                userRole={data.role}
+                                institutionName={institutionName}
+                                institutionLogoUrl={institutionLogoUrl}
+                            />
                         ) : (
                             <Card className="border-dashed">
                                 <CardContent className="py-6 text-center text-sm text-slate-400">
@@ -433,7 +414,9 @@ export default async function StudentProfilePage({
                         <Card>
                             <CardHeader>
                                 <CardTitle className="text-base">Historial de Incidentes DEC</CardTitle>
-                                <CardDescription>Registro de desregulaciones emocionales y conductuales</CardDescription>
+                                <CardDescription>
+                                    Registro de desregulaciones emocionales y conductuales. Pulsa una fila para ver la ficha completa.
+                                </CardDescription>
                             </CardHeader>
                             <CardContent>
                                 {(!decRecords || decRecords.length === 0) ? (
@@ -441,43 +424,7 @@ export default async function StudentProfilePage({
                                         No hay incidentes DEC registrados para este estudiante.
                                     </p>
                                 ) : (
-                                    <div className="space-y-3">
-                                        {decRecords.map((dec) => (
-                                            <div key={dec.id} className="border rounded-md p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                                <div>
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <span className="font-semibold text-sm text-slate-900">{dec.folio}</span>
-                                                        <Badge variant="outline" className={`text-[10px] ${dec.severity === "moderada" ? "bg-amber-100 text-amber-700 border-amber-200" :
-                                                            dec.severity === "severa" ? "bg-rose-100 text-rose-700 border-rose-200" :
-                                                                "bg-slate-100 text-slate-700"
-                                                            }`}>
-                                                            {dec.severity === "moderada" ? "Etapa 2 — Moderada" :
-                                                                dec.severity === "severa" ? "Etapa 3 — Severa" :
-                                                                    dec.severity}
-                                                        </Badge>
-                                                        <Badge variant="outline" className={`text-[10px] ${dec.resolved ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"
-                                                            }`}>
-                                                            {dec.resolved ? "Resuelto" : "En seguimiento"}
-                                                        </Badge>
-                                                    </div>
-                                                    <p className="text-xs text-slate-500">
-                                                        Fecha: {new Date(dec.incident_date).toLocaleDateString("es-CL", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
-                                                        {dec.end_date && ` - ${new Date(dec.end_date).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}`}
-                                                    </p>
-                                                    {dec.location && (
-                                                        <p className="text-xs text-slate-500 mt-0.5">Lugar: {dec.location}</p>
-                                                    )}
-                                                </div>
-                                                <div className="text-left sm:text-right">
-                                                    <p className="text-xs text-slate-400">Reportado por:</p>
-                                                    <p className="text-sm font-medium text-slate-700">
-                                                        {(dec.users as any)?.name} {(dec.users as any)?.last_name}
-                                                    </p>
-                                                    <p className="text-xs text-slate-500 capitalize">{(dec.users as any)?.role}</p>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
+                                    <StudentDecRecordsWithModal decRecords={decRecords as Record<string, unknown>[]} />
                                 )}
                             </CardContent>
                         </Card>
@@ -635,11 +582,17 @@ export default async function StudentProfilePage({
                                                             Ver detalle →
                                                         </Link>
                                                     </div>
-                                                    <p className="text-sm text-slate-700">
-                                                        {data.role === "docente"
-                                                            ? "Información confidencial reservada."
-                                                            : caso.reason}
-                                                    </p>
+                                                    {data.role === "docente" ? (
+                                                        <p className="text-sm text-slate-400 italic">
+                                                            Información confidencial reservada.
+                                                        </p>
+                                                    ) : (
+                                                        <ExpandableText
+                                                            text={caso.reason}
+                                                            maxLength={200}
+                                                            textClassName="text-sm text-slate-700 leading-relaxed"
+                                                        />
+                                                    )}
                                                 </div>
                                             )
                                         })}

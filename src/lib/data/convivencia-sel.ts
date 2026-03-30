@@ -9,6 +9,27 @@ export type TipoActividad = "Reflexión" | "Dilema" | "Regulación"
 
 export type Ciclo = "ciclo1" | "ciclo2" | "ciclo3"
 
+export type TipoInteractivo =
+    | "emojis"
+    | "colores"
+    | "semaforo"
+    | "cuerpo"
+    | "respiracion"
+    | "vinetas"
+    | "votacion"
+    | "frases"
+
+export interface OpcionVotacion {
+    letra: string
+    texto: string
+}
+
+export interface ContenidoInteractivo {
+    tipo: TipoInteractivo
+    opciones?: OpcionVotacion[]
+    frasesComparativas?: { incorrecta: string; correcta: string }[]
+}
+
 export interface ActividadSEL {
     id: string
     numero: number
@@ -19,6 +40,25 @@ export interface ActividadSEL {
     ejeCasel: EjeCasel
     tipo: TipoActividad
     mes?: string
+    interactivo?: ContenidoInteractivo
+}
+
+export interface SELActividadRegistro {
+    id: string
+    created_by: string
+    institution_id: string
+    actividad_id: string
+    actividad_nombre: string
+    ciclo: string
+    eje_casel: string
+    tipo: string
+    participacion: "alta" | "media" | "baja" | null
+    calificacion: number | null
+    observaciones: string | null
+    curso_id: string | null
+    curso_nombre: string | null
+    realizada_en: string
+    created_at: string
 }
 
 export interface CicloInfo {
@@ -70,6 +110,7 @@ export const ACTIVIDADES_CICLO1: ActividadSEL[] = [
             "Si hay estudiantes que dicen \"mal\" o \"triste\", no los corrijas ni minimices. Diles \"gracias por contarme\" y ofrece el apoyo si es necesario. Es importante entender la validez de emociones placenteras y displacenteras.",
         ejeCasel: "Autoconciencia",
         tipo: "Reflexión",
+        interactivo: { tipo: "emojis" },
     },
     {
         id: "c1-s2",
@@ -84,6 +125,7 @@ export const ACTIVIDADES_CICLO1: ActividadSEL[] = [
             "Aplica los colores mencionados y la emoción escrita para hacer un \"clima del curso\" en la pizarra. Muéstralo: \"¡Miren cuántos colores diferentes tiene nuestro curso hoy!\" Eso valida la diversidad emocional. (en caso de no tener los insumos se recomienda utilizar proyectar Paint).",
         ejeCasel: "Autoregulación",
         tipo: "Reflexión",
+        interactivo: { tipo: "colores" },
     },
     {
         id: "c1-s3",
@@ -98,6 +140,7 @@ export const ACTIVIDADES_CICLO1: ActividadSEL[] = [
             "Si muchos levantan la mano en rojo, pregunta \"¿qué les ayudaría a pasar al amarillo?\" No busques soluciones perfectas — busca que los estudiantes piensen en recursos propios.",
         ejeCasel: "Autoconciencia",
         tipo: "Reflexión",
+        interactivo: { tipo: "semaforo" },
     },
     {
         id: "c1-s4",
@@ -126,6 +169,7 @@ export const ACTIVIDADES_CICLO1: ActividadSEL[] = [
             "Normaliza respuestas diversas — no hay ubicación incorrecta. Si un estudiante dice \"en el estómago cuando estoy nervioso\", valídalo: \"es una respuesta fisiológica real.\"",
         ejeCasel: "Autoconciencia",
         tipo: "Reflexión",
+        interactivo: { tipo: "cuerpo" },
     },
     {
         id: "c1-s6",
@@ -140,6 +184,7 @@ export const ACTIVIDADES_CICLO1: ActividadSEL[] = [
             "Haz la respiración junto con los estudiantes — no solo instrúyelos. Cuando el docente también participa, la actividad pierde la sensación de \"tarea\" y se vuelve compartida.",
         ejeCasel: "Autoregulación",
         tipo: "Regulación",
+        interactivo: { tipo: "respiracion" },
     },
     {
         id: "c1-s7",
@@ -154,6 +199,7 @@ export const ACTIVIDADES_CICLO1: ActividadSEL[] = [
             "Pregunta también \"¿alguna vez tú te has sentido así?\" para conectar la empatía con la experiencia propia.",
         ejeCasel: "Conciencia Social",
         tipo: "Reflexión",
+        interactivo: { tipo: "vinetas" },
     },
     {
         id: "c1-s8",
@@ -168,6 +214,14 @@ export const ACTIVIDADES_CICLO1: ActividadSEL[] = [
             "No presentes la C como \"mala\" de entrada. Pregunta por qué alguien elegiría no involucrarse — puede haber miedo, vergüenza o experiencias propias. Valida eso antes de explorar otras opciones.",
         ejeCasel: "Habilidades Relacionales",
         tipo: "Dilema",
+        interactivo: {
+            tipo: "votacion",
+            opciones: [
+                { letra: "A", texto: "Me acerco y le pregunto cómo está" },
+                { letra: "B", texto: "Llamo a la profe o a un adulto" },
+                { letra: "C", texto: "Sigo jugando, no es mi problema" },
+            ],
+        },
     },
     {
         id: "c1-s9",
@@ -224,6 +278,14 @@ export const ACTIVIDADES_CICLO1: ActividadSEL[] = [
             "Explora con el curso: \"¿Seguiría siendo tu amigo si te culpas de algo que no hizo?\" La lealtad y la honestidad no siempre se oponen — ayúdalos a ver que decir la verdad puede proteger la amistad a largo plazo.",
         ejeCasel: "Toma de decisiones",
         tipo: "Dilema",
+        interactivo: {
+            tipo: "votacion",
+            opciones: [
+                { letra: "A", texto: "Digo que fui yo para proteger a mi amigo" },
+                { letra: "B", texto: "Le digo a mi amigo que tiene que ser honesto" },
+                { letra: "C", texto: "Le cuento a la profe lo que realmente pasó" },
+            ],
+        },
     },
     {
         id: "c1-s13",
@@ -266,6 +328,15 @@ export const ACTIVIDADES_CICLO1: ActividadSEL[] = [
             "Pregunta: \"¿Por qué a veces es difícil defender a alguien?\" Valida el miedo — es real. Luego explora: \"¿Qué podrías hacer que no se enfrentara directamente?\" (buscar a un adulto, acompañar después). Hay muchas formas de ayudar.",
         ejeCasel: "Habilidades Relacionales",
         tipo: "Dilema",
+        interactivo: {
+            tipo: "votacion",
+            opciones: [
+                { letra: "A", texto: "Me meto y les digo que paren" },
+                { letra: "B", texto: "Busco a un adulto para que ayude" },
+                { letra: "C", texto: "Acompaño al compañero después del recreo" },
+                { letra: "D", texto: "No hago nada, no quiero meterme en problemas" },
+            ],
+        },
     },
     {
         id: "c1-s16",
@@ -322,6 +393,15 @@ export const ACTIVIDADES_CICLO1: ActividadSEL[] = [
             "Introduce el concepto de \"mensaje yo\" de forma simple: \"En lugar de decir \'tú haces X\', prueba \'yo siento Y cuando pasa X\'.\". Practiquen una vez con algo real del curso.",
         ejeCasel: "Habilidades Relacionales",
         tipo: "Reflexión",
+        interactivo: {
+            tipo: "frases",
+            frasesComparativas: [
+                { incorrecta: "Eres un pesado", correcta: "Me molesta cuando haces eso" },
+                { incorrecta: "Siempre me molestas", correcta: "Yo me siento mal cuando eso pasa" },
+                { incorrecta: "Eres malo/a", correcta: "Esa acción me hizo sentir triste" },
+                { incorrecta: "Nunca me escuchas", correcta: "Necesito que me prestes atención" },
+            ],
+        },
     },
     {
         id: "c1-s20",
@@ -336,6 +416,15 @@ export const ACTIVIDADES_CICLO1: ActividadSEL[] = [
             "Valida el dolor del rechazo antes de pasar a soluciones. Decir \"eso duele\" antes que \"pero hay otras opciones\" cambia completamente cómo los estudiantes reciben el consejo.",
         ejeCasel: "Autoregulación",
         tipo: "Dilema",
+        interactivo: {
+            tipo: "votacion",
+            opciones: [
+                { letra: "A", texto: "Me enojo y les reclamo" },
+                { letra: "B", texto: "Me voy triste y juego solo" },
+                { letra: "C", texto: "Busco a otros compañeros con quién jugar" },
+                { letra: "D", texto: "Le cuento a la profe lo que pasó" },
+            ],
+        },
     },
     {
         id: "c1-s21",
@@ -378,6 +467,15 @@ export const ACTIVIDADES_CICLO1: ActividadSEL[] = [
             "Pregunta: \"¿Qué necesitarías para animarte a actuar?\" Puede ser compañía, un adulto, pedir permiso. Explorar los obstáculos es más útil que simplemente decirles que deben actuar.",
         ejeCasel: "Toma de decisiones",
         tipo: "Dilema",
+        interactivo: {
+            tipo: "votacion",
+            opciones: [
+                { letra: "A", texto: "Intervengo directamente para defenderlo" },
+                { letra: "B", texto: "Busco a un adulto de confianza" },
+                { letra: "C", texto: "Hablo con el agresor después en privado" },
+                { letra: "D", texto: "No hago nada por miedo a que me pase lo mismo" },
+            ],
+        },
     },
     {
         id: "c1-s24",
@@ -420,6 +518,15 @@ export const ACTIVIDADES_CICLO1: ActividadSEL[] = [
             "Si ha habido estudiantes nuevos en el curso, este es el momento ideal para que quien vivió eso comparta cómo se sintió — si quiere y si es apropiado.",
         ejeCasel: "Conciencia Social",
         tipo: "Dilema",
+        interactivo: {
+            tipo: "votacion",
+            opciones: [
+                { letra: "A", texto: "Lo invito a jugar conmigo" },
+                { letra: "B", texto: "Le presento a mis amigos" },
+                { letra: "C", texto: "Lo observo pero no me acerco" },
+                { letra: "D", texto: "Sigo con lo mío, no es mi responsabilidad" },
+            ],
+        },
     },
     {
         id: "c1-s27",
@@ -510,4 +617,78 @@ export const COLORES_TIPO: Record<TipoActividad, { bg: string; text: string }> =
     Reflexión: { bg: "bg-emerald-100", text: "text-emerald-700" },
     Dilema: { bg: "bg-orange-100", text: "text-orange-700" },
     Regulación: { bg: "bg-sky-100", text: "text-sky-700" },
+}
+
+export const CARD_PALETTES_MODAL: Record<EjeCasel, {
+    cardBg: string
+    headerBg: string
+    numBg: string
+    numText: string
+    shadow: string
+    quoteColor: string
+    toggleBg: string
+    consejoBg: string
+    consejoText: string
+    consejoBorder: string
+}> = {
+    "Autoconciencia": {
+        cardBg: "bg-violet-50",
+        headerBg: "bg-violet-100",
+        numBg: "bg-violet-500",
+        numText: "text-white",
+        shadow: "0 8px 32px rgba(139,92,246,0.22)",
+        quoteColor: "text-violet-600",
+        toggleBg: "hover:bg-violet-100/60",
+        consejoBg: "bg-violet-50",
+        consejoText: "text-violet-800",
+        consejoBorder: "border-violet-200",
+    },
+    "Autoregulación": {
+        cardBg: "bg-blue-50",
+        headerBg: "bg-blue-100",
+        numBg: "bg-blue-500",
+        numText: "text-white",
+        shadow: "0 8px 32px rgba(59,130,246,0.22)",
+        quoteColor: "text-blue-600",
+        toggleBg: "hover:bg-blue-100/60",
+        consejoBg: "bg-blue-50",
+        consejoText: "text-blue-800",
+        consejoBorder: "border-blue-200",
+    },
+    "Habilidades Relacionales": {
+        cardBg: "bg-pink-50",
+        headerBg: "bg-pink-100",
+        numBg: "bg-pink-500",
+        numText: "text-white",
+        shadow: "0 8px 32px rgba(236,72,153,0.22)",
+        quoteColor: "text-pink-600",
+        toggleBg: "hover:bg-pink-100/60",
+        consejoBg: "bg-pink-50",
+        consejoText: "text-pink-800",
+        consejoBorder: "border-pink-200",
+    },
+    "Conciencia Social": {
+        cardBg: "bg-teal-50",
+        headerBg: "bg-teal-100",
+        numBg: "bg-teal-500",
+        numText: "text-white",
+        shadow: "0 8px 32px rgba(20,184,166,0.22)",
+        quoteColor: "text-teal-600",
+        toggleBg: "hover:bg-teal-100/60",
+        consejoBg: "bg-teal-50",
+        consejoText: "text-teal-800",
+        consejoBorder: "border-teal-200",
+    },
+    "Toma de decisiones": {
+        cardBg: "bg-amber-50",
+        headerBg: "bg-amber-100",
+        numBg: "bg-amber-500",
+        numText: "text-white",
+        shadow: "0 8px 32px rgba(245,158,11,0.22)",
+        quoteColor: "text-amber-600",
+        toggleBg: "hover:bg-amber-100/60",
+        consejoBg: "bg-amber-50",
+        consejoText: "text-amber-800",
+        consejoBorder: "border-amber-200",
+    },
 }

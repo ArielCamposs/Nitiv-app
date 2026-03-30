@@ -2,10 +2,7 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { ReportesClient } from "@/components/reportes/reportes-client"
-
-const ENERGY_SCORE: Record<string, number> = {
-    explosiva: 1, apatica: 2, inquieta: 3, regulada: 4,
-}
+import { climateScoreForAggregation } from "@/lib/climate-evaluation"
 const EMOTION_LABEL: Record<string, string> = {
     muy_bien: "Muy bien", bien: "Bien", neutral: "Neutral",
     mal: "Mal", muy_mal: "Muy mal",
@@ -178,13 +175,13 @@ async function getReportesData() {
                 return d >= weekStart && d <= weekEnd
             })
             const avg = weekLogs.length > 0
-                ? weekLogs.reduce((a, l) => a + (ENERGY_SCORE[l.energy_level] ?? 3), 0) / weekLogs.length
+                ? weekLogs.reduce((a, l) => a + climateScoreForAggregation(l.energy_level), 0) / weekLogs.length
                 : null
             return { semana, promedio: avg !== null ? Math.round(avg * 10) / 10 : null, registros: weekLogs.length }
         })
 
         const avg = courseLogs.length > 0
-            ? courseLogs.reduce((a, l) => a + (ENERGY_SCORE[l.energy_level] ?? 3), 0) / courseLogs.length
+            ? courseLogs.reduce((a, l) => a + climateScoreForAggregation(l.energy_level), 0) / courseLogs.length
             : null
 
         const courseStudents = (students ?? []).filter(s => s.course_id === c.id)

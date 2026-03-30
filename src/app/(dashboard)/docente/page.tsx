@@ -2,13 +2,7 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { TeacherDashboardClient, type Tendencia } from "@/components/docente/teacher-dashboard-client"
-
-const ENERGY_SCORE: Record<string, number> = {
-    regulada: 4,
-    inquieta: 3,
-    apatica: 2,
-    explosiva: 1,
-}
+import { climateScoreForAggregation } from "@/lib/climate-evaluation"
 
 async function getTeacherData() {
     const cookieStore = await cookies()
@@ -99,8 +93,9 @@ async function getTeacherData() {
             const logsDay = (teacherLogs ?? []).filter(l => l.log_date === dateStr)
             
             // Si hay múltiples registros (mañana/tarde), tomamos el más crítico para el heatmap
-            const worst = logsDay.sort((a, b) =>
-                (ENERGY_SCORE[a.energy_level] ?? 3) - (ENERGY_SCORE[b.energy_level] ?? 3)
+            const worst = logsDay.sort(
+                (a, b) =>
+                    climateScoreForAggregation(a.energy_level) - climateScoreForAggregation(b.energy_level)
             )[0]
 
             return {
@@ -109,7 +104,7 @@ async function getTeacherData() {
                 day,
                 dayIndex: di,
                 energy: worst?.energy_level ?? null,
-                score: worst ? (ENERGY_SCORE[worst.energy_level] ?? 3) : 0,
+                score: worst ? climateScoreForAggregation(worst.energy_level) : 0,
             }
         })
     )
@@ -129,7 +124,7 @@ async function getTeacherData() {
 
     const withScore = (teacherLogs ?? []).map(l => ({
         ...l,
-        score: ENERGY_SCORE[l.energy_level] ?? 3,
+        score: climateScoreForAggregation(l.energy_level),
         date: new Date(l.log_date),
     }))
 

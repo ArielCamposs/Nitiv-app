@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { createServerClient } from "@supabase/ssr"
-
-const ENERGY_SCORE: Record<string, number> = {
-    explosiva: 1,
-    apatica: 2,
-    inquieta: 3,
-    regulada: 4,
-}
+import { climateScoreForAggregation, climateLabel } from "@/lib/climate-evaluation"
 
 export async function POST(req: NextRequest) {
     try {
@@ -89,12 +83,7 @@ export async function POST(req: NextRequest) {
             })
         }
 
-        const byEnergy: Record<string, number> = {
-            explosiva: 0,
-            apatica: 0,
-            inquieta: 0,
-            regulada: 0,
-        }
+        const byEnergy: Record<string, number> = {}
 
         let sumScore = 0
         let firstDate: string | null = null
@@ -102,10 +91,8 @@ export async function POST(req: NextRequest) {
 
         for (const log of logs) {
             const level = (log as any).energy_level || "regulada"
-            if (byEnergy[level] != null) {
-                byEnergy[level] += 1
-            }
-            sumScore += ENERGY_SCORE[level] ?? 3
+            byEnergy[level] = (byEnergy[level] ?? 0) + 1
+            sumScore += climateScoreForAggregation(level)
 
             const d = (log as any).log_date as string
             if (!firstDate || d < firstDate) firstDate = d
@@ -117,18 +104,11 @@ export async function POST(req: NextRequest) {
             Object.entries(byEnergy)
                 .sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
 
-        const energyLabels: Record<string, string> = {
-            explosiva: "explosiva (mucha tensión o descontrol)",
-            apatica: "apática (baja motivación o desconexión)",
-            inquieta: "inquieta (ruido o dispersión alta)",
-            regulada: "regulada (clima adecuado para aprender)",
-        }
-
         const distTexto = Object.entries(byEnergy)
             .filter(([, count]) => count > 0)
             .map(([key, count]) => {
                 const pct = Math.round((count / total) * 100)
-                return `${pct}% de los registros con energía ${energyLabels[key] ?? key}`
+                return `${pct}% de los registros: ${climateLabel(key)}`
             })
             .join("; ")
 
@@ -141,10 +121,10 @@ export async function POST(req: NextRequest) {
 Curso: ${courseName}.
 Período analizado: ${periodoTexto}.
 Total de registros de clima de aula: ${total}.
-Promedio de energía (escala 1–4, donde 1=explosiva, 2=apática, 3=inquieta, 4=regulada): ${avg.toFixed(
+Promedio numérico de clima (escala 1–5; historial antiguo 1–4 mapeado; valores neutros/no aplica cuentan como 3): ${avg.toFixed(
             2
         )}.
-Clima predominante según los registros: ${dominant ?? "sin un patrón claro"}.
+Clima predominante según los registros: ${dominant ? climateLabel(dominant) : "sin un patrón claro"}.
 Distribución aproximada: ${distTexto || "sin datos suficientes para describir la distribución"}.
 `.trim()
 

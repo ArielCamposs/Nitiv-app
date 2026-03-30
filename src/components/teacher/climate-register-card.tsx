@@ -20,46 +20,22 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select"
-import { Sun, Sunset } from "lucide-react"
-
-const ENERGY_OPTIONS = [
-    {
-        value: "explosiva",
-        label: "🔴 Explosiva",
-        desc: "Gritos, conflictos, descontrol",
-    },
-    {
-        value: "inquieta",
-        label: "🟡 Inquieta",
-        desc: "Mucho ruido, dificultad para iniciar",
-    },
-    {
-        value: "regulada",
-        label: "🟢 Regulada",
-        desc: "Ruido normal de trabajo, calma",
-    },
-    {
-        value: "apatica",
-        label: "🔵 Apática",
-        desc: "Silencio excesivo, desánimo, falta de respuesta",
-    },
-]
-
-const CONDUCT_TAGS = [
-    "Trabajadores / Enfocados",
-    "Participativos",
-    "Desafiantes / Discutidores",
-    "Agotados / Sin energía",
-    "Colaborativos",
-]
+import { Sun, Sunset, ArrowRight } from "lucide-react"
+import {
+    CLASSROOM_CLIMATES,
+    CLIMATE_CHARACTERIZATION_TAGS,
+    CLIMATE_META,
+    type ClassroomClimate,
+} from "@/lib/climate-evaluation"
+import { cn } from "@/lib/utils"
 
 type Props = {
     teacherId: string
-    courseId: string // Curso para el registro (si hideCourseSelector, es el único; si no, es el valor inicial del selector)
+    courseId: string
     institutionId: string
-    allCourses?: Array<{ id: string; name: string }> // Lista para el selector de curso (no se usa si hideCourseSelector)
-    hideCourseSelector?: boolean // Si true, no se muestra el selector de curso en el formulario (se usa el de arriba)
-    onRegistered?: () => void | Promise<void> // Llamado tras guardar para refrescar calendario/historial
+    allCourses?: Array<{ id: string; name: string }>
+    hideCourseSelector?: boolean
+    onRegistered?: () => void | Promise<void>
 }
 
 function getTodayRange() {
@@ -82,11 +58,11 @@ export function ClimateRegisterCard({
     const [selectedCourseId, setSelectedCourseId] = useState(initialCourseId)
     const [sessionTime, setSessionTime] = useState<"morning" | "afternoon">("morning")
     const [blockNumber, setBlockNumber] = useState<string>("1")
-    const [energyLevel, setEnergyLevel] = useState<string>("")
+    const [selectedClimate, setSelectedClimate] = useState<ClassroomClimate | "">("")
+    const [step, setStep] = useState<1 | 2>(1)
     const [selectedTags, setSelectedTags] = useState<string[]>([])
     const [notes, setNotes] = useState("")
     const [loading, setLoading] = useState(false)
-    /** Bloques (1-12) que ya tienen registro hoy para este docente + curso; no se pueden volver a elegir */
     const [registeredBlocksToday, setRegisteredBlocksToday] = useState<number[]>([])
     const [mounted, setMounted] = useState(false)
 
@@ -94,12 +70,10 @@ export function ClimateRegisterCard({
         setMounted(true)
     }, [])
 
-    // Si el curso viene del selector de arriba, mantenerlo sincronizado
     useEffect(() => {
         if (hideCourseSelector && initialCourseId) setSelectedCourseId(initialCourseId)
     }, [hideCourseSelector, initialCourseId])
 
-    // Cargar qué bloques ya tienen registro hoy (por día): un bloque solo se puede registrar una vez al día
     useEffect(() => {
         const loadRegisteredBlocks = async () => {
             if (!selectedCourseId) return
@@ -117,7 +91,6 @@ export function ClimateRegisterCard({
         void loadRegisteredBlocks()
     }, [supabase, teacherId, selectedCourseId])
 
-    // Si el bloque seleccionado ya está registrado hoy, cambiar al primer bloque disponible
     useEffect(() => {
         const num = parseInt(blockNumber, 10)
         if (registeredBlocksToday.includes(num)) {
@@ -136,6 +109,18 @@ export function ClimateRegisterCard({
 
     const blockAlreadyRegistered = registeredBlocksToday.includes(parseInt(blockNumber, 10))
 
+    const selectClimate = (c: ClassroomClimate) => {
+        setSelectedClimate(c)
+        setStep(2)
+        setSelectedTags([])
+    }
+
+    const backToClimates = () => {
+        setStep(1)
+        setSelectedClimate("")
+        setSelectedTags([])
+    }
+
     const toggleTag = (tag: string) => {
         setSelectedTags((prev) =>
             prev.includes(tag)
@@ -147,11 +132,10 @@ export function ClimateRegisterCard({
     }
 
     const handleSubmit = async () => {
-        if (!energyLevel) {
-            toast.error("Selecciona el nivel de energía de la clase.")
+        if (!selectedClimate) {
+            toast.error("Selecciona el clima del aula.")
             return
         }
-
         if (!blockNumber) {
             toast.error("Selecciona el bloque de la clase.")
             return
@@ -159,7 +143,6 @@ export function ClimateRegisterCard({
 
         try {
             setLoading(true)
-
             const { from, to } = getTodayRange()
 
             const { data: existing } = await supabase
@@ -173,7 +156,6 @@ export function ClimateRegisterCard({
                 .maybeSingle()
 
             if (existing) {
-                setBlockAlreadyRegistered(true)
                 toast.info("Ya registraste el clima de este curso y bloque hoy. Elige otro bloque si tienes más clases con este curso.")
                 return
             }
@@ -182,7 +164,7 @@ export function ClimateRegisterCard({
                 institution_id: institutionId,
                 teacher_id: teacherId,
                 course_id: selectedCourseId,
-                energy_level: energyLevel,
+                energy_level: selectedClimate,
                 session_time: sessionTime,
                 block_number: parseInt(blockNumber),
                 tags: selectedTags,
@@ -191,20 +173,21 @@ export function ClimateRegisterCard({
             })
 
             if (error) {
-                console.error(error)
-                toast.error("No se pudo guardar el registro de clima.")
+                console.error("Supabase insert error:", JSON.stringify(error, null, 2), error)
+                toast.error(`No se pudo guardar el registro de clima. ${error.message || ""}`)
                 return
             }
 
             toast.success("Clima registrado. Si tienes otra clase con este curso hoy, elige otro bloque.")
             const justRegistered = parseInt(blockNumber, 10)
-            setRegisteredBlocksToday((prev) => [...prev, justRegistered].sort((a, b) => a - b))
-            setEnergyLevel("")
+            const mergedBlocks = [...new Set([...registeredBlocksToday, justRegistered])].sort((a, b) => a - b)
+            setRegisteredBlocksToday(mergedBlocks)
+            setSelectedClimate("")
+            setStep(1)
             setSelectedTags([])
             setNotes("")
-            const afterRegister = [...registeredBlocksToday, justRegistered]
-            const nextBlock = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].find((b) => !afterRegister.includes(b))
-            if (nextBlock != null) setBlockNumber(String(nextBlock))
+            const nextFree = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].find((b) => !mergedBlocks.includes(b))
+            if (nextFree != null) setBlockNumber(String(nextFree))
             await onRegistered?.()
         } finally {
             setLoading(false)
@@ -220,16 +203,15 @@ export function ClimateRegisterCard({
     }
 
     return (
-        <Card>
-            <CardHeader className="pb-3">
-                <CardTitle className="text-lg">¿Cómo estuvo la clase hoy?</CardTitle>
-                <CardDescription>
-                    Puedes registrar varias veces al día (una por cada bloque/hora con este curso).
+        <Card className="overflow-hidden border-slate-200">
+            <CardHeader className="pb-3 bg-gradient-to-r from-emerald-700/90 to-teal-700/90 text-white rounded-t-lg border-b border-emerald-800/30">
+                <CardTitle className="text-lg text-white">Clima de aula</CardTitle>
+                <CardDescription className="text-emerald-100">
+                    Registro obligatorio: elige el clima. Luego, opcionalmente, hasta 2 características (basado en evaluación holística del clima de aula).
                 </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 pt-6">
 
-                {/* Jornada y Bloque (curso elegido arriba cuando hideCourseSelector) */}
                 <div className={`grid grid-cols-1 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100 ${hideCourseSelector ? "md:grid-cols-2" : "md:grid-cols-3"}`}>
                     {!hideCourseSelector && (
                         <div className="space-y-2">
@@ -267,10 +249,10 @@ export function ClimateRegisterCard({
                                     <button
                                         key={s.id}
                                         type="button"
-                                        onClick={() => setSessionTime(s.id as any)}
+                                        onClick={() => setSessionTime(s.id as "morning" | "afternoon")}
                                         className={`flex-1 flex items-center justify-center gap-2 rounded-md text-xs font-medium transition-all ${active
-                                                ? "bg-slate-900 text-white shadow-sm"
-                                                : "text-slate-500 hover:bg-slate-50"
+                                            ? "bg-slate-900 text-white shadow-sm"
+                                            : "text-slate-500 hover:bg-slate-50"
                                             }`}
                                     >
                                         <Icon className={`w-3.5 h-3.5 ${active ? "text-amber-400" : ""}`} />
@@ -307,71 +289,128 @@ export function ClimateRegisterCard({
                     </div>
                 </div>
 
-                {/* Paso 1: Termómetro de energía */}
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-900">
-                        Paso 1 — Nivel de energía de la clase
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                        {ENERGY_OPTIONS.map((opt) => (
-                            <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => setEnergyLevel(opt.value)}
-                                className={`rounded-lg border p-3 text-left transition-all ${energyLevel === opt.value
-                                        ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500"
-                                        : "border-slate-200 hover:border-slate-300"
-                                    }`}
-                            >
-                                <div className="text-sm font-medium">{opt.label}</div>
-                                <div className="text-xs text-slate-500">{opt.desc}</div>
-                            </button>
-                        ))}
+                {step === 1 && (
+                    <div className="space-y-4">
+                        <p className="text-center text-sm font-semibold text-slate-600">
+                            ¿Cuál de estas opciones describe mejor cómo estuvo el curso hoy?
+                        </p>
+                        <div className="rounded-2xl border border-slate-800 bg-[#2d2d2d] p-4 sm:p-5">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                {CLASSROOM_CLIMATES.map((key) => {
+                                    const m = CLIMATE_META[key]
+                                    return (
+                                        <button
+                                            key={key}
+                                            type="button"
+                                            disabled={blockAlreadyRegistered}
+                                            onClick={() => selectClimate(key)}
+                                            className={cn(
+                                                "flex flex-col items-center text-center rounded-2xl p-4 min-h-[140px] transition-all",
+                                                "border-2 border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/25",
+                                                "focus:outline-none focus:ring-2 focus:ring-emerald-400/60",
+                                                "disabled:opacity-40 disabled:pointer-events-none"
+                                            )}
+                                        >
+                                            <span className="text-4xl sm:text-5xl leading-none mb-2" aria-hidden>
+                                                {m.emoji}
+                                            </span>
+                                            <span className="sel-font text-sm font-black text-white leading-tight">
+                                                {m.label}
+                                            </span>
+                                            <span className="text-[11px] text-slate-400 mt-1.5 leading-snug">
+                                                {m.desc}
+                                            </span>
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                        </div>
                     </div>
-                </div>
+                )}
 
-                {/* Paso 2: Etiquetas de conducta */}
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-900">
-                        Paso 2 — Etiquetas de conducta{" "}
-                        <span className="text-slate-400 font-normal">(máx. 2)</span>
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                        {CONDUCT_TAGS.map((tag) => (
-                            <button
-                                key={tag}
-                                type="button"
-                                onClick={() => toggleTag(tag)}
-                                className={`rounded-full border px-3 py-1 text-xs transition-all ${selectedTags.includes(tag)
-                                        ? "border-indigo-500 bg-indigo-100 text-indigo-700"
-                                        : "border-slate-200 text-slate-600 hover:border-slate-300"
-                                    }`}
-                            >
-                                {tag}
-                            </button>
-                        ))}
+                {step === 2 && selectedClimate && (
+                    <div className="space-y-4 animate-in fade-in duration-300">
+                        <button
+                            type="button"
+                            onClick={backToClimates}
+                            className="text-xs font-bold text-indigo-600 hover:text-indigo-800"
+                        >
+                            ← Cambiar clima
+                        </button>
+
+                        <div
+                            className="rounded-2xl border border-white/15 p-5 space-y-4"
+                            style={{
+                                backgroundColor: "#2d2d2d",
+                                boxShadow: `0 0 0 1px ${CLIMATE_META[selectedClimate].color}33`,
+                            }}
+                        >
+                            <div className="flex items-center gap-3 text-white">
+                                <span className="text-3xl">{CLIMATE_META[selectedClimate].emoji}</span>
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-widest text-white/50">Clima elegido</p>
+                                    <p className="text-lg font-black">{CLIMATE_META[selectedClimate].label}</p>
+                                </div>
+                            </div>
+
+                            <div>
+                                <p className="text-sm font-semibold text-slate-300 mb-3">
+                                    ¿Qué lo caracterizó? <span className="text-slate-500 font-normal">(opcional — máx. 2)</span>
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    {CLIMATE_CHARACTERIZATION_TAGS.map((tag) => (
+                                        <button
+                                            key={tag}
+                                            type="button"
+                                            onClick={() => toggleTag(tag)}
+                                            className={cn(
+                                                "rounded-full border px-3 py-1.5 text-xs font-semibold transition-all",
+                                                selectedTags.includes(tag)
+                                                    ? "border-white bg-white text-slate-900"
+                                                    : "border-white/30 text-slate-200 hover:border-white/50 hover:bg-white/5"
+                                            )}
+                                        >
+                                            {tag}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-semibold text-slate-300 block mb-2">
+                                    Observación breve <span className="text-slate-500 font-normal">(opcional)</span>
+                                </label>
+                                <Textarea
+                                    rows={3}
+                                    placeholder="Ej.: El curso llegó muy activo después de educación física…"
+                                    value={notes}
+                                    onChange={(e) => setNotes(e.target.value)}
+                                    className="bg-black/20 border-white/20 text-white placeholder:text-slate-500"
+                                />
+                            </div>
+                        </div>
                     </div>
-                </div>
-
-                {/* Paso 3: Nota libre */}
-                <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-900">
-                        Paso 3 — Observación breve{" "}
-                        <span className="text-slate-400 font-normal">(opcional)</span>
-                    </label>
-                    <Textarea
-                        rows={3}
-                        placeholder="Ej: El curso llegó muy activo después de educación física..."
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                    />
-                </div>
+                )}
             </CardContent>
-            <CardFooter className="flex justify-end">
-                <Button onClick={handleSubmit} disabled={loading || !energyLevel || blockAlreadyRegistered}>
-                    {loading ? "Guardando..." : "Guardar clima"}
-                </Button>
-            </CardFooter>
+            {step === 2 && (
+                <CardFooter className="flex justify-between gap-3 border-t bg-slate-50/80">
+                    <Button type="button" variant="ghost" onClick={backToClimates}>
+                        Atrás
+                    </Button>
+                    <Button
+                        onClick={handleSubmit}
+                        disabled={loading || !selectedClimate || blockAlreadyRegistered}
+                        className="gap-2 min-w-[200px] bg-[#2d2d2d] text-white border-2 border-white hover:bg-[#3d3d3d]"
+                    >
+                        {loading ? "Guardando…" : (
+                            <>
+                                Guardar registro
+                                <ArrowRight className="h-4 w-4" />
+                            </>
+                        )}
+                    </Button>
+                </CardFooter>
+            )}
         </Card>
     )
 }

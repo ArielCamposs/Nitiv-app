@@ -2,13 +2,6 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 
-const ENERGY_SCORE: Record<string, number> = {
-    explosiva: 1, apatica: 2, inquieta: 3, regulada: 4,
-}
-
-const DAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie"]
-const WEEK_NAMES = ["S1", "S2", "S3", "S4"]
-
 export async function getHeatmapData() {
     const cookieStore = await cookies()
     const supabase = createServerClient(
